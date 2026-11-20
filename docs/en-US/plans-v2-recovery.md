@@ -24,8 +24,10 @@ disposition.
 ## Prove the worktree package before a manual parity check
 
 A verified installed Plans package takes precedence over the factory bundle,
-including in development. Rebuilding `dist-plugins/navide-plans` alone does not
-prove that an existing app/profile loaded it. Do not remove or overwrite an
+including in development. Staging a pinned version (navide.plans is built in
+[Navide-dev/navide-plans](https://github.com/Navide-dev/navide-plans); the App
+build stages the version `officialPluginVersions.ts` pins from the official
+Registry) does not prove that an existing app/profile loaded it. Do not remove or overwrite an
 installed package to diagnose this.
 
 Use a fresh named development profile and isolate backend and CLI hook state.
@@ -41,7 +43,7 @@ plans_probe_dir="$(mktemp -d /private/tmp/navide-plans-parity.XXXXXX)"
 plans_probe_profile="parity-$(uuidgen)"
 
 mise exec node@22 pnpm@10.0.0 -- \
-  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" pnpm run build:plans
+  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" pnpm run build:official-plugins
 
 AGENT_TEAM_PLUGIN_DEV=1 \
 NAVIDE_PLANS_DEV_PROFILE="$plans_probe_profile" \
@@ -59,33 +61,32 @@ Before testing controls, check the Host's `navide.plans dev provenance` record:
   this fresh profile. Acquisition provenance is recorded separately: an
   installed package originally acquired from a factory is still a catalog
   selection.
-- `packageDirectory` must be this checkout's canonical
-  `dist-plugins/navide-plans`; `packageVersion` must match its built manifest.
+- `packageDirectory` must be this checkout's staged
+  `dist-plugins/official-artifacts/factory-resources/navide.plans/<pinned>/<platform>-<arch>/package`;
+  `packageVersion` must match its manifest.
 - `frontendEntries["navide.plans.window"]` must be the built window entry and
   `backendExecutable` must be the executable inside the same package directory.
 - In the plugin view's developer console, inspect
   `window.__NAVIDE_PLANS_PROVENANCE__`. Its `packageSource` must be
   `factory-bundled` (the renderer label differs from the Host's
-  `factory-bundle`), and its version must match the selected manifest. Compare
-  its `buildId` exactly with the current source identity printed below.
+  `factory-bundle`), and its version must match the selected manifest. Its
+  `buildId` must be the one the staged bundle carries, printed below.
   These diagnostics are opt-in; normal packaged
   launches do not publish the diagnostic query/global.
 
 ```sh
 mise exec node@22 pnpm@10.0.0 -- \
   env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" \
-  node --input-type=module -e 'import { loadConfigFromFile } from "vite"; const result = await loadConfigFromFile({ command: "build", mode: "production" }, "plugins/navide-plans/vite.config.ts"); console.log(JSON.parse(result.config.define.__NAVIDE_PLANS_BUILD_ID__))'
+  node -e 'const { readdirSync, readFileSync } = require("fs"); const v = /.navide\.plans.: .([^\x27]+)./.exec(readFileSync("src/main/plugins/officialPluginVersions.ts", "utf8"))[1]; const d = `dist-plugins/official-artifacts/factory-resources/navide.plans/${v}/${process.platform}-${process.arch}/package/frontend/assets`; for (const f of readdirSync(d).filter((f) => f.endsWith(".js"))) for (const m of readFileSync(`${d}/${f}`, "utf8").matchAll(/"([0-9a-f]{16})"/g)) console.log(f, m[1])'
 ```
 
-The automated artifact test compares the loaded build identity to current
-source inputs and fails on a stale build. Run it after rebuilding:
+The automated artifact tests load the staged package's emitted bundles and
+its packaged backend, never plugin sources. Run them after staging:
 
 ```sh
-NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 \
 mise exec node@22 pnpm@10.0.0 -- \
   env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" \
-  pnpm test:run tests/integration/plansPackagedRoundtrip.test.ts \
-  -t 'loads the Host-selected worktree frontend artifact'
+  pnpm test:packaged-plans
 ```
 
 Use a disposable fixture workspace for manual checks. Open a plan with both
@@ -110,7 +111,7 @@ Compare the retained view and plugin view at wide and narrow window sizes:
 DOM/component and emitted-artifact tests do not implement Chromium hit-testing;
 real pointer obstruction, native focus, IME integration, and visual spacing
 remain manual checks. See the package's
-[v1 test coverage matrix](../../plugins/navide-plans/tests/parity-coverage.md).
+[v1 test coverage matrix](https://github.com/Navide-dev/navide-plans/blob/main/tests/parity-coverage.md).
 
 ## Force the legacy adapter
 

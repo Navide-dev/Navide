@@ -10,7 +10,6 @@ import {
 } from './officialPluginVersions'
 
 const sourceDirs: Record<string, string> = {
-  'navide.plans': 'plugins/navide-plans',
 }
 
 const readJson = (path: string) => JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'))
@@ -22,8 +21,8 @@ describe('OFFICIAL_PLUGIN_VERSIONS', () => {
       .toEqual([...Object.keys(sourceDirs), ...REGISTRY_SOURCED_OFFICIAL_PLUGINS].sort())
   })
 
-  it('takes navide.git, navide.mini-ide and navide.browser from the Registry, not from a directory here', () => {
-    expect(REGISTRY_SOURCED_OFFICIAL_PLUGINS).toEqual(['navide.git', 'navide.mini-ide', 'navide.browser'])
+  it('takes every official plugin from the Registry, not from a directory here', () => {
+    expect(REGISTRY_SOURCED_OFFICIAL_PLUGINS).toEqual(['navide.git', 'navide.mini-ide', 'navide.browser', 'navide.plans'])
     for (const id of REGISTRY_SOURCED_OFFICIAL_PLUGINS) expect(Object.keys(sourceDirs)).not.toContain(id)
   })
 

@@ -9,8 +9,7 @@ import { describe, expect, it } from 'vitest'
 // the Security page showed only the text before the pipe.
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
-  'src/renderer/src/i18n/locales',
-  'plugins/navide-plans/src/locales'
+  'src/renderer/src/i18n/locales'
 ]
 // Every catalog in the folder, so a new language is checked without editing this.
 const localesIn = (dir: string): string[] =>

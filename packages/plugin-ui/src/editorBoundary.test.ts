@@ -24,7 +24,7 @@ describe('public editor ownership', () => {
   it('keeps a single implementation and makes consumers use the editor export', () => {
     expect(existsSync(resolve(repositoryRoot, 'src/renderer/src/editor/EditorPane.vue'))).toBe(false)
     expect(existsSync(resolve(repositoryRoot, 'src/renderer/src/editor/view/EditorViewMonaco.vue'))).toBe(false)
-    for (const path of [...sources(resolve(repositoryRoot, 'src/renderer')), ...sources(resolve(repositoryRoot, 'plugins'))]) {
+    for (const path of sources(resolve(repositoryRoot, 'src/renderer'))) {
       if (/\.test\.ts$|__tests__/.test(path)) continue
       const source = readFileSync(path, 'utf8')
       for (const match of source.matchAll(/(?:from\s*|import\s*\()['"]([^'"]+)['"]/g)) {

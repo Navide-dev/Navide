@@ -670,7 +670,8 @@ describe('Manifest v2 filesystem scope declarations', () => {
   // The Plans declaration must match what its backend actually reaches:
   // - root: src/main/plugins/plansRoot.ts resolvePlansRootPath (nearest
   //   ancestor containing .git, else the workspace);
-  // - documents: plugins/navide-plans/backend/plans_backend.py PLAN_DOC_DIRS
+  // - documents: navide-plans' backend/plans_backend.py PLAN_DOC_DIRS (recorded
+  //   for the pinned version in tests/fixtures/navide-plans/contract.json)
   //   and _plan_path (a document directly inside one of those directories,
   //   which may sit at any depth under the root);
   // - `.plans/<doc>`: _manual_document and _manual_write_path;
@@ -688,7 +689,7 @@ describe('Manifest v2 filesystem scope declarations', () => {
 
   it('declares exactly the plan document locations the Plans backend reads and writes', () => {
     const manifest = parseInstalledManifest(
-      JSON.parse(readFileSync(join(process.cwd(), 'plugins/navide-plans/manifest.json'), 'utf8'))
+      JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/navide-plans/manifest.json'), 'utf8'))
     )
     expect(manifestToInstalledPackageSummary(manifest).manifestPermissions).toEqual({
       system: ['fs', 'ui', 'aiCli'],
@@ -714,13 +715,10 @@ describe('Manifest v2 filesystem scope declarations', () => {
   })
 
   it('keeps the declared Plans document directories in step with the backend', () => {
-    const backend = readFileSync(
-      join(process.cwd(), 'plugins/navide-plans/backend/plans_backend.py'),
-      'utf8'
-    )
-    const tuple = /^PLAN_DOC_DIRS: tuple\[str, \.\.\.\] = \(\n([\s\S]*?)\n\)/m.exec(backend)
-    expect(tuple, 'PLAN_DOC_DIRS not found in plans_backend.py').not.toBeNull()
-    expect([...tuple![1].matchAll(/"([^"]+)"/g)].map((match) => match[1])).toEqual(PLANS_DOC_DIRS)
+    const contract = JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/navide-plans/contract.json'), 'utf8')) as {
+      planDocDirs: string[]
+    }
+    expect(contract.planDocDirs).toEqual(PLANS_DOC_DIRS)
   })
 
   it('leaves the descriptor, activation and capability policy unchanged by a scope declaration', () => {

@@ -74,13 +74,13 @@ simply missing at runtime.
 | A panel beside the panes | view `location`: `left`, `right`, `top` or `bottom` | [navide-git](https://github.com/Navide-dev/navide-git) (`left`) |
 | A full tab in the stage tab bar | view `location: "main"` | the `init` scaffold |
 | A separate window | view `location: "window"` | [navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide) |
-| Read or write workspace files | `permissions.system: ["fs"]`, `fs.*` capabilities; narrow with `permissions.scopes.fs` | `plugins/navide-plans` (scoped `fs`) |
+| Read or write workspace files | `permissions.system: ["fs"]`, `fs.*` capabilities; narrow with `permissions.scopes.fs` | [navide-plans](https://github.com/Navide-dev/navide-plans) (scoped `fs`) |
 | Run a command | `permissions.shell: "allowlist"` (git, gh, glab) or `{"mode": "allowlist", "executables": ["npm"]}` for other executables, then `shell.run` | [navide-git](https://github.com/Navide-dev/navide-git); spec, "Declared executables" |
 | Call a web API from the view | `permissions.network: {"hosts": ["api.example.com"]}`, then `fetch` in the view | spec, "Network hosts" |
 | Drive an AI CLI pane | `permissions.system: ["aiCli"]` | [navide-git](https://github.com/Navide-dev/navide-git) |
 | Open real web pages | `permissions.system: ["web"]` (disclosed as high risk) | [navide-browser](https://github.com/Navide-dev/navide-browser) |
 | Remember settings or view state | `createPluginViewState(key, fallback)` from `@navide/plugin-sdk` (keeps state across reloads), or `storage.get` / `storage.set`; no permission to declare | spec, "SDK interface" and "Host-managed storage partitions" |
-| Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | `plugins/navide-plans` |
+| Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | [navide-plans](https://github.com/Navide-dev/navide-plans) |
 | A tool agents can call | `backend.methods` + `backend.agentTools`; with no backend, `contributes.agentTools` (`view` instead of `method`) served by the view with `onAgentToolCall` | [navide-browser](https://github.com/Navide-dev/navide-browser); spec, "Agent tools" |
 
 The capability catalog with every method, its schema and the permission it

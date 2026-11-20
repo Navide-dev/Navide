@@ -6,10 +6,8 @@ import { expect, it } from 'vitest'
 // paints them in the `neo` look unless told otherwise. Plans keep the
 // mermaid 11 appearance, so every initialize call pins both options.
 const repositoryRoot = resolve(import.meta.dirname, '../..')
-const roots = [
-  join(repositoryRoot, 'src'),
-  ...readdirSync(join(repositoryRoot, 'plugins')).map((name) => join(repositoryRoot, 'plugins', name, 'src')),
-]
+// The first-party plugins, built in their own repositories, check their own calls.
+const roots = [join(repositoryRoot, 'src')]
 
 function sourceFiles(dir: string): string[] {
   let entries
@@ -36,7 +34,6 @@ const calls = roots.flatMap(sourceFiles).flatMap((path) => {
 it('finds every mermaid.initialize call site', () => {
   // A scan that matches nothing would pass the check below vacuously.
   expect(calls.map((call) => call.file).sort()).toEqual([
-    'plugins/navide-plans/src/retained/PlanMarkdownBody.vue',
     'src/renderer/src/editor/PlanFileView.vue',
     'src/renderer/src/editor/PlanMarkdownBody.vue',
     'src/renderer/src/preview/MarkdownPreview.vue',

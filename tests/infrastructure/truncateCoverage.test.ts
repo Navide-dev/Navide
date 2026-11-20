@@ -8,7 +8,7 @@ import { expect, it } from 'vitest'
 // it fails here; a deliberate exception goes in EXEMPT with its reason.
 
 const ROOT = join(__dirname, '..', '..')
-const SCAN = ['src/renderer/src', 'plugins/navide-plans/src']
+const SCAN = ['src/renderer/src']
 // Static illustrations in the help pages, not live UI.
 const SKIP_DIRS = ['src/renderer/src/components/helpMocks']
 

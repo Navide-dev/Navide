@@ -23,7 +23,7 @@ function sourceFiles(root: string, skipTests = false): string[] {
 }
 
 describe('navide.git, Host side', () => {
-  it.each([['navide-git', 'navide.git'], ['navide-mini-ide', 'navide.mini-ide'], ['navide-browser', 'navide.browser']])(
+  it.each([['navide-git', 'navide.git'], ['navide-mini-ide', 'navide.mini-ide'], ['navide-browser', 'navide.browser'], ['navide-plans', 'navide.plans']])(
     'keeps the %s fixture at the pinned version', (dir, id) => {
       // Host tests read the pinned version's manifest (and Git's target schema)
       // from tests/fixtures/<dir>: update them with the pin.
