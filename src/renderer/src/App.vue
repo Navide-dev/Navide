@@ -9615,9 +9615,17 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   })
   delete paneRefs[paneId]
   unregisterPaneMessaging(paneId)
-  // Only a real close releases a chat-channel binding; rebuild and idle-reclaim
-  // keep the seat, and workspace close / teardown restore the pane later.
-  if (markRemoved && !keepInList) useChannels(backend).paneClosed(paneId)
+  // Only a real close parks a chat-channel binding (kept dormant for the chat to wake
+  // back or unlink); rebuild and idle-reclaim keep the seat, and workspace close /
+  // teardown restore the pane later.
+  if (markRemoved && !keepInList) {
+    useChannels(backend).paneClosed(paneId, {
+      paneName: pane?.customName || pane?.autoName || pane?.messagingName || '',
+      workspacePath: pane?.workspacePath ?? '',
+      sessionId: pane?.pinnedSessionId ?? '',
+      agent: pane?.agentKey ?? '',
+    })
+  }
   turnTextGate.delete(paneId)
   workerTurnTextGate.delete(paneId)
   workerTurnTextAt.delete(paneId)

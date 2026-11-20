@@ -10191,6 +10191,11 @@
       "auto-child-hint": "為子分格自動建立的話題；關閉父分格的連線時會一併關閉。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已關閉",
+      "pane-dormant": "已休眠・可喚醒",
+      "pane-dormant-hint": "分格已關閉，但聊天室仍保留連線；可以在這裡或聊天室喚醒，不要了就關閉連線。",
+      "wake": "喚醒",
+      "waking": "喚醒中…",
+      "wake-label": "喚醒 {pane}，接回它在 {channel} 的對話",
       "chat-id": "聊天 {id}"
     }
   },

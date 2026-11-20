@@ -1489,7 +1489,7 @@ class ChannelManager:
     async def wake_from_app(self, pane_id: str, *, fresh: bool = False) -> dict[str, Any]:
         """The window's wake of a dormant (or offline) binding, from the channel overview: the
         same seams as the chat's, without the chat's limits (the user is at the computer).
-        The chat is told when it worked; the answer carries the chat's wording either way."""
+        The chat is told when it worked; a refusal carries the chat's wording."""
         binding = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
         if binding is None:
             return {"ok": False, "error": "no such binding"}
@@ -1502,7 +1502,8 @@ class ChannelManager:
         else:
             result = await self._seams.wake(pane_id, binding.workspace_path, binding.session_id)
         if not result.get("ok"):
-            return {"ok": False, "code": str(result.get("code") or ""), "message": wake.outcome_text(lang, result)}
+            # The window's channels call reads `error` as the text to show, `reason` as the code.
+            return {"ok": False, "reason": str(result.get("code") or ""), "error": wake.outcome_text(lang, result)}
         new_pane_id = str(result.get("pane_id") or pane_id)
         if new_pane_id != pane_id:
             await run_in_db_thread(self.store.rename_pane, pane_id, new_pane_id)

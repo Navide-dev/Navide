@@ -313,5 +313,5 @@ async def test_the_window_starts_a_new_conversation_and_reports_a_refusal(env: E
     env.store.park("pane-1n")
     fw.fresh_result = {"ok": False, "code": "quota", "agent": "claude", "started": False}
     answer = await env.m.wake_from_app("pane-1n")
-    assert answer == {"ok": False, "code": "quota", "message": _zh("quota", agent="claude")}
+    assert answer == {"ok": False, "reason": "quota", "error": _zh("quota", agent="claude")}
     assert (await env.m.wake_from_app("nobody"))["ok"] is False

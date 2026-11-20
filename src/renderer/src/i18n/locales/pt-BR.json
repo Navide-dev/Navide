@@ -10191,6 +10191,11 @@
       "auto-child-hint": "Criado automaticamente para um pane filho. Desconectar o pane pai também o fecha.",
       "unnamed-pane": "Pane sem nome",
       "pane-closed": "Fechado",
+      "pane-dormant": "Adormecido · pode despertar",
+      "pane-dormant-hint": "O pane foi fechado, mas o chat continua vinculado. Desperte-o aqui ou pelo chat, ou desconecte se não precisar mais.",
+      "wake": "Despertar",
+      "waking": "Despertando…",
+      "wake-label": "Despertar {pane} e voltar à conversa com {channel}",
       "chat-id": "chat {id}"
     }
   },

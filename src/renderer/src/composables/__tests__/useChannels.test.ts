@@ -148,7 +148,8 @@ describe('useChannels', () => {
     store.paneClosed('p1')
     expect(mock.sent).toEqual([
       expect.objectContaining({ type: 'channels.rebind', payload: { from_pane_id: 'p1', to_pane_id: 'p1b' } }),
-      expect.objectContaining({ type: 'channels.unbind', payload: { pane_id: 'p1', reason: 'closed' } }),
+      expect.objectContaining({ type: 'channels.park', payload: {
+        pane_id: 'p1', pane_name: '', workspace_path: '', session_id: '', agent: '' } }),
     ])
   })
 
@@ -156,7 +157,15 @@ describe('useChannels', () => {
     const mock = createMockBackend('disconnected')
     const store = useChannels(mock.backend)
     store.paneClosed('p1')
-    expect(mock.sent.map((s) => s.type)).toEqual(['channels.unbind'])
+    expect(mock.sent.map((s) => s.type)).toEqual(['channels.park'])
+  })
+
+  it('parks a closed pane with what the window knows of it', () => {
+    const mock = createMockBackend('disconnected')
+    const store = useChannels(mock.backend)
+    store.paneClosed('p1', { paneName: 'api', workspacePath: '/w', sessionId: 's-1', agent: 'claude' })
+    expect(mock.sent[0]).toEqual(expect.objectContaining({ type: 'channels.park', payload: {
+      pane_id: 'p1', pane_name: 'api', workspace_path: '/w', session_id: 's-1', agent: 'claude' } }))
   })
 
   it('toasts who switched which pane\'s model from a chat', async () => {
