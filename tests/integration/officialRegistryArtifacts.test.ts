@@ -6,13 +6,21 @@ import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginV
 
 // The first-party copies the build staged from the official Registry
 // (scripts/stage-official-plugin-artifacts.mjs) load through the same
-// Manifest v2 directory loader as any installed package. The artifacts
-// project runs after the build, so the staged copies must be there.
+// Manifest v2 directory loader as any installed package.
+//
+// Only a build stages them. scripts/run-artifact-tests.mjs (CI's
+// test:artifacts:ci after `bun run build`, and the release gate's
+// test:packaged-plans, which stages first) sets NAVIDE_TEST_STAGED_PLUGINS=1,
+// and then a missing copy fails. A plain `pnpm test:run` builds nothing, so
+// without a staged tree these skip.
 const hostTarget = `${process.platform}-${process.arch}`
+const stagedRoot = 'dist-plugins/official-artifacts/factory-resources'
 const staged = (id: string, target: string): string => join(
-  'dist-plugins/official-artifacts/factory-resources', id, OFFICIAL_PLUGIN_VERSIONS[id], target, 'package',
+  stagedRoot, id, OFFICIAL_PLUGIN_VERSIONS[id], target, 'package',
 )
+const notStaged = process.env.NAVIDE_TEST_STAGED_PLUGINS !== '1' && !existsSync(stagedRoot)
 
+describe.skipIf(notStaged)('official plugins staged by the build (skipped: nothing staged, run the build)', () => {
 describe.each([
   ['navide.git', 'universal', ['navide.git.left', 'navide.git.branch-detail', 'navide.git.window']],
   ['navide.mini-ide', 'universal', ['navide.mini-ide.window']],
@@ -38,4 +46,5 @@ it.each([
   expect(existsSync(backend), backend).toBe(true)
   expect(statSync(backend).size).toBeGreaterThan(0)
   if (process.platform !== 'win32') expect(statSync(backend).mode & 0o111).not.toBe(0)
+})
 })

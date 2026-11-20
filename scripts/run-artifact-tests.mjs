@@ -21,7 +21,9 @@ if (packaged) {
   pnpm(['run', 'build:plans:fixture'])
 }
 
-const env = testEnvironment({ NAVIDE_TEST_ARTIFACTS_PREBUILT: '1' })
+// Both paths staged the official plugins above (or `bun run build` did):
+// the tests that read the staged copies must find them, never skip.
+const env = testEnvironment({ NAVIDE_TEST_ARTIFACTS_PREBUILT: '1', NAVIDE_TEST_STAGED_PLUGINS: '1' })
 if (packaged) {
   env.NAVIDE_TEST_PACKAGED_PLANS = '1'
   env.NAVIDE_TEST_PRODUCTION_PLANS_BACKEND = '1'
@@ -30,6 +32,7 @@ run(process.execPath, [
   'node_modules/vitest/vitest.mjs', 'run', '--project', 'artifacts', '--project', 'artifacts-heavy',
   ...(packagedOnly ? [
     'tests/integration/plansPackagedRoundtrip.test.ts',
+    'tests/integration/officialRegistryArtifacts.test.ts',
     'src/main/plugins/pluginBackendHost.test.ts',
     'src/main/plugins/pluginBackendSupervisor.test.ts',
   ] : []),

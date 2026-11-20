@@ -103,7 +103,9 @@ jobs:
           bun run typecheck
           bun run test:run
           bun run test:packaged-plans
-          uv --project backend run --locked pytest backend/tests
+          # test:packaged-plans staged the official plugins: the Host contract
+          # tests against their backends must run, not skip.
+          NAVIDE_TEST_STAGED_PLUGINS=1 uv --project backend run --locked pytest backend/tests
 
       - name: Build Python backend
         working-directory: backend
