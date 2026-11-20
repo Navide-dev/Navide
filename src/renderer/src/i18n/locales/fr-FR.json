@@ -9028,11 +9028,19 @@
     "alternate": "Autre installation",
     "unknown-version": "Version indisponible",
     "keep-primary": "Conservez l’exécutable actif affiché par Navide s’il s’agit de la version attendue.",
-    "remove-alternate": "Supprimez les autres installations avec leur gestionnaire de paquets d’origine ; ne désactivez pas la sécurité de macOS.",
+    "remove-alternate": {
+      "darwin": "Supprimez les autres installations avec leur gestionnaire de paquets d’origine ; ne désactivez pas la sécurité de macOS.",
+      "win32": "Supprimez les autres installations avec leur gestionnaire de paquets d’origine ; ne désactivez pas la sécurité de Windows.",
+      "linux": "Supprimez les autres installations avec leur gestionnaire de paquets d’origine ; ne désactivez pas la sécurité de Linux."
+    },
     "run-doctor": "Lancez le diagnostic de la CLI, puis revenez ici et relancez la détection.",
     "open-terminal": "Ouvrir le terminal de diagnostic",
     "use-version": "Utiliser la version {version} dans Navide",
-    "use-version-note": "C’est sûr et réversible : cela ne change que l’exécutable lancé par Navide. Rien n’est désinstallé et la sécurité de macOS n’est pas affaiblie.",
+    "use-version-note": {
+      "darwin": "C’est sûr et réversible : cela ne change que l’exécutable lancé par Navide. Rien n’est désinstallé et la sécurité de macOS n’est pas affaiblie.",
+      "win32": "C’est sûr et réversible : cela ne change que l’exécutable lancé par Navide. Rien n’est désinstallé et la sécurité de Windows n’est pas affaiblie.",
+      "linux": "C’est sûr et réversible : cela ne change que l’exécutable lancé par Navide. Rien n’est désinstallé et la sécurité de Linux n’est pas affaiblie."
+    },
     "remove-installation": "Supprimer cette installation…",
     "removal-blocked": "La suppression est impossible, car aucune autre installation fonctionnelle n’a été trouvée. Réparez ou installez d’abord une autre copie, puis relancez la détection.",
     "update-current": "Actuelle {version}",

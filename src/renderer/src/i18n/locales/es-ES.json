@@ -9028,11 +9028,19 @@
     "alternate": "Instalación alternativa",
     "unknown-version": "Versión no disponible",
     "keep-primary": "Conserva el binario activo que muestra Navide si es la versión que esperas.",
-    "remove-alternate": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de macOS.",
+    "remove-alternate": {
+      "darwin": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de macOS.",
+      "win32": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de Windows.",
+      "linux": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de Linux."
+    },
     "run-doctor": "Ejecuta el diagnóstico de la CLI, vuelve aquí y vuelve a detectar.",
     "open-terminal": "Abrir terminal de diagnóstico",
     "use-version": "Usar la versión {version} en Navide",
-    "use-version-note": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de macOS.",
+    "use-version-note": {
+      "darwin": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de macOS.",
+      "win32": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de Windows.",
+      "linux": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de Linux."
+    },
     "remove-installation": "Quitar esta instalación…",
     "removal-blocked": "No se puede quitar porque no se ha encontrado ninguna otra instalación que funcione. Repara o instala primero otra copia y vuelve a detectar.",
     "update-current": "Actual {version}",

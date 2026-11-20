@@ -9028,11 +9028,19 @@
     "alternate": "Alternative Installation",
     "unknown-version": "Version nicht verfügbar",
     "keep-primary": "Behalten Sie die von Navide angezeigte aktive Binärdatei, wenn es die erwartete Version ist.",
-    "remove-alternate": "Entfernen Sie alternative Installationen mit ihrem ursprünglichen Paketmanager; deaktivieren Sie nicht die macOS-Sicherheit.",
+    "remove-alternate": {
+      "darwin": "Entfernen Sie alternative Installationen mit ihrem ursprünglichen Paketmanager; deaktivieren Sie nicht die macOS-Sicherheit.",
+      "win32": "Entfernen Sie alternative Installationen mit ihrem ursprünglichen Paketmanager; deaktivieren Sie nicht die Windows-Sicherheit.",
+      "linux": "Entfernen Sie alternative Installationen mit ihrem ursprünglichen Paketmanager; deaktivieren Sie nicht die Linux-Sicherheit."
+    },
     "run-doctor": "Führen Sie die CLI-Diagnose aus, kehren Sie dann hierher zurück und erkennen Sie erneut.",
     "open-terminal": "Diagnose-Terminal öffnen",
     "use-version": "Version {version} in Navide verwenden",
-    "use-version-note": "Das ist sicher und umkehrbar: Es ändert nur die ausführbare Datei, die Navide startet. Es wird nichts deinstalliert und die macOS-Sicherheit nicht geschwächt.",
+    "use-version-note": {
+      "darwin": "Das ist sicher und umkehrbar: Es ändert nur die ausführbare Datei, die Navide startet. Es wird nichts deinstalliert und die macOS-Sicherheit nicht geschwächt.",
+      "win32": "Das ist sicher und umkehrbar: Es ändert nur die ausführbare Datei, die Navide startet. Es wird nichts deinstalliert und die Windows-Sicherheit nicht geschwächt.",
+      "linux": "Das ist sicher und umkehrbar: Es ändert nur die ausführbare Datei, die Navide startet. Es wird nichts deinstalliert und die Linux-Sicherheit nicht geschwächt."
+    },
     "remove-installation": "Diese Installation entfernen …",
     "removal-blocked": "Entfernen ist nicht möglich, weil keine andere funktionierende Installation gefunden wurde. Reparieren oder installieren Sie zuerst eine weitere Kopie und erkennen Sie dann erneut.",
     "update-current": "Aktuell {version}",
