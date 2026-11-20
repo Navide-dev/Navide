@@ -398,6 +398,7 @@
     "hold-starting": "O pane de destino ainda está iniciando",
     "hold-typing": "Alguém está digitando no pane de destino",
     "hold-mid-turn": "O agent de destino está no meio de um turno",
+    "hold-foreground": "Há um programa na frente do shell do terminal de destino (um comando, um editor, um pedido de senha)",
     "hold-settling": "Aguardando o destino se estabilizar",
     "hold-composer": "A caixa de entrada ainda contém o último envio",
     "hold-model-switch": "O pane de destino está trocando de modelo",
@@ -1596,7 +1597,6 @@
         "loadFailedHint": "Verifique sua conexão e tente novamente. Os plug-ins do Navide instalados continuam funcionando.",
         "errorDetails": "Detalhes",
         "info": "Informações",
-        "detailTabs": "Detalhes do plug-in do Navide",
         "installVersion": "Instalar {version}",
         "versionLabel": "Versão {version}",
         "otherTarget": "Não é para esta plataforma ({target})",
@@ -1643,11 +1643,50 @@
           "target": "Destino",
           "channel": "Canal",
           "downloads": "Downloads",
-          "status": "Status"
+          "status": "Status",
+          "trust": "Confiança",
+          "capabilities": "Recursos"
         },
         "prereleaseAvailable": "pré-lançamento {version} disponível",
         "buildOwnHint": "Quer criar o seu?",
-        "buildOwn": "Criar um plug-in do Navide"
+        "buildOwn": "Criar um plug-in do Navide",
+        "installCard": "Instalar",
+        "disabledBadge": "Desativada",
+        "actionsNote": "Cada ação pede confirmação antes de mudar qualquer coisa.",
+        "enableInExtensions": "O Navide interrompeu este plug-in do Navide. Veja na página Plug-ins do Navide o que ele estava fazendo antes de ativá-lo de novo.",
+        "actionFailed": "Não foi possível concluir: {error}",
+        "verifiedDomain": "verificado · {domain}",
+        "riskBanner": "Este plug-in do Navide solicita recursos sensíveis: {list}. Revise antes de instalar.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Capturas de tela",
+        "screenshotLabel": "Captura {n}",
+        "ratingTitle": "Avaliação",
+        "rateOnWeb": "Avaliar no site",
+        "report": "Denunciar",
+        "ratingSignIn": "Avaliações e denúncias são feitas no site do Navide Marketplace e exigem login no Navide Cloud.",
+        "capabilityHint": {
+          "fs": "lê e grava arquivos",
+          "shell": "executa comandos de shell",
+          "terminal": "executa comandos em um terminal",
+          "aiCli": "controla agentes de CLI de IA",
+          "web": "navega em sites com seus logins e os mantém",
+          "agentMessages": "lê o texto das mensagens entre seus agentes",
+          "secrets": "guarda as próprias chaves de API criptografadas no seu dispositivo",
+          "agentNotify": "envia notificações aos painéis dos seus agentes, depois que você permitir"
+        },
+        "intro": {
+          "title": "Deixe o Navide do seu jeito, com plug-ins do Navide verificados.",
+          "signed": "Pacotes assinados pelo Registry",
+          "permissions": "Permissões mostradas antes de instalar",
+          "inApp": "Toda instalação é confirmada no Navide"
+        },
+        "footer": {
+          "label": "Links do Navide Marketplace",
+          "removed": "Plug-ins do Navide removidos",
+          "docs": "Documentação para desenvolvedores",
+          "discussions": "Discussões",
+          "security": "Segurança"
+        }
       },
       "developerMode": {
         "errors": {
@@ -9402,7 +9441,8 @@
       "manage": "Gerenciar no workspace →",
       "locked-title": "Uma tarefa do sistema pertencente ao app: altere-a no painel de autoevolução desse workspace",
       "managed-by": "Gerenciada pelo workspace",
-      "name": "Autoevolução · {workspace}"
+      "name": "Autoevolução · {workspace}",
+      "locked-title-shipped-log": "Agendamento do sistema mantido pelo App: altere no painel Registro de publicações desse espaço de trabalho"
     },
     "add": "+ Nova",
     "empty": "Nenhuma tarefa agendada ainda",
@@ -9435,7 +9475,11 @@
       "interrupted": "Ignorada: interrompida",
       "budget_global": "Ignorada: o total diário dos agents se esgotou",
       "expired": "Expirada: tarefa de agent não renovada em 7 dias",
-      "unknown": "Ignorada"
+      "unknown": "Ignorada",
+      "empty": "Pulado: nada publicado",
+      "no_chat": "Pulado: nenhum chat privado vinculado",
+      "plugin_disabled": "Pulado: o Registro de publicações está desativado",
+      "workspace_gone": "Pulado: a pasta do espaço de trabalho não existe"
     },
     "fail-reason": {
       "no_window": "Nenhuma janela do Navide está com o workspace desta tarefa aberto. Abra o workspace e execute a tarefa de novo.",
@@ -10186,6 +10230,11 @@
       "auto-child-hint": "Criado automaticamente para um pane filho. Desconectar o pane pai também o fecha.",
       "unnamed-pane": "Pane sem nome",
       "pane-closed": "Fechado",
+      "pane-dormant": "Adormecido · pode despertar",
+      "pane-dormant-hint": "O pane foi fechado, mas o chat continua vinculado. Desperte-o aqui ou pelo chat, ou desconecte se não precisar mais.",
+      "wake": "Despertar",
+      "waking": "Despertando…",
+      "wake-label": "Despertar {pane} e voltar à conversa com {channel}",
       "chat-id": "chat {id}"
     }
   },
@@ -12518,5 +12567,74 @@
     "disconnected-body": "A CLI no contêiner parou. Reconectar abre uma nova sessão no mesmo contêiner.",
     "reconnect": "Reconectar",
     "close-pane": "Fechar pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Registro de publicações"
+    },
+    "title": "Registro de publicações",
+    "close": "Fechar",
+    "loading": "Carregando…",
+    "window": {
+      "today": "Hoje",
+      "yesterday": "Ontem",
+      "7d": "7 dias",
+      "30d": "30 dias"
+    },
+    "count": "{n} publicados",
+    "pending": "{n} comando(s) de deploy detectado(s) para confirmar",
+    "empty": "Nada foi publicado neste período",
+    "verb": {
+      "added": "Adicionado",
+      "fixed": "Corrigido",
+      "changed": "Alterado"
+    },
+    "basis": {
+      "agent": "registrado",
+      "branch": "branch de deploy",
+      "tag": "etiqueta",
+      "hook": "detectado",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Configuração de produção",
+      "migration": "Migração de banco de dados",
+      "other": "Outro"
+    },
+    "sensitive": "Sensível",
+    "edited": "Editado",
+    "detected": "Comando de deploy detectado (não confirmado)",
+    "confirm": "Confirmar publicação",
+    "dismiss": "Descartar",
+    "edit": "Editar linha",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "reset": "Restaurar",
+    "mark-sensitive": "Marcar como sensível (o chat recebe só a contagem)",
+    "add-title": "Adicionar uma entrada",
+    "add": "Adicionar",
+    "summary-placeholder": "Uma linha simples dizendo o que mudou (nunca um valor)",
+    "ref-placeholder": "Hash do commit, chave da configuração ou ticket (opcional)",
+    "config-title": "Configurações de produção",
+    "config-hint": "Registre o nome de uma configuração e onde ela fica, nunca o valor; o que parecer um valor é recusado.",
+    "config-empty": "Nenhuma configuração registrada ainda",
+    "config-key": "chave (ex.: mail.sender)",
+    "config-label": "Nome",
+    "config-location": "Local (ex.: SSM /app/prod/mail_from)",
+    "config-environment": "Ambiente (padrão production)",
+    "config-note": "Observação",
+    "remove": "Remover",
+    "digest-title": "Resumo diário",
+    "digest-hint": "O Navide envia direto para cada chat privado vinculado: nenhum painel é acordado e nenhuma cota de painel é gasta; itens sensíveis e comandos detectados são só contados.",
+    "digest-enabled": "Enviar as últimas 24 horas todo dia",
+    "digest-at": "Horário",
+    "digest-tz": "Fuso horário",
+    "digest-skip-empty": "Pular dias sem publicações",
+    "digest-next": "Próximo: {time}",
+    "digest-run": "Enviar um agora",
+    "digest-sent": "Envio agendado",
+    "error-at": "O horário deve ser HH:MM",
+    "error-tz": "Fuso horário desconhecido"
   }
 }

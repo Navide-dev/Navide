@@ -53,7 +53,7 @@ function harness() {
     standaloneTaskDeps: () => ({}), standaloneKickoffVerdict, createKickoffReporter,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
-    recordDiagnostic: vi.fn(), notePaneRecordWrite, notifyRestore: { toast: vi.fn() },
+    recordDiagnostic: vi.fn(), terminalPlacementNote: () => null, notePaneRecordWrite, notifyRestore: { toast: vi.fn() },
     i18n: { global: { t: (key: string) => key } }, sendSpawnFeedback: vi.fn(),
     seenSpawnRequestIds: new Set(), SEEN_SPAWN_REQUEST_IDS_CAP: 200,
   }

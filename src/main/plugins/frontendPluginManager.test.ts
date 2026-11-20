@@ -1168,7 +1168,7 @@ describe('registered receiver frame lifecycle', () => {
     const detailView: PluginViewLaunchDescriptor = {
       id: 'detail', contributionKey: 'acme.receiver-lifecycle.detail', kind: 'custom',
       location: 'detail', title: 'Detail', entryFile,
-      targetSchema: 'plugins/navide-git/schemas/branch-comparison.json',
+      targetSchema: 'tests/fixtures/navide-git/schemas/branch-comparison.json',
     }
     descriptor.views = withDetailPair ? [receiverView, providerView, detailView] : [receiverView, providerView]
     mgr.registerDescriptor(descriptor, { builtin: true })
@@ -3604,7 +3604,7 @@ describe('devPlansPluginDescriptor', () => {
       mkdirSync(join(decoy, 'frontend/left'), { recursive: true })
       mkdirSync(join(decoy, 'frontend/window'), { recursive: true })
       mkdirSync(join(decoy, 'backend'), { recursive: true })
-      writeFileSync(join(decoy, 'manifest.json'), readFileSync('plugins/navide-plans/manifest.json'))
+      writeFileSync(join(decoy, 'manifest.json'), readFileSync('tests/fixtures/navide-plans/manifest.json'))
       writeFileSync(join(decoy, 'frontend/left/index.html'), '<!doctype html>')
       writeFileSync(join(decoy, 'frontend/window/index.html'), '<!doctype html>')
       const backendEntry = join(decoy, 'backend/navide-plans')
@@ -12380,7 +12380,7 @@ describe('first-party Git private bridge', () => {
   it('loads the selected factory contribution with its actual provenance regardless of the development environment flag', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-factory-query-')))
     // The real manifest is copied in below; its version names the artifact.
-    const plansVersion = JSON.parse(readFileSync('plugins/navide-plans/manifest.json', 'utf8')).version as string
+    const plansVersion = JSON.parse(readFileSync('tests/fixtures/navide-plans/manifest.json', 'utf8')).version as string
     const mgr = new FrontendPluginManager()
     try {
       const packageDir = join(
@@ -12396,7 +12396,7 @@ describe('first-party Git private bridge', () => {
       mkdirSync(join(packageDir, 'frontend/left'), { recursive: true })
       mkdirSync(join(packageDir, 'frontend/window'), { recursive: true })
       mkdirSync(join(packageDir, 'backend'), { recursive: true })
-      writeFileSync(join(packageDir, 'manifest.json'), readFileSync('plugins/navide-plans/manifest.json'))
+      writeFileSync(join(packageDir, 'manifest.json'), readFileSync('tests/fixtures/navide-plans/manifest.json'))
       writeFileSync(join(packageDir, 'frontend/left/index.html'), '<!doctype html>')
       writeFileSync(join(packageDir, 'frontend/window/index.html'), '<!doctype html>')
       copyFileSync(process.execPath, join(packageDir, backendEntryOnDisk('backend/navide-plans')))

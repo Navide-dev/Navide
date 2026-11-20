@@ -398,6 +398,7 @@
     "hold-starting": "Der Zielbereich startet noch",
     "hold-typing": "Im Zielbereich wird gerade getippt",
     "hold-mid-turn": "Der Ziel-Agent ist mitten in einer Runde",
+    "hold-foreground": "Vor der Shell des Ziel-Terminals läuft ein Programm (ein Befehl, ein Editor, eine Passwortabfrage)",
     "hold-settling": "Warten, bis sich das Ziel beruhigt",
     "hold-composer": "Das Eingabefeld enthält noch die letzte Übergabe",
     "hold-model-switch": "Der Zielbereich wechselt gerade sein Modell",
@@ -1596,7 +1597,6 @@
         "loadFailedHint": "Prüfen Sie Ihre Verbindung und versuchen Sie es erneut. Installierte Navide-Plug-ins funktionieren weiter.",
         "errorDetails": "Fehlerdetails",
         "info": "Informationen",
-        "detailTabs": "Details zum Navide-Plug-in",
         "installVersion": "{version} installieren",
         "versionLabel": "Version {version}",
         "otherTarget": "Nicht für diese Plattform ({target})",
@@ -1643,11 +1643,50 @@
           "target": "Ziel",
           "channel": "Kanal",
           "downloads": "Downloads",
-          "status": "Status"
+          "status": "Status",
+          "trust": "Vertrauen",
+          "capabilities": "Fähigkeiten"
         },
         "prereleaseAvailable": "Vorabversion {version} verfügbar",
         "buildOwnHint": "Selbst etwas bauen?",
-        "buildOwn": "Navide-Plug-in entwickeln"
+        "buildOwn": "Navide-Plug-in entwickeln",
+        "installCard": "Installieren",
+        "disabledBadge": "Deaktiviert",
+        "actionsNote": "Jede Aktion fragt nach, bevor sich etwas ändert.",
+        "enableInExtensions": "Navide hat dieses Navide-Plug-in gestoppt. Prüfe auf der Seite „Navide-Plug-ins“, was es dabei getan hat, bevor du es wieder aktivierst.",
+        "actionFailed": "Konnte nicht abgeschlossen werden: {error}",
+        "verifiedDomain": "verifiziert · {domain}",
+        "riskBanner": "Dieses Navide-Plug-in fordert sensible Fähigkeiten an: {list}. Vor der Installation prüfen.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Bildschirmfotos",
+        "screenshotLabel": "Bildschirmfoto {n}",
+        "ratingTitle": "Bewertung",
+        "rateOnWeb": "Auf der Website bewerten",
+        "report": "Melden",
+        "ratingSignIn": "Bewerten und Melden erfolgen auf der Website des Navide Marketplace und erfordern eine Anmeldung bei Navide Cloud.",
+        "capabilityHint": {
+          "fs": "liest und schreibt Dateien",
+          "shell": "führt Shell-Befehle aus",
+          "terminal": "führt Befehle in einem Terminal aus",
+          "aiCli": "steuert KI-CLI-Agenten",
+          "web": "besucht Websites mit deinen Anmeldungen und behält sie",
+          "agentMessages": "liest den Text von Nachrichten zwischen deinen Agenten",
+          "secrets": "speichert eigene API-Schlüssel verschlüsselt auf deinem Gerät",
+          "agentNotify": "benachrichtigt deine Agent-Bereiche, sobald du es erlaubst"
+        },
+        "intro": {
+          "title": "Mach Navide zu deinem, mit verifizierten Navide-Plug-ins.",
+          "signed": "Von der Registry signierte Pakete",
+          "permissions": "Berechtigungen vor der Installation sichtbar",
+          "inApp": "Jede Installation wird in Navide bestätigt"
+        },
+        "footer": {
+          "label": "Links zum Navide Marketplace",
+          "removed": "Entfernte Navide-Plug-ins",
+          "docs": "Entwicklerdokumentation",
+          "discussions": "Diskussionen",
+          "security": "Sicherheit"
+        }
       },
       "developerMode": {
         "errors": {
@@ -9402,7 +9441,8 @@
       "manage": "Im Arbeitsbereich verwalten →",
       "locked-title": "Ein Systemauftrag der App: Ändern Sie ihn im Selbstentwicklungs-Panel dieses Arbeitsbereichs",
       "managed-by": "Vom Arbeitsbereich verwaltet",
-      "name": "Selbstentwicklung · {workspace}"
+      "name": "Selbstentwicklung · {workspace}",
+      "locked-title-shipped-log": "Von der App verwalteter Systemplan: nur im Release-Protokoll dieses Arbeitsbereichs änderbar"
     },
     "add": "+ Neu",
     "empty": "Noch keine geplanten Aufträge",
@@ -9435,7 +9475,11 @@
       "interrupted": "Übersprungen: unterbrochen",
       "budget_global": "Übersprungen: Tageskontingent der Agents aufgebraucht",
       "expired": "Abgelaufen: Agent-Auftrag seit 7 Tagen nicht erneuert",
-      "unknown": "Übersprungen"
+      "unknown": "Übersprungen",
+      "empty": "Übersprungen: nichts veröffentlicht",
+      "no_chat": "Übersprungen: kein Direktchat verknüpft",
+      "plugin_disabled": "Übersprungen: das Release-Protokoll ist aus",
+      "workspace_gone": "Übersprungen: der Arbeitsbereichsordner existiert nicht"
     },
     "fail-reason": {
       "no_window": "Kein Navide-Fenster hat den Arbeitsbereich dieses Jobs geöffnet. Öffnen Sie den Arbeitsbereich und führen Sie den Job erneut aus.",
@@ -10186,6 +10230,11 @@
       "auto-child-hint": "Automatisch für einen untergeordneten Bereich erstellt. Beim Trennen des übergeordneten Bereichs wird er ebenfalls geschlossen.",
       "unnamed-pane": "Unbenannter Bereich",
       "pane-closed": "Geschlossen",
+      "pane-dormant": "Ruhend · aufweckbar",
+      "pane-dormant-hint": "Das pane wurde geschlossen, der Chat bleibt aber verknüpft. Wecken Sie es hier oder im Chat auf, oder trennen Sie die Verbindung, wenn Sie es nicht mehr brauchen.",
+      "wake": "Aufwecken",
+      "waking": "Wird aufgeweckt…",
+      "wake-label": "{pane} aufwecken und die Unterhaltung mit {channel} fortsetzen",
       "chat-id": "Chat {id}"
     }
   },
@@ -12518,5 +12567,74 @@
     "disconnected-body": "Die CLI im Container wurde beendet. Neu verbinden öffnet eine neue Sitzung im selben Container.",
     "reconnect": "Neu verbinden",
     "close-pane": "Bereich schließen"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Release-Protokoll"
+    },
+    "title": "Release-Protokoll",
+    "close": "Schließen",
+    "loading": "Wird geladen…",
+    "window": {
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "7d": "7 Tage",
+      "30d": "30 Tage"
+    },
+    "count": "{n} veröffentlicht",
+    "pending": "{n} erkannte(r) Deploy-Befehl(e) zu bestätigen",
+    "empty": "In diesem Zeitraum wurde nichts veröffentlicht",
+    "verb": {
+      "added": "Hinzugefügt",
+      "fixed": "Behoben",
+      "changed": "Geändert"
+    },
+    "basis": {
+      "agent": "erfasst",
+      "branch": "Deploy-Branch",
+      "tag": "Tag",
+      "hook": "erkannt",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Produktionseinstellung",
+      "migration": "Datenbankmigration",
+      "other": "Sonstiges"
+    },
+    "sensitive": "Vertraulich",
+    "edited": "Bearbeitet",
+    "detected": "Deploy-Befehl erkannt (unbestätigt)",
+    "confirm": "Als veröffentlicht bestätigen",
+    "dismiss": "Verwerfen",
+    "edit": "Zeile bearbeiten",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "reset": "Zurücksetzen",
+    "mark-sensitive": "Als vertraulich markieren (ein Chat erhält nur die Anzahl)",
+    "add-title": "Eintrag hinzufügen",
+    "add": "Hinzufügen",
+    "summary-placeholder": "Ein einfacher Satz, was sich geändert hat (nie ein Wert)",
+    "ref-placeholder": "Commit-Hash, Einstellungs-Key oder Ticket (optional)",
+    "config-title": "Produktionseinstellungen",
+    "config-hint": "Erfasse Name und Ort einer Einstellung, nie ihren Wert; alles, was wie ein Wert aussieht, wird abgelehnt.",
+    "config-empty": "Noch keine Einstellungen erfasst",
+    "config-key": "Key (z. B. mail.sender)",
+    "config-label": "Bezeichnung",
+    "config-location": "Ort (z. B. SSM /app/prod/mail_from)",
+    "config-environment": "Umgebung (Standard production)",
+    "config-note": "Notiz",
+    "remove": "Entfernen",
+    "digest-title": "Tägliche Zusammenfassung",
+    "digest-hint": "Navide sendet sie selbst an jeden verknüpften Direktchat: Kein Bereich wird geweckt und kein Bereichskontingent verbraucht; vertrauliche Einträge und erkannte Befehle werden nur gezählt.",
+    "digest-enabled": "Jeden Tag die letzten 24 Stunden senden",
+    "digest-at": "Uhrzeit",
+    "digest-tz": "Zeitzone",
+    "digest-skip-empty": "Tage ohne Veröffentlichung überspringen",
+    "digest-next": "Nächste: {time}",
+    "digest-run": "Jetzt einmal senden",
+    "digest-sent": "Senden eingeplant",
+    "error-at": "Die Uhrzeit muss HH:MM sein",
+    "error-tz": "Unbekannte Zeitzone"
   }
 }

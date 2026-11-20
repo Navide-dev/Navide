@@ -160,6 +160,19 @@ export interface ChannelBinding {
   parent_pane_id?: string
   /** True for a topic the backend created itself (a child pane's), false for a manual binding. */
   auto?: boolean
+  /** "dormant": the pane was closed; the binding stays for the chat (or this window) to wake
+   *  it back, until it is unlinked. Absent on older backends (= active). */
+  state?: 'active' | 'dormant'
+  /** When the pane was closed (seconds); 0 while active. */
+  closed_at?: number
+}
+
+/** What the window knows of a pane it closes, for its parked binding's later wake. */
+export interface ClosedPaneInfo {
+  paneName?: string
+  workspacePath?: string
+  sessionId?: string
+  agent?: string
 }
 
 export type ChannelVerbosity = 'replies' | 'minimal' | 'standard' | 'full'
@@ -627,13 +640,24 @@ function createChannelsStore(backend: Backend) {
     unbind: (paneId: string, paneName = '') => mutate('channels.unbind', { pane_id: paneId, pane_name: paneName }),
     rebind: (fromPaneId: string, toPaneId: string) =>
       mutate('channels.rebind', { from_pane_id: fromPaneId, to_pane_id: toPaneId }),
-    /** A pane really closed. The backend no longer unbinds on unregister (a
-     *  workspace switch or detach unregisters too), so this is the only path
-     *  that releases the binding. Skipped for panes known to be unbound. */
-    paneClosed(paneId: string): void {
+    /** A pane really closed. Its binding is parked, not released: the chat keeps it to
+     *  wake the conversation back (or start a new one) until someone unlinks it. The
+     *  backend does not park on unregister (a workspace switch or detach unregisters
+     *  too), so this is the only path. Skipped for panes known to be unbound. */
+    paneClosed(paneId: string, info: ClosedPaneInfo = {}): void {
       if (loaded.value && !bindingByPane.value.has(paneId)) return
-      void call('channels.unbind', { pane_id: paneId, reason: 'closed' })
+      void call('channels.park', {
+        pane_id: paneId,
+        pane_name: info.paneName ?? '',
+        workspace_path: info.workspacePath ?? '',
+        session_id: info.sessionId ?? '',
+        agent: info.agent ?? '',
+      })
     },
+    /** Wake a dormant binding's pane from the window: back onto its conversation, or
+     *  (`fresh`, or when none is known) a new one in the same CLI and workspace. A
+     *  refusal's `error` is the chat's wording of why, `reason` its code. */
+    wake: (paneId: string, fresh = false) => mutate('channels.wake', { pane_id: paneId, fresh }),
     /** A rebuild replaced a pane under a new id: carry its binding over. */
     paneReplaced(fromPaneId: string, toPaneId: string): void {
       if (loaded.value && !bindingByPane.value.has(fromPaneId)) return

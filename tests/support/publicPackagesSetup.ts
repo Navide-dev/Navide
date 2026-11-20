@@ -22,7 +22,7 @@ declare module 'vitest' {
 
 const repositoryRoot = resolve(import.meta.dirname, '../..')
 const builtPackages = ['packages/plugin-contracts', 'packages/plugin-sdk', 'packages/plugin-ui']
-const packedPackages = [...builtPackages, 'plugins/navide-git']
+const packedPackages = builtPackages
 
 // Under Bun the build scripts run through Bun itself, so a Bun-only machine
 // needs no pnpm. On Windows process.execPath can be Bun's generated `node`
@@ -76,8 +76,6 @@ export function missingArtifactInputs(root: string): string[] {
   return [
     ...builtPackages.map((directory) => `${directory}/dist/index.js`),
     'packages/plugin-ui/dist/editor/index.js',
-    'dist-plugins/navide-mini-ide/manifest.json',
-    'dist-plugins/navide-mini-ide/frontend/window/index.html',
   ].filter((file) => !existsSync(join(root, file)))
 }
 
@@ -127,13 +125,13 @@ export function prepareArtifactInputs(root: string, build: () => void, prepared 
 
   const stamp = join(root, 'node_modules/.cache/navide-artifact-inputs.json')
   const inputs = artifactDigest(root, [
-    ...builtPackages, 'plugins/navide-mini-ide', 'tests/support/publicPackagesSetup.ts',
+    ...builtPackages, 'tests/support/publicPackagesSetup.ts',
     'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'bun.lock', 'bunfig.toml', 'scripts/bun/vue-tsc.cjs',
     ...readdirSync(root).filter((file) => /^tsconfig.*\.json$/.test(file) || /^\.env(?:\.|$)/.test(file)),
     ...['typescript', 'vue-tsc', 'vite', '@vitejs/plugin-vue'].map((name) => `node_modules/${name}/package.json`),
   ], true)
   const outputs = () => artifactDigest(root, [
-    ...builtPackages.map((directory) => `${directory}/dist`), 'dist-plugins/navide-mini-ide',
+    ...builtPackages.map((directory) => `${directory}/dist`),
   ])
   let cached: { inputs?: string; outputs?: string } | null = null
   if (existsSync(stamp)) {
@@ -154,7 +152,6 @@ export function prepareArtifactInputs(root: string, build: () => void, prepared 
 export default function setup(project: TestProject): () => void {
   prepareArtifactInputs(repositoryRoot, () => {
     pnpm(['run', 'build:public-packages'], repositoryRoot)
-    pnpm(['run', 'build:mini-ide:v2'], repositoryRoot)
   }, process.env.NAVIDE_TEST_ARTIFACTS_PREBUILT === '1')
 
   // The runner's TEMP can be an 8.3 short path (C:\Users\RUNNER~1); tools

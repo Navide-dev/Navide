@@ -14,7 +14,7 @@ export function repositoryTestFiles(root: string): string[] {
       else if (entry.isFile() && /\.(test|spec)\.ts$/.test(entry.name)) files.push(resolve(path))
     }
   }
-  for (const directory of ['src', 'packages', 'plugins', 'tests']) walk(join(root, directory))
+  for (const directory of ['src', 'packages', 'tests']) walk(join(root, directory))
   for (const entry of readdirSync(root)) {
     if (/^vitest\..*\.(test|spec)\.ts$/.test(entry)) files.push(resolve(root, entry))
   }

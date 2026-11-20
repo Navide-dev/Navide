@@ -16053,7 +16053,7 @@ function devServerOrigin(descriptor: PluginLaunchDescriptor): string | null {
  * during unpackaged dev lookup).
  * Registered at startup only under `AGENT_TEAM_PLUGIN_DEV=1`, mirroring
  * {@link devPlansPluginDescriptor}. The bundle is built separately
- * (plugins/navide-git/vite.config.ts) with the package-local capability
+ * (in Navide-dev/navide-git) with the package-local capability
  * backend, so it
  * is not served by the electron-vite dev server: `devUrl` is empty and it
  * always loadFiles. The packaged Manifest v2 permissions are the source of the

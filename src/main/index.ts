@@ -1649,7 +1649,7 @@ const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
   currentPluginHostTarget(),
 )
 /** Load the bundled browser package. A build without it (no staged
- *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
+ *  official-artifacts/navide.browser) is not an error: nothing is loaded. */
 function loadFactoryBrowserPackage():
   | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
   | { loaded: false; reason: string; absent?: true } {

@@ -10,7 +10,7 @@ import { CAP_EVENTS, CAP_MAP } from './capabilityMap'
 // navide.git ships through the Navide Marketplace on its own schedule, so an
 // installed copy may meet a newer or older Host: what the Host serves on the
 // bridge changes only with the contract's version. The plugin checks its own
-// copy in plugins/navide-git/src/__tests__/gitBridgeContract.test.ts.
+// copy in Navide-dev/navide-git (src/__tests__/gitBridgeContract.test.ts).
 
 // One digest per released contract version. Changing the messages without a
 // new version (and a new line here) fails; a minor version may only add.

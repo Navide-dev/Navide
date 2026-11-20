@@ -1851,7 +1851,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     const inputHandlers = createTerminalInputHandlers({
       terminal: term,
       isAgentPane: () => !!activeAgentKey && activeAgentKey !== 'terminal',
-      send: (text) => { void pasteText(text, HUMAN_KEY) },
+      send: (text) => {
+        // Shift+Enter reaches the CLI here, not through term.onData.
+        if (text === encodeShiftEnter(agentProfile(activeAgentKey))) appendPrompt('\n')
+        else if (text === '\x15') promptBuffer = ''
+        void pasteText(text, HUMAN_KEY)
+      },
       encodeNewline: () => encodeShiftEnter(agentProfile(activeAgentKey)),
       finalizeStaleComposition,
       reportEmptyCopy: () => reportEmptyCopy(),
@@ -2388,6 +2393,45 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return draftPending.value ? inputBuffer : ''
   }
 
+  /** The prompt being written, in full, line breaks included — inputBuffer
+   *  keeps only the last 100 chars of the current line. Renderer memory only:
+   *  never written to a file or a log, and gone with the pane. */
+  let promptBuffer = ''
+  /** What the person last sent with Enter in this pane, for Restore: an
+   *  interrupt puts it back in Claude Code's box, and the box's hard wraps
+   *  cannot tell a typed line break at the right edge from a wrap
+   *  (lib/claudeComposer.ts restoredText). Only keystrokes, pastes and
+   *  Shift+Enter of the person's own reach it — Navide's injections are
+   *  written to the PTY without passing through here. */
+  let lastSubmitted = ''
+  /** Per pane; a longer prompt keeps its tail, which no box will match. */
+  const PROMPT_BUFFER_MAX = 32 * 1024
+
+  /** Typed or pasted text as the box will hold it: a paste's line breaks
+   *  kept, its bracketing and every other control sequence dropped. */
+  function promptChars(data: string): string {
+    return data.split(/\r\n?|\n/).map(stripInputSequences).join('\n')
+  }
+
+  function appendPrompt(text: string): void {
+    promptBuffer += text
+    if (promptBuffer.length > PROMPT_BUFFER_MAX) promptBuffer = promptBuffer.slice(-PROMPT_BUFFER_MAX)
+  }
+
+  /** Enter: Claude Code reads a trailing backslash as a line break instead. */
+  function submitPrompt(): void {
+    if (promptBuffer.endsWith('\\')) {
+      promptBuffer = promptBuffer.slice(0, -1) + '\n'
+      return
+    }
+    if (promptBuffer.trim() !== '') lastSubmitted = promptBuffer
+    promptBuffer = ''
+  }
+
+  function lastSubmittedPrompt(): string {
+    return lastSubmitted
+  }
+
   /** Whether the program on the other end of this PTY has mode 2004 on right
    *  now, as xterm parsed it off that program's own output.
    *
@@ -2422,6 +2466,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     if (before !== 'awaiting' || now === 'awaiting') return
     if (inputBuffer.trim().length > SINGLE_KEY_ANSWER_MAX) return
     inputBuffer = ''
+    promptBuffer = ''
     syncDraft()
   }
 
@@ -2488,6 +2533,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // session that no longer exists.
     if (!sessionId.value || status.value === 'exited' || status.value === 'error') return
     noteUserInput(pending)
+    // Held keystrokes, Enters and edits mixed: not tracked as a prompt.
+    promptBuffer = ''
     void terminalPort.input(sessionId.value, pending, undefined, human ? { human: true } : undefined)
   }
 
@@ -2521,10 +2568,17 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     syncDraft()
   }
 
+  /** A clipboard paste lands in the box whole, its line breaks included. */
+  function notePastedPrompt(text: string): void {
+    appendPrompt(promptChars(text))
+  }
+
   // Wire input/output/exit handlers for the current sessionId. Shared by a fresh
   // spawn and a reattach so both bind identically.
   function bindSessionHandlers(): void {
     inputBuffer = ''
+    promptBuffer = ''
+    lastSubmitted = ''
     syncDraft()
     inputDisposer = term.onData((data) => {
       // Before the gates below: a keystroke held back for a preparing pane is
@@ -2547,6 +2601,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       noteAnswerKeys(data)
       if (data === '\r' || data === '\n' || data === '\r\n') {
         resumeFromStop()
+        submitPrompt()
         if (inputBuffer.trim() === '/clear' && opts?.onClear) {
           inputBuffer = ''
           syncDraft()
@@ -2556,6 +2611,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         inputBuffer = ''
       } else if (data === '\x7f' || data === '\b') {
         inputBuffer = inputBuffer.slice(0, -1)
+        promptBuffer = promptBuffer.slice(0, -1)
       } else if (data === '\x03' || data === '\x15' || data === '\x1b') {
         // The three ways a composer is emptied without sending it: Ctrl+C,
         // Ctrl+U, and Escape. Tracked because the draft signal latches
@@ -2563,22 +2619,28 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         // buffer still holds it, and the pane stays "being typed at" until the
         // user's next Enter.
         inputBuffer = ''
+        promptBuffer = ''
       } else if (data === '\x17') {
         // Ctrl+W deletes back to the previous word boundary rather than
         // clearing, so mirror that instead of emptying the buffer: treating it
         // as a clear would call a still-half-written line finished, which is
         // the failure this whole gate exists to prevent.
         inputBuffer = inputBuffer.replace(/\s*\S+\s*$/, '')
+        promptBuffer = promptBuffer.replace(/\s*\S+\s*$/, '')
       } else if (data.length === 1 && data.charCodeAt(0) >= 32) {
         resumeFromStop()
         inputBuffer += data
+        appendPrompt(data)
       } else if (data.length > 1) {
         resumeFromStop()
         // Terminal reports ride this same channel and are not typed text.
         // Dropping escape sequences is not enough for the mouse ones: X10
         // encodes the button and coordinates as three PRINTABLE bytes after
         // `ESC[M`, which would land in the buffer as a draft that never clears.
-        if (!isTerminalReport(data)) inputBuffer += stripInputSequences(data)
+        if (!isTerminalReport(data)) {
+          inputBuffer += stripInputSequences(data)
+          appendPrompt(promptChars(data))
+        }
       }
       if (inputBuffer.length > 100) inputBuffer = inputBuffer.slice(-100)
       syncDraft()
@@ -3395,6 +3457,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     // The rest of what term.onData would have done for us (CoreService's
     // _onUserInput plus this composable's own input bookkeeping).
     noteUserInput(normalized)
+    notePastedPrompt(normalized)
     // Sent as one burst rather than awaited chunk by chunk: wsClient writes in
     // call order, so the PTY still receives them in sequence, and a large paste
     // does not pay a round trip per 512 bytes. Awaiting the settled results is
@@ -3476,6 +3539,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     if (_stdinGated || isDisposed) return false
     if (!pasteText('\r', HUMAN_KEY)) return false
     resumeFromStop()
+    submitPrompt()
     inputBuffer = ''
     syncDraft()
     return true
@@ -3626,6 +3690,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
 
   onScopeDispose(() => {
     isDisposed = true
+    promptBuffer = ''
+    lastSubmitted = ''
     void cancelPendingCreate().catch(() => {})
     saveScrollSnapshot()  // persist scrollback before the pane is torn down
     _liveTerminals.delete(_snapshotHooks)  // stop answering app-exit saves / key rotations
@@ -3723,6 +3789,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     lastRawActivityAt,
     hasDraft,
     draftText,
+    lastSubmittedPrompt,
     lastUserKeyAt,
     isBracketedPasteActive,
     terminalSize,

@@ -36,7 +36,8 @@ vi.mock('node:fs', async () => {
   }
 })
 
-const gitPackageDir = resolve(process.cwd(), 'plugins/navide-git')
+// The pinned navide.git version's manifest and target schema.
+const gitPackageDir = resolve(process.cwd(), 'tests/fixtures/navide-git')
 const temporaryPackages: string[] = []
 
 afterEach(() => {

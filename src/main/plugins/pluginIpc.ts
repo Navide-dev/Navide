@@ -498,6 +498,11 @@ function httpsLink(value: unknown): string | null {
 /** Largest icon the Marketplace will display; bigger ones fall back to the
  *  letter placeholder. */
 export const MARKETPLACE_ICON_MAX_BYTES = 256 * 1024
+/** Largest screenshot the detail page will display; bigger ones are left out. */
+export const MARKETPLACE_SCREENSHOT_MAX_BYTES = 2 * 1024 * 1024
+/** Screenshots the detail page shows at most. */
+const MARKETPLACE_SCREENSHOT_LIMIT = 8
+const VERIFIED_DOMAIN_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i
 const ICON_PATH_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/
 
 /** Raster type by magic bytes; the Registry's Content-Type is not trusted. */
@@ -1659,7 +1664,9 @@ export function registerPluginIpc(
       options?: { category?: unknown; offset?: unknown; limit?: unknown; hideIncompatible?: unknown } | null
     ) => {
       assertAuthorized(event)
-      return marketplaceSearch(query, sort, options)
+      const result = await marketplaceSearch(query, sort, options)
+      // The Registry website, for the page footer's links.
+      return { ...result, site_url: resolveConfiguredMarketplace(trust).registryUrl.replace(/\/+$/, '') }
     }
   )
 
@@ -1689,8 +1696,14 @@ export function registerPluginIpc(
   const iconCache = new Map<string, string | null>()
   ipcMain.handle(
     'plugins:marketplaceIcon',
-    async (event, args: { namespace?: unknown; name?: unknown; version?: unknown; path?: unknown } | null) => {
+    async (
+      event,
+      args: { namespace?: unknown; name?: unknown; version?: unknown; path?: unknown; kind?: unknown } | null
+    ) => {
       assertAuthorized(event)
+      // A screenshot is the same kind of untrusted package image, only larger.
+      const screenshot = args?.kind === 'screenshot'
+      const maxBytes = screenshot ? MARKETPLACE_SCREENSHOT_MAX_BYTES : MARKETPLACE_ICON_MAX_BYTES
       const namespace = marketplacePathSegment(args?.namespace)
       const name = marketplacePathSegment(args?.name)
       const version = args?.version
@@ -1698,7 +1711,7 @@ export function registerPluginIpc(
       if (typeof version !== 'string' || compareSemver(version, version) !== 0) return null
       if (typeof path !== 'string' || path.length > 256 || !ICON_PATH_RE.test(path)) return null
       if (path.split('/').some((segment) => segment === '.' || segment === '..')) return null
-      const key = `${namespace}/${name}/${version}/${path}`
+      const key = `${screenshot ? 'shot:' : ''}${namespace}/${name}/${version}/${path}`
       if (iconCache.has(key)) return iconCache.get(key) ?? null
       const marketplace = resolveConfiguredMarketplace(trust)
       const encodedPath = path.split('/').map(encodeURIComponent).join('/')
@@ -1709,8 +1722,8 @@ export function registerPluginIpc(
           { redirect: 'error' }
         )
         const declared = Number(res.headers.get('content-length') ?? '0')
-        if (res.ok && declared <= MARKETPLACE_ICON_MAX_BYTES) {
-          const bytes = await readBodyCapped(res, MARKETPLACE_ICON_MAX_BYTES)
+        if (res.ok && declared <= maxBytes) {
+          const bytes = await readBodyCapped(res, maxBytes)
           const mime = bytes ? sniffIconMime(bytes) : null
           if (bytes && mime) dataUrl = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`
         }
@@ -1805,6 +1818,22 @@ export function registerPluginIpc(
         homepage: httpsLink(detail.homepage),
         icon_path: typeof detail.icon_path === 'string' ? detail.icon_path : null,
         has_changelog: detail.has_changelog === true,
+        // Newer Registries only: absent fields hide their block on the page.
+        verified_domain:
+          typeof detail.verified_domain === 'string' && VERIFIED_DOMAIN_RE.test(detail.verified_domain)
+            ? detail.verified_domain
+            : null,
+        screenshots: Array.isArray(detail.screenshots)
+          ? detail.screenshots
+            .filter(
+              (path): path is string =>
+                typeof path === 'string' &&
+                path.length <= 256 &&
+                ICON_PATH_RE.test(path) &&
+                !path.split('/').some((segment) => segment === '.' || segment === '..')
+            )
+            .slice(0, MARKETPLACE_SCREENSHOT_LIMIT)
+          : [],
         extension_pack: Array.isArray(detail.extension_pack)
           ? detail.extension_pack.filter((member): member is string => typeof member === 'string')
           : null,
@@ -1834,7 +1863,14 @@ export function registerPluginIpc(
     'plugins:marketplaceDetail',
     async (event, args: { namespace?: unknown; name?: unknown } | null) => {
       assertAuthorized(event)
-      return marketplaceDetail(args)
+      const detail = await marketplaceDetail(args)
+      // The extension's page on the Registry website, where rating and
+      // reporting happen (both need a Navide Cloud sign-in there).
+      const site = resolveConfiguredMarketplace(trust).registryUrl.replace(/\/+$/, '')
+      return {
+        ...detail,
+        web_url: `${site}/extensions/${marketplacePathSegment(args?.namespace)}/${marketplacePathSegment(args?.name)}`,
+      }
     }
   )
 

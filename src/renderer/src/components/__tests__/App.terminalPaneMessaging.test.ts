@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 // App.vue cannot be mounted here (see App.spawnAdvisories.test.ts), so these
@@ -64,7 +65,7 @@ describe('plain terminal panes over MCP', () => {
 
   it('holds a terminal whose shell is not in front of its tty (a quiet program)', () => {
     const fn = block('function messagingHoldKey(', '\n}\n')
-    expect(fn).toContain("pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'mid-turn'")
+    expect(fn).toContain("pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'foreground'")
     expect(fn).toContain('pane.agentKey === TERMINAL_AGENT_KEY ? TERMINAL_TYPING_HOLD_MS : TYPING_HOLD_MS')
     expect(appSource).toContain('const TERMINAL_TYPING_HOLD_MS = 60_000')
     // Polled on the pump tick, which is what re-opens the gate.
@@ -125,5 +126,48 @@ describe('plain terminal panes over MCP', () => {
     expect(deliver).toContain('if (!ok && outcome.commandRefused) return { failed: rawReason(outcome.commandRefused) }')
     const kickoff = block('async function kickoffRequestedPane(', '\n/** Spawn + kick off a pane')
     expect(kickoff).toContain('seen.commandRefused ?? TERMINAL_KICKOFF_REASON[outcome]')
+  })
+})
+
+// 0.2.46: a terminal opened over MCP landed on a tab the user was not looking
+// at, and read as "it never opened". Agent panes keep their placement and get
+// no note; a terminal off screen comes back with where it is and how to show it.
+describe('terminalPlacementNote', () => {
+  function note(opts: {
+    pane: Record<string, unknown>
+    onScreen?: boolean
+    pluginTab?: string | null
+    workspace?: string
+  }): string | null {
+    const fn = block('function terminalPlacementNote(', '\n}\n') + '\n}'
+    const deps = {
+      panes: { value: [{ id: 'p1', agentKey: 'terminal', workspacePath: '/w', messagingName: 'shell', ...opts.pane }] },
+      TERMINAL_AGENT_KEY: 'terminal',
+      normWs: (p: string) => p.replace(/\/+$/, ''),
+      currentWorkspace: { value: opts.workspace ?? '/w' },
+      activePluginMainKey: { value: opts.pluginTab ?? null },
+      tabFilteredPaneIds: { value: new Set(opts.onScreen === false ? [] : ['p1']) },
+      runGroups: { value: [{ id: 'rg-1', name: 'Run 1' }] },
+    }
+    const js = ts.transpileModule(`${fn}\nreturn terminalPlacementNote('p1')`, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 },
+    }).outputText
+    return new Function(...Object.keys(deps), js)(...Object.values(deps)) as string | null
+  }
+
+  it('says nothing for a terminal on screen, or for an agent pane anywhere', () => {
+    expect(note({ pane: {} })).toBeNull()
+    expect(note({ pane: { agentKey: 'claude' }, onScreen: false })).toBeNull()
+  })
+
+  it('names the tab and the focus call for a terminal on another tab', () => {
+    const text = note({ pane: { runGroupId: 'rg-1' }, onScreen: false })
+    expect(text).toContain('tab "Run 1", which is not the tab on screen')
+    expect(text).toContain('ui.pane.focus {"paneId": "p1"}')
+  })
+
+  it('reports a terminal hidden behind a plugin tab, and one in a background workspace', () => {
+    expect(note({ pane: {}, pluginTab: 'plans' })).toContain('tab "manual", which a plugin tab is covering')
+    expect(note({ pane: { workspacePath: '/other' } })).toContain('workspace /other, which is not the one on screen')
   })
 })

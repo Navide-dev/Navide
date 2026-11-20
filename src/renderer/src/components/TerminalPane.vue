@@ -653,6 +653,8 @@ defineExpose({
   // The person at the keyboard, for App.vue's messaging idle gate.
   hasDraft: terminal.hasDraft,
   draftText: terminal.draftText,
+  // The prompt last sent with Enter, for Restore (lib/claudeComposer.ts).
+  lastSubmittedPrompt: terminal.lastSubmittedPrompt,
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,

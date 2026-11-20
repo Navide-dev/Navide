@@ -9,7 +9,7 @@ import {
   type BundledOfficialRefreshDeps,
 } from './bundledOfficialRefresh'
 
-const gitManifest = JSON.parse(readFileSync('plugins/navide-git/manifest.json', 'utf8')) as DisclosureManifestInput & {
+const gitManifest = JSON.parse(readFileSync('tests/fixtures/navide-git/manifest.json', 'utf8')) as DisclosureManifestInput & {
   version: string
   permissions: { system: string[] }
 }

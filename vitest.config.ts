@@ -5,8 +5,7 @@ import { testWorkerCap } from './vitest.workerCap'
 
 // Every source test has one owner. Artifact consumers build/pack once before
 // their workers start; ordinary tests and CLI contracts need no plugin build.
-// The App-bundled plugins are not collected here: each runs its own tests with
-// plugins/<dir>/vitest.config.ts (see vitest.plugin.ts, pnpm test:plugins).
+// The first-party plugins are tested in their own repositories.
 const hostTests = ['vitest.*.{test,spec}.ts', '{src,tests}/**/*.{test,spec}.ts']
 const packageTests = ['packages/**/*.{test,spec}.ts']
 const cliTests = ['tests/cli/**/*.{test,spec}.ts']

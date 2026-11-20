@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt, composerOwner, unwrapComposer } from '../claudeComposer'
+import { boxHoldsUserDraft, claudeComposerText, clearLeftoverPrompt, composerOwner, restoredText, unwrapComposer } from '../claudeComposer'
 import { composerClearKeys } from '../cliCoordination'
 
 const screen = (name: string): string => readFileSync(join(__dirname, 'fixtures', name), 'utf8')
@@ -81,7 +81,38 @@ describe('unwrapComposer', () => {
   })
 })
 
-function harness(screens: string[], draft = '', navideTypedLast = false) {
+// A typed line break exactly where the row reaches the box's right edge (72
+// columns, a 68-column box): on screen it looks like Claude Code's own wrap.
+const EDGE_LINE = 'word '.repeat(13) + 'edge' // 69 chars, 68 once trimmed
+const AT_EDGE = `${EDGE_LINE.trim()}\nsecond line`
+const atEdge = withBox(AT_EDGE.split('\n'))
+
+describe('restoredText', () => {
+  it('gives back the submitted prompt when the box holds it, a break at the right edge included', () => {
+    const box = claudeComposerText(atEdge) as string
+    expect(unwrapComposer(box, 72)).not.toBe(AT_EDGE) // the screen alone cannot tell
+    expect(restoredText(box, 72, AT_EDGE)).toBe(AT_EDGE)
+  })
+
+  it('keeps the original whitespace: tabs, blank lines, trailing spaces', () => {
+    const original = 'first\n\n\tindented  \nlast '
+    expect(restoredText('first\n\nindented\nlast', 72, original)).toBe(original)
+  })
+
+  it('rebuilds from the rows when the box holds something else', () => {
+    const box = claudeComposerText(atEdge) as string
+    for (const other of ['', '   ', 'a different prompt', `${AT_EDGE}\nand a queued one`]) {
+      expect(restoredText(box, 72, other)).toBe(unwrapComposer(box, 72))
+    }
+  })
+
+  it('never hands back one of Navide\'s own envelopes as the original', () => {
+    const envelope = '[Navide MSG] from: Navide指揮 run the release dry run'
+    expect(restoredText(envelope, 72, envelope)).toBe(unwrapComposer(envelope, 72))
+  })
+})
+
+function harness(screens: string[], draft = '', navideTypedLast = false, lastSubmitted = '') {
   const writes: string[] = []
   const onCleared = vi.fn()
   let read = 0
@@ -91,6 +122,7 @@ function harness(screens: string[], draft = '', navideTypedLast = false) {
     deps: {
       readScreen: () => screens[Math.min(read++, screens.length - 1)],
       draftText: () => draft,
+      lastSubmitted: () => lastSubmitted,
       navideTypedLast: () => navideTypedLast,
       cols: 72,
       send: async (keys: string) => { writes.push(keys) },
@@ -108,6 +140,18 @@ describe('clearLeftoverPrompt', () => {
     expect(h.onCleared).toHaveBeenCalledOnce()
     expect(h.onCleared.mock.calls[0][0]).toMatchObject({ text: RESTORED, owner: 'restored' })
     expect(h.onCleared.mock.calls[0][0].diagnostic).toContain('Run the release dry run')
+  })
+
+  it('hands over the prompt the person submitted when the box holds it, line break at the edge kept', async () => {
+    const h = harness([atEdge, empty], '', false, AT_EDGE)
+    expect(await clearLeftoverPrompt(h.deps)).toBe('cleared')
+    expect(h.onCleared.mock.calls[0][0]).toMatchObject({ text: AT_EDGE, owner: 'restored' })
+  })
+
+  it('falls back to the rows when the last submitted prompt is not what the box holds', async () => {
+    const h = harness([atEdge, empty], '', false, 'an older prompt')
+    expect(await clearLeftoverPrompt(h.deps)).toBe('cleared')
+    expect(h.onCleared.mock.calls[0][0].text).toBe(unwrapComposer(claudeComposerText(atEdge) as string, 72))
   })
 
   it('clears every row of a wrapped one; one of our envelopes is handed over as ours', async () => {

@@ -398,6 +398,7 @@
     "hold-starting": "Le pane cible est encore en train de démarrer",
     "hold-typing": "Quelqu’un est en train de saisir dans le pane cible",
     "hold-mid-turn": "L’agent cible est au milieu d’un tour",
+    "hold-foreground": "Un programme occupe le terminal cible devant son shell (une commande, un éditeur, une invite de mot de passe)",
     "hold-settling": "En attente de la stabilisation de la cible",
     "hold-composer": "La zone de saisie contient encore le dernier envoi",
     "hold-model-switch": "Le pane cible est en train de changer de modèle",
@@ -1596,7 +1597,6 @@
         "loadFailedHint": "Vérifiez votre connexion et réessayez. Les plugins Navide installés continuent de fonctionner.",
         "errorDetails": "Détails",
         "info": "Informations",
-        "detailTabs": "Détails du plugin Navide",
         "installVersion": "Installer la version {version}",
         "versionLabel": "Version {version}",
         "otherTarget": "Pas pour cette plateforme ({target})",
@@ -1643,11 +1643,50 @@
           "target": "Cible",
           "channel": "Canal",
           "downloads": "Téléchargements",
-          "status": "État"
+          "status": "État",
+          "trust": "Confiance",
+          "capabilities": "Capacités"
         },
         "prereleaseAvailable": "préversion {version} disponible",
         "buildOwnHint": "Envie de créer le vôtre ?",
-        "buildOwn": "Créer un plugin Navide"
+        "buildOwn": "Créer un plugin Navide",
+        "installCard": "Installer",
+        "disabledBadge": "Désactivée",
+        "actionsNote": "Chaque action demande une confirmation avant toute modification.",
+        "enableInExtensions": "Navide a arrêté ce plugin Navide. Consultez ce qu’il faisait sur la page Plugins Navide avant de le réactiver.",
+        "actionFailed": "Impossible de terminer : {error}",
+        "verifiedDomain": "vérifié · {domain}",
+        "riskBanner": "Ce plugin Navide demande des capacités sensibles : {list}. Vérifiez avant d’installer.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Captures d’écran",
+        "screenshotLabel": "Capture d’écran {n}",
+        "ratingTitle": "Note",
+        "rateOnWeb": "Noter sur le site",
+        "report": "Signaler",
+        "ratingSignIn": "La notation et le signalement se font sur le site du Navide Marketplace et nécessitent une connexion à Navide Cloud.",
+        "capabilityHint": {
+          "fs": "lit et écrit des fichiers",
+          "shell": "exécute des commandes shell",
+          "terminal": "exécute des commandes dans un terminal",
+          "aiCli": "pilote des agents CLI d’IA",
+          "web": "navigue sur des sites avec vos connexions et les conserve",
+          "agentMessages": "lit le texte des messages entre vos agents",
+          "secrets": "conserve ses propres clés d’API chiffrées sur votre appareil",
+          "agentNotify": "envoie des notifications à vos volets d’agent, une fois autorisé"
+        },
+        "intro": {
+          "title": "Faites de Navide le vôtre, avec des plugins Navide vérifiés.",
+          "signed": "Paquets signés par le Registry",
+          "permissions": "Autorisations affichées avant l’installation",
+          "inApp": "Chaque installation est confirmée dans Navide"
+        },
+        "footer": {
+          "label": "Liens du Navide Marketplace",
+          "removed": "Plugins Navide retirés",
+          "docs": "Documentation développeur",
+          "discussions": "Échanges",
+          "security": "Sécurité"
+        }
       },
       "developerMode": {
         "errors": {
@@ -9402,7 +9441,8 @@
       "manage": "Gérer dans l’espace de travail →",
       "locked-title": "Une tâche système de l’application : modifiez-la depuis le panneau d’auto-évolution de cet espace de travail",
       "managed-by": "Gérée par l’espace de travail",
-      "name": "Auto-évolution · {workspace}"
+      "name": "Auto-évolution · {workspace}",
+      "locked-title-shipped-log": "Planification système gérée par l'App : modifiez-la dans le panneau Journal des mises en production de cet espace de travail"
     },
     "add": "+ Nouvelle",
     "empty": "Aucune tâche planifiée pour l’instant",
@@ -9435,7 +9475,11 @@
       "interrupted": "Ignorée : interrompue",
       "budget_global": "Ignorée : total quotidien des agents épuisé",
       "expired": "Expirée : tâche d’agent non renouvelée depuis 7 jours",
-      "unknown": "Ignorée"
+      "unknown": "Ignorée",
+      "empty": "Ignoré : rien mis en production",
+      "no_chat": "Ignoré : aucun chat privé lié",
+      "plugin_disabled": "Ignoré : le Journal des mises en production est désactivé",
+      "workspace_gone": "Ignoré : le dossier de l'espace de travail n'existe pas"
     },
     "fail-reason": {
       "no_window": "Aucune fenêtre Navide n’a ouvert l’espace de travail de cette tâche. Ouvrez l’espace de travail, puis relancez la tâche.",
@@ -10186,6 +10230,11 @@
       "auto-child-hint": "Créé automatiquement pour un pane enfant. La déconnexion du pane parent le ferme aussi.",
       "unnamed-pane": "Pane sans nom",
       "pane-closed": "Fermé",
+      "pane-dormant": "En veille · réveillable",
+      "pane-dormant-hint": "Le pane a été fermé, mais le chat reste associé. Réveillez-le ici ou depuis le chat, ou déconnectez-le si vous n’en avez plus besoin.",
+      "wake": "Réveiller",
+      "waking": "Réveil…",
+      "wake-label": "Réveiller {pane} pour reprendre sa conversation avec {channel}",
       "chat-id": "chat {id}"
     }
   },
@@ -12518,5 +12567,74 @@
     "disconnected-body": "La CLI du conteneur s’est arrêtée. Reconnecter ouvre une nouvelle session dans le même conteneur.",
     "reconnect": "Reconnecter",
     "close-pane": "Fermer le pane"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "Journal des mises en production"
+    },
+    "title": "Journal des mises en production",
+    "close": "Fermer",
+    "loading": "Chargement…",
+    "window": {
+      "today": "Aujourd'hui",
+      "yesterday": "Hier",
+      "7d": "7 jours",
+      "30d": "30 jours"
+    },
+    "count": "{n} mis en production",
+    "pending": "{n} commande(s) de déploiement détectée(s) à confirmer",
+    "empty": "Rien n'a été mis en production sur cette période",
+    "verb": {
+      "added": "Ajouté",
+      "fixed": "Corrigé",
+      "changed": "Modifié"
+    },
+    "basis": {
+      "agent": "enregistré",
+      "branch": "branche de déploiement",
+      "tag": "étiquette",
+      "hook": "détecté",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "Réglage de production",
+      "migration": "Migration de base de données",
+      "other": "Autre"
+    },
+    "sensitive": "Sensible",
+    "edited": "Modifié à la main",
+    "detected": "Commande de déploiement détectée (non confirmée)",
+    "confirm": "Confirmer la mise en production",
+    "dismiss": "Ignorer",
+    "edit": "Modifier la ligne",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "reset": "Rétablir",
+    "mark-sensitive": "Marquer comme sensible (un chat ne reçoit que le nombre)",
+    "add-title": "Ajouter une entrée",
+    "add": "Ajouter",
+    "summary-placeholder": "Une phrase simple sur ce qui a changé (jamais une valeur)",
+    "ref-placeholder": "Hash de commit, clé de réglage ou ticket (facultatif)",
+    "config-title": "Réglages de production",
+    "config-hint": "Enregistrez le nom d'un réglage et son emplacement, jamais sa valeur ; tout ce qui ressemble à une valeur est refusé.",
+    "config-empty": "Aucun réglage enregistré",
+    "config-key": "clé (ex. mail.sender)",
+    "config-label": "Nom",
+    "config-location": "Emplacement (ex. SSM /app/prod/mail_from)",
+    "config-environment": "Environnement (production par défaut)",
+    "config-note": "Remarque",
+    "remove": "Retirer",
+    "digest-title": "Résumé quotidien",
+    "digest-hint": "Navide l'envoie lui-même à chaque chat privé lié : aucun volet n'est réveillé et aucun quota de volet n'est consommé ; les éléments sensibles et les commandes détectées sont seulement comptés.",
+    "digest-enabled": "Envoyer les dernières 24 heures chaque jour",
+    "digest-at": "Heure",
+    "digest-tz": "Fuseau horaire",
+    "digest-skip-empty": "Ne rien envoyer les jours sans mise en production",
+    "digest-next": "Prochain : {time}",
+    "digest-run": "En envoyer un maintenant",
+    "digest-sent": "Envoi programmé",
+    "error-at": "L'heure doit être au format HH:MM",
+    "error-tz": "Fuseau horaire inconnu"
   }
 }

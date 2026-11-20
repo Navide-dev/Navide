@@ -6,12 +6,14 @@ import { appendPlansProvenanceQuery, FrontendPluginManager, registerBundledPlans
 import { backendEntryOnDisk, loadPluginDir } from './installedPlugins'
 
 const PLANS_BACKEND = backendEntryOnDisk('backend/navide-plans')
+// The pinned navide.plans manifest (Navide-dev/navide-plans) and its version.
+const PLANS_VERSION = (JSON.parse(readFileSync('tests/fixtures/navide-plans/manifest.json', 'utf8')) as { version: string }).version
 
 function packageFixture(directory: string): string {
   mkdirSync(join(directory, 'frontend/left'), { recursive: true })
   mkdirSync(join(directory, 'frontend/window'), { recursive: true })
   mkdirSync(join(directory, 'backend'), { recursive: true })
-  writeFileSync(join(directory, 'manifest.json'), readFileSync('plugins/navide-plans/manifest.json'))
+  writeFileSync(join(directory, 'manifest.json'), readFileSync('tests/fixtures/navide-plans/manifest.json'))
   writeFileSync(join(directory, 'frontend/left/index.html'), '<!doctype html>')
   writeFileSync(join(directory, 'frontend/window/index.html'), '<!doctype html>')
   // A tiny stand-in with the executable bit: the provenance scan only stats
@@ -34,14 +36,14 @@ describe('Plans Host provenance query', () => {
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.1.8',
+        artifactVersion: PLANS_VERSION,
         devRoot: root,
         installedActivation: { ...scanned.activation!, provenance },
       })).toEqual({ registered: true })
       expect(manager.getPlansProvenance()).toMatchObject({
         descriptorSource: 'installed-catalog', selectionOrigin: 'installed-catalog',
         acquisitionProvenance: provenance, packageDirectory: installedDirectory,
-        packageVersion: '1.1.8', frontendEntry: join(installedDirectory, 'frontend/left/index.html'),
+        packageVersion: PLANS_VERSION, frontendEntry: join(installedDirectory, 'frontend/left/index.html'),
         backendExecutable: join(installedDirectory, PLANS_BACKEND),
         frontendEntries: { 'navide.plans.window': join(installedDirectory, 'frontend/window/index.html') },
       })
@@ -58,20 +60,20 @@ describe('Plans Host provenance query', () => {
       const directory = packageFixture(join(
         root,
         'dist-plugins',
-        'official-artifacts/factory-resources/navide.plans/1.1.8',
+        `official-artifacts/factory-resources/navide.plans/${PLANS_VERSION}`,
         `${process.platform}-${process.arch}`,
         'package',
       ))
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.1.8',
+        artifactVersion: PLANS_VERSION,
         devRoot: root,
       })).toEqual({ registered: true })
       expect(manager.getPlansProvenance()).toMatchObject({
         descriptorSource: 'factory-bundle', selectionOrigin: 'factory-bundle',
         acquisitionProvenance: 'factory-bundled', packageDirectory: directory,
-        packageVersion: '1.1.8', backendExecutable: join(directory, PLANS_BACKEND),
+        packageVersion: PLANS_VERSION, backendExecutable: join(directory, PLANS_BACKEND),
       })
       manager.replaceBuiltinForRecovery({ id: 'navide.plans', requires: [], devUrl: '', entryFile: '/legacy.html' })
       expect(manager.getPlansProvenance()).toMatchObject({ selectionOrigin: 'host-bundled', backendExecutable: null })
@@ -91,7 +93,7 @@ describe('Plans Host provenance query', () => {
       expect(registerBundledPlans(manager, {
         isPackaged: false,
         resourcesPath: '',
-        artifactVersion: '1.1.8',
+        artifactVersion: PLANS_VERSION,
         devRoot: root,
         installedActivation: other.activation!,
       })).toEqual({

@@ -273,9 +273,8 @@ seam later without changing the Client wire contract.
 > `login`, `whoami`, `logout`, `publish`. See
 > [`docs/en-US/marketplace-publishing.md`](../../docs/en-US/marketplace-publishing.md).
 > This Python CLI prints a deprecation notice and stays for
-> `scripts/publish-first-party-plugins.sh` and the `plugin-packages.yml` CI
-> pack job: the SDK packages a backend only for its own host target, while
-> `pack --target` here packs every target on one Linux runner. Both CLIs share
+> `scripts/publish-first-party-plugins.sh`, which signs and publishes the
+> packages the first-party plugins' own repositories pack. Both CLIs share
 > `~/.config/navide-plugin/credentials.json` and produce signatures this
 > Registry verifies the same way (`tests/test_sdk_cli_compat.py`).
 
@@ -413,50 +412,28 @@ Then, from the repository root:
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh
+scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-plans \
+  --id navide.plans --version <version> [--target "linux-x64 linux-arm64"] [--yes]
 ```
 
-The script builds, packs, signs and publishes `navide.git` and
-`navide.mini-ide` as `universal`, and `navide.plans` and `navide.browser` for
-the host target (for example `darwin-arm64`), reusing the `navide-plugin` CLI.
-`--skip-build` reuses `dist-plugins/`, `--only git|plans|mini-ide|browser`
-publishes one. Plans and Browser carry a PyInstaller backend, so each other
-target must be built on a machine of that platform and architecture (or by
-`plugin-packages.yml` / `browser-plugin-package.yml` and published with
-`--from-run`).
-
-Running the script with the same version on each platform adds that
-platform's artifact to the version (see
-[Per-target artifacts](#per-target-artifacts)); re-running on one platform
-returns `409` for the target already published.
+The first-party plugins are built in their own repositories
+(Navide-dev/navide-git, navide-mini-ide, navide-browser, navide-plans), whose
+CI packs them; the script only signs and publishes. `navide.git` and
+`navide.mini-ide` are frontend-only and published once as `universal` with
+`--package <vsix> --id <plugin id> --target universal --version <version>`.
 
 ### Publishing platform-specific first-party plugins
 
-`navide.plans` carries a PyInstaller backend, so every target needs its own
-build. `.github/workflows/plugin-packages.yml` (manual `workflow_dispatch`,
-input `ref`) builds it on a runner of each target the app ships
-(`darwin-arm64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`),
-checks the backend's architecture, and uploads
-`navide.plans-<version>-<target>.vsix` plus a `.sha256` (kept 7 days). The
-workflow has no secrets: signing and publishing stay on the maintainer's Mac.
-
-```bash
-gh workflow run plugin-packages.yml -f ref=<commit or tag> [-f artifact_version=<x.y.z>]
-gh run list --workflow plugin-packages.yml --limit 1   # note the run id
-
-NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
-NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
-  --target "linux-x64 linux-arm64" --yes
-```
-
-The packages carry the `ref`'s root `package.json` version unless
-`artifact_version` is given; then that version is stamped on them instead, so
-a plugin release does not have to wait for an App version. Build the local
-packages with the same version: `NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z>
-scripts/publish-first-party-plugins.sh` (the plugin builds read it), and pass it
-as `--version` to `--from-run`.
+`navide.plans` and `navide.browser` carry a PyInstaller backend, so every
+target needs its own build. Their repositories' packaging workflow builds
+each target the app ships (`darwin-arm64`, `linux-x64`, `linux-arm64`,
+`win32-x64`, `win32-arm64`) on a runner of that target and uploads
+`<id>-<version>-<target>.vsix` plus a `.sha256`. The workflows have no
+secrets: signing and publishing stay on the maintainer's Mac, with
+`--from-run <run id> --repo Navide-dev/navide-<name> --id <plugin id>`.
+Publishing the same version for another target adds that target's artifact
+to the version (see [Per-target artifacts](#per-target-artifacts));
+re-publishing a target returns `409`.
 
 Without `--yes` the script downloads the packages (`gh run download`), checks
 each sha256 and the manifest id/version, and prints what it would publish.

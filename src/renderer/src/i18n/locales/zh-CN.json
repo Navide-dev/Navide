@@ -398,6 +398,7 @@
     "hold-starting": "目标分格仍在启动中",
     "hold-typing": "用户正在该分格输入中",
     "hold-mid-turn": "目标 agent 正在运行中",
+    "hold-foreground": "目标终端的 shell 前面有程序在运行（命令、编辑器或密码提示）",
     "hold-settling": "等待目标静置",
     "hold-composer": "输入框仍握着上一次推送的文字",
     "hold-model-switch": "目标分格正在切换模型",
@@ -1596,7 +1597,6 @@
         "loadFailedHint": "请检查网络连接后重试；已安装的 Navide 插件不受影响。",
         "errorDetails": "详细信息",
         "info": "信息",
-        "detailTabs": "Navide 插件详细内容",
         "installVersion": "安装 {version}",
         "versionLabel": "版本 {version}",
         "otherTarget": "不适用此平台（{target}）",
@@ -1643,11 +1643,50 @@
           "target": "平台",
           "channel": "通道",
           "downloads": "下载次数",
-          "status": "状态"
+          "status": "状态",
+          "trust": "签名",
+          "capabilities": "权限"
         },
         "prereleaseAvailable": "有预览版 {version}",
         "buildOwnHint": "想自己做一个？",
-        "buildOwn": "开发 Navide 插件"
+        "buildOwn": "开发 Navide 插件",
+        "installCard": "安装",
+        "disabledBadge": "已停用",
+        "actionsNote": "每个操作都会先请你确认，确认后才会更改。",
+        "enableInExtensions": "这个 Navide 插件被停止了。请先到“Navide 插件”页查看它当时在做什么，再重新启用。",
+        "actionFailed": "无法完成：{error}",
+        "verifiedDomain": "已验证 · {domain}",
+        "riskBanner": "这个 Navide 插件请求敏感能力：{list}。安装前请先确认。",
+        "riskItem": "{cap}（{hint}）",
+        "screenshots": "截图",
+        "screenshotLabel": "截图 {n}",
+        "ratingTitle": "评分",
+        "rateOnWeb": "到网页评分",
+        "report": "举报",
+        "ratingSignIn": "评分和举报在 Navide 市场网页上进行，需要登录 Navide Cloud。",
+        "capabilityHint": {
+          "fs": "读写文件",
+          "shell": "运行 shell 命令",
+          "terminal": "在终端中运行命令",
+          "aiCli": "操作 AI CLI 代理",
+          "web": "以你的登录身份浏览网站并保留登录",
+          "agentMessages": "读取代理之间的消息内容",
+          "secrets": "在你的设备上加密保存自己的 API 密钥",
+          "agentNotify": "经你同意后通知你的代理分格"
+        },
+        "intro": {
+          "title": "让 Navide 更合你用，每个 Navide 插件都经过验证。",
+          "signed": "Registry 签名包",
+          "permissions": "安装前披露权限",
+          "inApp": "每次安装都在 Navide 内确认"
+        },
+        "footer": {
+          "label": "Navide 市场链接",
+          "removed": "已移除的 Navide 插件",
+          "docs": "开发者文档",
+          "discussions": "讨论区",
+          "security": "安全"
+        }
       },
       "developerMode": {
         "errors": {
@@ -9402,7 +9441,8 @@
       "manage": "到工作区管理 →",
       "locked-title": "由 App 管理的系统调度：只能在该工作区的自我优化面板修改",
       "managed-by": "由工作区管理",
-      "name": "自我优化 · {workspace}"
+      "name": "自我优化 · {workspace}",
+      "locked-title-shipped-log": "由 App 管理的系统计划：只能在该工作区的上线记录面板修改"
     },
     "add": "＋ 添加",
     "empty": "还没有调度工作",
@@ -9435,7 +9475,11 @@
       "interrupted": "略过：运行中断",
       "budget_global": "略过：agent 每日总量已满",
       "expired": "已过期：agent job 7 天未更新",
-      "unknown": "略过"
+      "unknown": "略过",
+      "empty": "跳过：这段时间没有上线",
+      "no_chat": "跳过：没有绑定的私聊",
+      "plugin_disabled": "跳过：上线记录已停用",
+      "workspace_gone": "跳过：工作区文件夹不存在"
     },
     "fail-reason": {
       "no_window": "没有 Navide 窗口打开这个 job 的工作区。请先打开工作区，再运行一次。",
@@ -10186,6 +10230,11 @@
       "auto-child-hint": "为子分格自动创建的话题；关闭父分格的连接时会一并关闭。",
       "unnamed-pane": "未命名分格",
       "pane-closed": "已关闭",
+      "pane-dormant": "已休眠・可唤醒",
+      "pane-dormant-hint": "分格已关闭，但聊天室仍保留连接；可以在这里或聊天室唤醒，不要了就关闭连接。",
+      "wake": "唤醒",
+      "waking": "唤醒中…",
+      "wake-label": "唤醒 {pane}，接回它在 {channel} 的对话",
       "chat-id": "聊天 {id}"
     }
   },
@@ -12518,5 +12567,74 @@
     "disconnected-body": "容器中的 CLI 已停止。重新连接会在同一个容器中开启新的会话。",
     "reconnect": "重新连接",
     "close-pane": "关闭分格"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "上线记录"
+    },
+    "title": "上线记录",
+    "close": "关闭",
+    "loading": "读取中…",
+    "window": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "7d": "7 天",
+      "30d": "30 天"
+    },
+    "count": "上线 {n} 条",
+    "pending": "待确认的部署命令 {n} 条",
+    "empty": "这段时间没有上线记录",
+    "verb": {
+      "added": "新增",
+      "fixed": "修复",
+      "changed": "调整"
+    },
+    "basis": {
+      "agent": "登记",
+      "branch": "部署分支",
+      "tag": "标签",
+      "hook": "检测",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "生产环境设置",
+      "migration": "数据库迁移",
+      "other": "其他"
+    },
+    "sensitive": "敏感",
+    "edited": "已改写",
+    "detected": "检测到部署命令（待确认）",
+    "confirm": "确认上线",
+    "dismiss": "忽略",
+    "edit": "改说明",
+    "save": "保存",
+    "cancel": "取消",
+    "reset": "还原",
+    "mark-sensitive": "标为敏感（聊天只显示条数）",
+    "add-title": "补登一条",
+    "add": "新增",
+    "summary-placeholder": "一句话说明改了什么（不要填任何值）",
+    "ref-placeholder": "commit hash、设置 key 或单号（选填）",
+    "config-title": "生产环境设置登记",
+    "config-hint": "只登记名称与位置，绝不填值；看起来像值的内容会被拒绝。",
+    "config-empty": "还没有登记任何设置",
+    "config-key": "key（例如 mail.sender）",
+    "config-label": "名称",
+    "config-location": "位置（例如 SSM /app/prod/mail_from）",
+    "config-environment": "环境（默认 production）",
+    "config-note": "备注",
+    "remove": "移除",
+    "digest-title": "每日摘要",
+    "digest-hint": "由 Navide 直接推送到所有绑定的私聊，不唤醒分格、不花分格额度；敏感条目与检测到的命令只显示条数。",
+    "digest-enabled": "每天推送过去 24 小时的上线记录",
+    "digest-at": "时间",
+    "digest-tz": "时区",
+    "digest-skip-empty": "没有上线的那天不推",
+    "digest-next": "下次：{time}",
+    "digest-run": "立即推送一次",
+    "digest-sent": "已排入推送",
+    "error-at": "时间格式要是 HH:MM",
+    "error-tz": "无法识别的时区"
   }
 }

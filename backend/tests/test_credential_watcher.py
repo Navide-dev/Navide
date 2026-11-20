@@ -738,3 +738,242 @@ async def test_reconcile_survives_a_failed_broadcast(
     monkeypatch.setattr(ws_handlers, "_broadcast_profiles_changed", failing_broadcast)
     await reconcile_live_account("codex")
     assert "socket gone" in caplog.text
+
+
+# ---- cursor: a Keychain login that carries an account id --------------------
+#
+# cursor-agent keeps its session in two login-keychain items; the identity the
+# vault reads is the access token's user id. The Keychain here is the in-process
+# fake from the vendor tests, so no real item and no real token is ever read.
+
+
+def _cursor_vault(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from agent_team_backend.credential_vault import CredentialVault
+    from tests.test_credential_vault_keychain_vendors import FakeSecurity
+
+    sec = FakeSecurity()
+    vault = CredentialVault(
+        root=tmp_path / "vault-root", real_home=tmp_path / "vault-home",
+        security_runner=sec, platform="darwin",
+    )
+    monkeypatch.setattr(app, "credential_vault", vault)
+    return vault, sec
+
+
+def _cursor_sign_in(sec, sub: str | None) -> None:
+    """What `cursor-agent login` / `logout` leaves in the login keychain."""
+    from tests.test_credential_vault_keychain_vendors import _jwt
+
+    if sub is None:
+        sec.items.pop(("cursor-access-token", "cursor-user"), None)
+        sec.items.pop(("cursor-refresh-token", "cursor-user"), None)
+        return
+    sec.items[("cursor-access-token", "cursor-user")] = _jwt(f"auth0|{sub}")
+    sec.items[("cursor-refresh-token", "cursor-user")] = f"refresh-{sub}"
+
+
+async def test_cursor_is_watched_through_the_login_keychain_on_macos(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    keychain = home / "Library" / "Keychains" / "login.keychain-db"
+    keychain.parent.mkdir(parents=True)
+    keychain.write_bytes(b"db-0")
+    identity = {"cursor": ("user_a", True)}
+    fired: list[str] = []
+
+    async def sink(agent_key: str) -> None:
+        fired.append(agent_key)
+
+    watcher = CredentialWatcher(
+        sink, real_home=home, agent_keys=("cursor",),
+        fingerprint=lambda key: identity[key], debounce_s=0.1, poll_s=0.05,
+        platform="darwin",
+    )
+    watcher.start()
+    try:
+        assert watcher._watched[keychain][0] == ("cursor",)  # noqa: SLF001
+        await asyncio.sleep(0.2)
+        identity["cursor"] = ("user_b", True)
+        keychain.write_bytes(b"db-1-longer")
+        await _wait_for(fired)
+        assert fired == ["cursor"]
+    finally:
+        watcher.stop()
+
+
+async def test_cursor_sign_in_to_a_parked_account_reuses_its_profile(
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    vault, sec = _cursor_vault(monkeypatch, tmp_path)
+    work = store.create(agent_key="cursor", name="Work")
+    personal = store.create(agent_key="cursor", name="Personal")
+    store.set_default("cursor", work["id"])
+    _cursor_sign_in(sec, "user_personal")
+    vault.capture("cursor", personal["id"])
+    _cursor_sign_in(sec, "user_work")
+    vault.capture("cursor", work["id"])
+    # `cursor-agent login` in a plain terminal, as the parked account.
+    _cursor_sign_in(sec, "user_personal")
+    _forbid_credential_writes(monkeypatch)
+
+    await reconcile_live_account("cursor")
+    await reconcile_live_account("cursor")
+
+    doc = store.list()
+    assert [p["id"] for p in doc["profiles"]] == [work["id"], personal["id"]]
+    assert doc["defaults"]["cursor"] == personal["id"]
+    payloads = [e["payload"] for e in events if e["type"] == "cli_profiles.changed"]
+    assert payloads and all(p["forced"] is False for p in payloads)
+
+
+async def test_cursor_sign_in_to_a_new_account_registers_it_once(
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    vault, sec = _cursor_vault(monkeypatch, tmp_path)
+    work = store.create(agent_key="cursor", name="Work")
+    store.set_default("cursor", work["id"])
+    _cursor_sign_in(sec, "user_work")
+    vault.capture("cursor", work["id"])
+    _cursor_sign_in(sec, "user_other")
+    _forbid_credential_writes(monkeypatch, allow=("harvest", "write_slot"))
+
+    await reconcile_live_account("cursor")
+    await reconcile_live_account("cursor")  # the same login seen again
+
+    doc = store.list()
+    assert len(doc["profiles"]) == 2
+    new_id = doc["defaults"]["cursor"]
+    assert new_id != work["id"]
+    assert vault.identity("cursor", new_id) == {"email": "user_other", "signedIn": True}
+    # Nothing moved in the Keychain: the live login is still the one signed in.
+    assert vault.identity("cursor") == {"email": "user_other", "signedIn": True}
+
+
+async def test_cursor_sign_out_is_announced_and_moves_nothing(
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    vault, sec = _cursor_vault(monkeypatch, tmp_path)
+    work = store.create(agent_key="cursor", name="Work")
+    store.set_default("cursor", work["id"])
+    _cursor_sign_in(sec, "user_work")
+    vault.capture("cursor", work["id"])
+    _cursor_sign_in(sec, None)
+    _forbid_credential_writes(monkeypatch)
+
+    await reconcile_live_account("cursor")
+
+    doc = store.list()
+    assert [p["id"] for p in doc["profiles"]] == [work["id"]]
+    assert doc["defaults"]["cursor"] == work["id"]
+    assert vault.identity("cursor") == {"email": None, "signedIn": False}
+    assert [e["type"] for e in events] == ["cli_profiles.changed"]
+
+
+async def test_a_navide_sign_in_in_progress_is_not_registered_twice(
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """cursor has no login isolation: an "add account" sign-in inside Navide
+    runs against the live Keychain, and the profile it was started for picks
+    the login up when it finishes. Reconciling the live login meanwhile would
+    register the same account a second time."""
+    vault, sec = _cursor_vault(monkeypatch, tmp_path)
+    work = store.create(agent_key="cursor", name="Work")
+    store.set_default("cursor", work["id"])
+    _cursor_sign_in(sec, "user_work")
+    vault.capture("cursor", work["id"])
+    adding = store.create(agent_key="cursor", name="Adding")
+    vault.login_spawn_env("cursor", adding["id"])
+    _cursor_sign_in(sec, "user_new")  # the login pane finished signing in
+
+    await reconcile_live_account("cursor")
+
+    doc = store.list()
+    assert [p["id"] for p in doc["profiles"]] == [work["id"], adding["id"]]
+    assert doc["defaults"]["cursor"] == work["id"]
+
+    # The login poller then parks the new login and puts the old one back.
+    assert vault.harvest_login_home("cursor", adding["id"])
+    await reconcile_live_account("cursor")
+
+    doc = store.list()
+    assert [p["id"] for p in doc["profiles"]] == [work["id"], adding["id"]]
+    assert doc["defaults"]["cursor"] == work["id"]
+    assert vault.identity("cursor", adding["id"])["email"] == "user_new"
+    assert vault.identity("cursor")["email"] == "user_work"
+
+
+@pytest.mark.parametrize("agent_key", ["cursor", "copilot"])
+async def test_an_add_account_sign_in_keeps_its_name_through_the_real_harvest(
+    agent_key: str,
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The whole non-isolated Add Account round trip: the watcher sees the new
+    login mid-sign-in, the login poller harvests it (with its de-duplication),
+    then the watcher sees the previous login put back. Reconciling mid-login
+    used to register the account under its id, flip the active account to it,
+    and let the de-duplication fold the profile the user named into that one."""
+    from agent_team_backend import usage_service
+    from agent_team_backend.credential_vault import CredentialVault
+    from tests.test_credential_vault_keychain_vendors import COPILOT_CONFIG, FakeSecurity
+
+    sec = FakeSecurity()
+    vault = CredentialVault(
+        root=tmp_path / "vault-root", real_home=tmp_path / "vault-home",
+        security_runner=sec,
+        platform="darwin" if agent_key == "cursor" else "linux",
+    )
+    monkeypatch.setattr(app, "credential_vault", vault)
+    monkeypatch.delenv("COPILOT_HOME", raising=False)
+    monkeypatch.setattr(usage_service, "_login_pane_running", lambda *_args: False)
+    copilot_config = tmp_path / "vault-home" / ".copilot" / "config.json"
+
+    def sign_in(who: str) -> None:
+        if agent_key == "cursor":
+            _cursor_sign_in(sec, who)
+            return
+        copilot_config.parent.mkdir(parents=True, exist_ok=True)
+        copilot_config.write_text(COPILOT_CONFIG.replace(
+            '"lastLoggedInUser": { "host": "https://github.com", "login": "alice" }',
+            f'"lastLoggedInUser": {{ "host": "https://github.com", "login": "{who}" }}',
+        ), encoding="utf-8")
+
+    work = store.create(agent_key=agent_key, name="Work")
+    store.set_default(agent_key, work["id"])
+    sign_in("alice")
+    vault.capture(agent_key, work["id"])
+    adding = store.create(agent_key=agent_key, name="Named by the user")
+    vault.login_spawn_env(agent_key, adding["id"])
+    sign_in("bob")  # the login pane finished signing in
+
+    expected = [(work["id"], "Work"), (adding["id"], "Named by the user")]
+
+    def profiles() -> list[tuple[str, str]]:
+        return [(p["id"], p["name"]) for p in store.list()["profiles"]]
+
+    await reconcile_live_account(agent_key)
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+
+    assert await usage_service._harvest_login_home_locked(vault, agent_key, adding["id"])
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+
+    await reconcile_live_account(agent_key)
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+    assert vault.identity(agent_key)["email"] == "alice"
+    assert vault.identity(agent_key, adding["id"])["email"] == "bob"

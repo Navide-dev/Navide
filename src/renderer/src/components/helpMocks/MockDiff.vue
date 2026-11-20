@@ -4,7 +4,7 @@
 // file actually says, and inventing source would be the one part of the
 // picture that could not be true.
 //
-// Mirrors plugins/navide-git/src/editor/DiffPane.vue:204-212 — `.dp-hunk`
+// Mirrors navide-git's src/editor/DiffPane.vue:204-212 — `.dp-hunk`
 // with its `.dp-range` header and the `.hk-btn` per-hunk actions — and the
 // `.dp-grid` side-by-side body under it (:218-226). The single-column form is
 // ConflictPane.vue's own one-block-at-a-time view.

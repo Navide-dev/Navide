@@ -26,10 +26,6 @@ const TEST_DIRS = [
   'src',
   'packages/plugin-sdk/src',
   'packages/plugin-ui/src',
-  'plugins/navide-git/src',
-  'plugins/navide-git/tests',
-  'plugins/navide-plans/src',
-  'plugins/navide-plans/tests',
   'tests',
 ]
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', 'dist-plugins', '.git'])

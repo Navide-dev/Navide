@@ -225,7 +225,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
-import { decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
+import { answerStartupPrompt, decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -537,6 +537,7 @@ const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./component
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
+const ShippedLogPanel = defineAsyncComponent(() => import('./components/ShippedLogPanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 // Plan P2: the status bar's Navide plugins item and its Stop popover.
@@ -3211,8 +3212,10 @@ function messagingHoldKey(
   // A quiet program is still a program: an editor, a pager, a REPL, an ssh
   // session or a sudo password prompt prints nothing and reads idle, and would
   // take the line (and its Enter) as its own input. The backend knows who is in
-  // front of the tty; polled by refreshTerminalPrompts().
-  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'mid-turn'
+  // front of the tty; polled by refreshTerminalPrompts(). Its own key, not
+  // 'mid-turn': a sender told "printing" waits, one told "a program has the
+  // tty" (a password prompt, an editor) knows someone has to finish it.
+  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'foreground'
   const lastActive = paneLastActiveAt.get(paneId) ?? 0
   const inFlight = isTurnInFlight(lastActive, paneTurnCompleteAt.get(paneId) ?? 0, now, {
     inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
@@ -4330,6 +4333,27 @@ function spawnGateContextFor(parentPaneId: string) {
  *  by open workspace — mirrors handleUiInvokeRequest's ownership check. The
  *  gate runs here because only this window knows the pane counts, chain depth
  *  and name collisions it needs. */
+/** For a terminal just opened over MCP that is not on screen, where it went
+ *  and how to show it; null otherwise. A terminal is usually there for the
+ *  user to type into (a password, a prefilled command), and one that landed
+ *  on another tab, behind a plugin tab or in a background workspace read as
+ *  "it never opened" (0.2.46). Agent panes keep their placement rules and get
+ *  no note: their user reads the result, not the pane. */
+function terminalPlacementNote(paneId: string): string | null {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane || pane.agentKey !== TERMINAL_AGENT_KEY) return null
+  const otherWorkspace = normWs(pane.workspacePath) !== normWs(currentWorkspace.value)
+  const behindPlugin = activePluginMainKey.value !== null
+  if (!otherWorkspace && !behindPlugin && tabFilteredPaneIds.value.has(paneId)) return null
+  const tab = pane.runGroupId ? (runGroups.value.find((g) => g.id === pane.runGroupId)?.name ?? pane.runGroupId) : 'manual'
+  const where = otherWorkspace
+    ? `workspace ${pane.workspacePath}, which is not the one on screen`
+    : behindPlugin
+      ? `tab "${tab}", which a plugin tab is covering`
+      : `tab "${tab}", which is not the tab on screen`
+  return `terminal "${pane.messagingName ?? paneId}" opened in ${where} — call ui_invoke ui.pane.focus {"paneId": "${paneId}"} to show it to the user`
+}
+
 async function handleMcpSpawnRequest(ev: {
   request_id: string
   requester_pane_id: string
@@ -4454,6 +4478,8 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
+  const placement = terminalPlacementNote(paneId)
+  const advisories = placement ? [...(gate.advisories ?? []), placement] : gate.advisories
   if (cross) {
     // Disclosed in this window as well as in the backend's action record: an
     // agent of another project opened a pane here (DESIGN-C §5). The toast
@@ -4473,7 +4499,7 @@ async function handleMcpSpawnRequest(ev: {
     // next and judged as the kickoff verdict; a pane whose task did not land
     // stays open (Windows VM 0.2.38: killing it reported a launched pane as
     // 建立失敗).
-    report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+    report({ ok: true, paneId, name: childName, advisories })
     const standaloneEvidence: StandaloneKickoffEvidence = {}
     // One verdict per request: a launch prompt reported as blocked-by-prompt
     // is the answer, and the verdict judged below is then dropped, as on the
@@ -4508,7 +4534,7 @@ async function handleMcpSpawnRequest(ev: {
   // own task yet.
   if (child) child.kickoffStatus = 'pending'
   notifyRestore.toast(i18n.global.t('msg.spawn-toast', { parent: parentName, child: childName }))
-  report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+  report({ ok: true, paneId, name: childName, advisories })
 
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
@@ -5344,6 +5370,7 @@ async function injectText(
       await clearLeftoverPrompt({
         readScreen: renderedScreen,
         draftText: () => (paneRefs[paneId]?.draftText as (() => string) | undefined)?.() ?? '',
+        lastSubmitted: () => (paneRefs[paneId]?.lastSubmittedPrompt as (() => string) | undefined)?.() ?? '',
         navideTypedLast: () => paneNavideTypedLast(paneId),
         cols: paneRefs[paneId]?.terminalSize?.()?.cols ?? 80,
         send: async (keys) => { await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys }) },
@@ -7670,6 +7697,25 @@ function heldWorkspaceTrust(paneId: string): string {
   return decision.action === 'block' ? decision.why : ''
 }
 
+/** The one answer Navide gives a workspace trust dialog live on this pane
+ *  outside the kickoff's watch (lib/startupPrompts.ts): decided against the
+ *  pane's workspace, the cursor moved onto the trust option, and answered only
+ *  once the dialog has left the screen — a bare Enter landed on Claude Code
+ *  2.1.329's "No, exit", and a dialog still drawn after it was answered a
+ *  second time by the kickoff's watch, which then reported blocked-by-prompt.
+ *  'none' when no workspace trust dialog is on screen. */
+async function answerWorkspaceTrust(paneId: string): Promise<{ outcome: 'none' | 'answered' } | { outcome: 'held'; why: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return { outcome: 'none' }
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  if (prompt?.kind !== 'workspace-trust') return { outcome: 'none' }
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  if (decision.action === 'block') return { outcome: 'held', why: decision.why }
+  if (await answerStartupPrompt(pane.agentKey, prompt, decision.choose, deps)) return { outcome: 'answered' }
+  return { outcome: 'held', why: 'the trust option did not take on the trust dialog' }
+}
+
 /** Role injection's hold on a trust dialog left to a person: recorded, then
  *  wait for whoever answers it. False when it was not answered in time. */
 async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string): Promise<boolean> {
@@ -7696,12 +7742,17 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
-      // Enter trusts the folder: only the pane's own workspace. Any other
-      // folder is reported (the kickoff's blocked-by-prompt) and left alone.
-      const held = heldWorkspaceTrust(paneId)
-      if (held) {
-        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${held}`)
+      // Trust only the pane's own workspace. Any other folder, or a menu whose
+      // cursor cannot be read, is reported (the kickoff's blocked-by-prompt)
+      // and left alone.
+      const trust = await answerWorkspaceTrust(paneId)
+      if (trust.outcome === 'held') {
+        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${trust.why}`)
         return false
+      }
+      if (trust.outcome === 'answered') {
+        pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
+        return true
       }
       if (ref.sessionId) {
         await backend.send('terminal.input', {
@@ -8184,7 +8235,14 @@ function scheduleInjection(pane: ActivePane): void {
         if (!paneAlive(pane.id)) return
       } else if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
-        const r = paneRefs[pane.id]
+        const trust = await answerWorkspaceTrust(pane.id)
+        if (trust.outcome === 'held' && !(await waitHeldWorkspaceTrust(pane, trust.why, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
+        }
+        const r = trust.outcome === 'none' ? paneRefs[pane.id] : undefined
         if (r?.sessionId) {
           await backend.send('terminal.input', {
             terminal_session_id: r.sessionId as string,
@@ -9582,9 +9640,17 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   })
   delete paneRefs[paneId]
   unregisterPaneMessaging(paneId)
-  // Only a real close releases a chat-channel binding; rebuild and idle-reclaim
-  // keep the seat, and workspace close / teardown restore the pane later.
-  if (markRemoved && !keepInList) useChannels(backend).paneClosed(paneId)
+  // Only a real close parks a chat-channel binding (kept dormant for the chat to wake
+  // back or unlink); rebuild and idle-reclaim keep the seat, and workspace close /
+  // teardown restore the pane later.
+  if (markRemoved && !keepInList) {
+    useChannels(backend).paneClosed(paneId, {
+      paneName: pane?.customName || pane?.autoName || pane?.messagingName || '',
+      workspacePath: pane?.workspacePath ?? '',
+      sessionId: pane?.pinnedSessionId ?? '',
+      agent: pane?.agentKey ?? '',
+    })
+  }
   turnTextGate.delete(paneId)
   workerTurnTextGate.delete(paneId)
   workerTurnTextAt.delete(paneId)
@@ -12316,6 +12382,8 @@ registerCommand('ui.pane.create', async (args) => {
   for (const advisory of spawnAdvisoriesFor(gateCtx)) {
     recordDiagnostic({ level: 'warn', code: 'spawn.advisory', message: advisory, paneId })
   }
+  const placement = terminalPlacementNote(paneId)
+  if (placement) recordDiagnostic({ level: 'warn', code: 'spawn.placement', message: placement, paneId })
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: currentWorkspace.value,
     pane_id: paneId,
@@ -28010,6 +28078,10 @@ function paneIsCommander(p: ActivePane): boolean {
       :agent-specs="enabledAgentSpecs"
       @close="evolve.closePanel()"
     />
+
+    <!-- Shipped Log panel (opened from the sidebar workspace menus and the
+         Schedule panel's digest job row; shown while a workspace is set) -->
+    <ShippedLogPanel :backend="backend" />
 
     <!-- Notifications popover -->
     <NotifyPanel

@@ -32,6 +32,7 @@ from .db import create_db_engine
 from .error_docs import CAPABILITY_DENIED, DocumentedHTTPException, register_error_docs
 from .migrations import MIGRATIONS, applied_migrations
 from .signing import public_key_fingerprint
+from .self_service import verified_domain
 from .static_scan.report import SCANNER_ID, SCANNER_VERSION
 from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure, undeclared_network_hosts
@@ -92,7 +93,7 @@ from .versions import (
     latest_stable_version,
     version_channel,
 )
-from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text
+from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text, screenshot_paths
 
 _log = logging.getLogger(__name__)
 
@@ -1035,6 +1036,10 @@ def _register_routes(app: FastAPI) -> None:
             and any(
                 a.path.lower() in CHANGELOG_NAMES
                 for a in repo.list_assets(latest_row.id)
+            ),
+            verified_domain=verified_domain(publisher),
+            screenshots=(
+                screenshot_paths(repo, latest_row) if latest_row is not None else []
             ),
         )
 

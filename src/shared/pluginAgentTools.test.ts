@@ -182,9 +182,11 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
   })
 
   it('keeps a fully escaped piece inside a 1 MiB child frame reader in both directions', () => {
-    // The built-in Plans backend's reader; read as text because it is Python.
-    const plans = readFileSync(join(process.cwd(), 'plugins/navide-plans/backend/plans_backend.py'), 'utf8')
-    const frame = Number(/^MAX_FRAME_BYTES = ([\d_]+)$/m.exec(plans)?.[1]?.replace(/_/g, ''))
+    // The first-party Plans backend's reader (MAX_FRAME_BYTES in navide-plans'
+    // backend/plans_backend.py), recorded for the pinned version.
+    const frame = (JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/navide-plans/contract.json'), 'utf8')) as {
+      maxFrameBytes: number
+    }).maxFrameBytes
     expect(frame).toBe(1_048_576)
     for (const method of [BACKEND_WIRE_RESULT_CHUNK_METHOD, BACKEND_WIRE_ARGUMENT_CHUNK_METHOD]) {
       const worst = JSON.stringify({

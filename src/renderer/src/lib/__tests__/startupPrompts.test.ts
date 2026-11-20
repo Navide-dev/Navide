@@ -260,6 +260,26 @@ const claudeTrust = (folder: string): string => [
   '',
   ' Enter to confirm · Esc to cancel',
 ].join('\n')
+// The same dialog as 2.1.329 actually draws it (VM, Linux, 2.1.329; binary:
+// cancelFirst, focus "cancel", hideIndexes): "No, exit" first with the cursor
+// on it, no numbers. `cursor` is the option the ❯ is on.
+const claudeTrustLive = (folder: string, cursor: 0 | 1 | null = 0): string => [
+  ' Accessing workspace:',
+  '',
+  ` ${folder}`,
+  '',
+  ' Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known',
+  " open source project, or work from your team). If not, take a moment to review what's in this folder first.",
+  '',
+  " Claude Code'll be able to read, edit, and execute files here.",
+  '',
+  ' Security guide',
+  '',
+  `${cursor === 0 ? ' ❯ ' : '   '}No, exit`,
+  `${cursor === 1 ? ' ❯ ' : '   '}Yes, I trust this folder`,
+  '',
+  ' Enter to confirm · Esc to cancel',
+].join('\n')
 const codexTrust = (folder: string): string => [
   ` You are in ${folder}`,
   '',
@@ -341,5 +361,101 @@ describe('the workspace trust dialog at launch', () => {
       expect(watch.outcome).toBe(outcome)
       expect(state.sent).toEqual(sent)
     }
+  })
+})
+
+describe('Claude Code\'s trust menu, in either order', () => {
+  // A pane on the 2.1.329 dialog: Down/Up move the cursor, Enter on Yes
+  // trusts, Enter on No exits the CLI (as the real one does).
+  function trustPane(layout: 'live' | 'old', folder = WORKSPACE) {
+    const options = layout === 'live' ? ['No, exit', 'Yes, I trust this folder'] : ['Yes, I trust this folder', 'No, exit']
+    const state = { cursor: 0, open: true, alive: true, sent: [] as string[] }
+    const draw = (): string => layout === 'live'
+      ? claudeTrustLive(folder, state.cursor as 0 | 1)
+      : claudeTrust(folder).replace(' ❯ 1. Yes', `${state.cursor === 0 ? ' ❯ ' : '   '}1. Yes`)
+        .replace('   2. No', `${state.cursor === 1 ? ' ❯ ' : '   '}2. No`)
+    return {
+      state,
+      readScreen: () => (state.open ? draw() : ' > '),
+      send: async (keys: string) => {
+        state.sent.push(keys)
+        if (keys === '\x1b[B') state.cursor = Math.min(state.cursor + 1, 1)
+        if (keys === '\r') {
+          state.open = false
+          state.alive = options[state.cursor] !== 'No, exit'
+        }
+        return true
+      },
+    }
+  }
+  const settle = (pane: ReturnType<typeof trustPane>) => {
+    let t = 0
+    return settleStartupPrompts({
+      agentKey: 'claude',
+      readScreen: pane.readScreen,
+      navideDirs: () => [],
+      workspace: () => WORKSPACE,
+      awaiting: () => false,
+      ready: () => !pane.state.open,
+      alive: () => pane.state.alive,
+      send: pane.send,
+      sleep: async () => { t += 250 },
+      now: () => t,
+      settleMs: 0,
+      timeoutMs: 15_000,
+      record: () => {},
+    })
+  }
+
+  it('reads the cursor off the 2.1.329 menu and the older one', () => {
+    expect(readStartupPrompt('claude', claudeTrustLive(WORKSPACE))).toMatchObject({
+      kind: 'workspace-trust', options: ['No, exit', 'Yes, I trust this folder'], cursorOn: 'No, exit',
+    })
+    expect(readStartupPrompt('claude', claudeTrustLive(WORKSPACE, 1))).toMatchObject({ cursorOn: 'Yes, I trust this folder' })
+    expect(readStartupPrompt('claude', claudeTrust(WORKSPACE))).toMatchObject({
+      options: ['Yes, I trust this folder', 'No, exit'], cursorOn: 'Yes, I trust this folder',
+    })
+  })
+
+  it('moves onto "Yes, I trust this folder" before Enter on the 2.1.329 menu', async () => {
+    const pane = trustPane('live')
+    expect(await settle(pane)).toEqual({ outcome: 'clear' })
+    expect(pane.state.sent).toEqual(['\x1b[B', '\r'])
+    expect(pane.state.alive).toBe(true)
+  })
+
+  it('presses Enter alone where the cursor already is on it (older menu)', async () => {
+    const pane = trustPane('old')
+    expect(await settle(pane)).toEqual({ outcome: 'clear' })
+    expect(pane.state.sent).toEqual(['\r'])
+  })
+
+  it('presses nothing when the cursor cannot be read', async () => {
+    const pane = trustPane('live')
+    const unmarked = claudeTrustLive(WORKSPACE, null)
+    expect(decideStartupPrompt(readStartupPrompt('claude', unmarked)!, { navideDirs: [], workspace: WORKSPACE }))
+      .toMatchObject({ action: 'block' })
+    const watch = await settle({ ...pane, readScreen: () => unmarked })
+    expect(watch.outcome).toBe('blocked')
+    expect(pane.state.sent).toEqual([])
+  })
+
+  it('still leaves any other folder alone on the 2.1.329 menu', async () => {
+    for (const folder of ['/Users/alex', `${WORKSPACE}/sub`, '/Users/alex/other']) {
+      const pane = trustPane('live', folder)
+      expect((await settle(pane)).outcome).toBe('blocked')
+      expect(pane.state.sent).toEqual([])
+    }
+  })
+
+  it('is not blocked by a dialog that was answered already and is leaving the screen', async () => {
+    // dismissStartupDialog's Enter went in; the watch reads the dialog once
+    // more before the CLI redraws, and must not report the kickoff blocked.
+    const pane = trustPane('old')
+    let reads = 0
+    const lagging = { ...pane, readScreen: () => (reads++ === 0 ? claudeTrust(WORKSPACE) : ' > ') }
+    pane.state.open = false
+    expect(await settle(lagging)).toEqual({ outcome: 'clear' })
+    expect(pane.state.sent).toEqual([])
   })
 })

@@ -117,7 +117,6 @@ VERSION_FILES=(
   README.md
   README.zh-TW.md
   README.ja-JP.md
-  plugins/official-plugin-fingerprints.json
 )
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -143,6 +142,10 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
 fi
 
 pnpm release:check
+# The installer takes navide.git from the official Registry: the pinned
+# version must be published and verify before anything else runs.
+node scripts/stage-official-plugin-artifacts.mjs --check-registry \
+  || fail "a pinned Registry plugin version is missing or does not verify (see above)"
 warn_missing_announcement "$VERSION"
 require_uv_version "$MIN_UV_VERSION"
 
@@ -174,9 +177,6 @@ node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
-# Record what each bundled first-party plugin ships in this release; refuses
-# when a plugin's content changed since the last release without a bump.
-node scripts/official-plugin-fingerprints.mjs --write --baseline "$TAG"
 uv --project backend lock
 pnpm release:check "$TAG"
 
@@ -203,7 +203,7 @@ node scripts/check-no-dev-web.mjs out
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \
     | sed -E 's/^.. //' \
-    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|plugins/official-plugin-fingerprints\.json)$' \
+    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md)$' \
     || true
 )"
 [[ -z "$unexpected_changes" ]] || \

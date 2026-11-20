@@ -11,24 +11,15 @@ import { AVAILABLE_UI_LOCALES } from '../index'
 // are coming, so they are tests now.
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
-  'src/renderer/src/i18n/locales',
-  'plugins/navide-git/src/locales',
-  'plugins/navide-mini-ide/src/locales',
-  'plugins/navide-plans/src/locales',
-  'plugins/navide-browser/src/locales'
+  'src/renderer/src/i18n/locales'
 ]
 
 // Where each catalog folder is registered, for the "a file is a registered
 // language" check. plugin-ui's registry is AVAILABLE_UI_LOCALES itself; the
 // Host's folder is merged by an import.meta.glob of every file in it
-// (src/renderer/src/i18n/hostMessages.ts), so it must hold exactly its languages.
+// (src/renderer/src/i18n/hostMessages.ts), so it must hold exactly its
+// languages. The first-party plugins check their own registries.
 const globRegistered = ['src/renderer/src/i18n/locales']
-const pluginRegistries: Record<string, string> = {
-  'plugins/navide-git/src/locales': 'plugins/navide-git/src/gitMessages.ts',
-  'plugins/navide-mini-ide/src/locales': 'plugins/navide-mini-ide/src/miniIdeMessages.ts',
-  'plugins/navide-plans/src/locales': 'plugins/navide-plans/src/plansI18n.ts',
-  'plugins/navide-browser/src/locales': 'plugins/navide-browser/src/browserI18n.ts'
-}
 
 // Locales translated after this check existed: their catalogs must not carry
 // English text that was simply left in place (see untranslated below).
@@ -240,13 +231,6 @@ describe('every catalog file is a registered language', () => {
 
   it.each(globRegistered)('in %s', (dir) => {
     expect(localesIn(dir)).toEqual(localesIn(localeDirs[0]))
-  })
-
-  it.each(Object.entries(pluginRegistries))('in %s', (dir, registry) => {
-    const source = readFileSync(resolve(registry), 'utf8')
-    const block = source.slice(source.indexOf('_MESSAGES = {'), source.indexOf('}', source.indexOf('_MESSAGES = {')))
-    const registered = [...block.matchAll(/'([a-z]{2}-[A-Z]{2})':/g)].map((m) => m[1]).sort()
-    expect(registered).toEqual(localesIn(dir))
   })
 })
 

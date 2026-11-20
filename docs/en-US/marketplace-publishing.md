@@ -696,18 +696,19 @@ undone, only yanked (see [8. Yank a version](#8-yank-a-version)).
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh [--only git|mini-ide|plans|browser]
+scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-<name> \
+  --id <plugin id> --version <version> [--target "<targets>"] [--yes]
 ```
 
+Each first-party plugin is built and packed by its own repository's CI
+(`Navide-dev/navide-git`, `navide-mini-ide`, `navide-browser`, `navide-plans`).
+
 - `navide.git` and `navide.mini-ide` are frontend-only and are listed once, as
-  `universal`.
+  `universal` (`--package <vsix> --id <plugin id> --target universal --version <version>`).
 - `navide.plans` and `navide.browser` carry a native backend and are listed
-  per target. The script lists the machine's own target; the other targets
-  the App ships come from `plugin-packages.yml` (Plans) and
-  `browser-plugin-package.yml` (Browser), listed with
-  `--from-run <run id> --id <plugin id> --version <version> --target "<targets>" --yes`.
-- Only list a plugin whose version changed in this release. A version that is
-  already listed answers `409`; skip it with `--only`.
+  per target, from their packaging run with `--from-run`.
+- Only list a plugin whose version changed. A version that is already listed
+  answers `409`.
 - `navide.browser` is listed for the first time with 0.2.39.
 
 The publisher key and token stay on the maintainer's machine; the CI

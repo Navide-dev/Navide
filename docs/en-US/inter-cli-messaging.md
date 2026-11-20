@@ -672,13 +672,20 @@ empties it with Ctrl-U unless it holds your unsent line. When the cleared text
 was your own prompt, a toast offers Restore, which pastes it back without
 pressing Enter, and Copy.
 
-Restore rebuilds the text from the box's rows, and that is a best guess: a
-line break you typed exactly where the row reaches the box's right edge reads
-as the TUI's own wrap, so Restore joins the two lines with a space. The
-original is not on screen to read. Claude Code wraps the box itself and draws
-each row separately, so xterm records no soft wrap (`isWrapped` is false on
-every row) and the PTY stream carries the same rows. Check a restored
-multi-line prompt before sending it; Copy has the same text.
+Restore gives back the prompt as you sent it. Claude Code wraps the box
+itself and draws each row separately, so xterm records no soft wrap
+(`isWrapped` is false on every row) and the PTY stream carries the same rows:
+on screen, a line break you typed exactly where a row reaches the box's right
+edge looks like the TUI's own wrap. So each pane keeps the prompt you last
+sent with Enter (`useTerminal`'s `lastSubmittedPrompt`): your keystrokes,
+pastes and Shift+Enter, up to 32 KB, in the renderer's memory only — never in
+a file or a log, and dropped when the pane closes. Navide's own injections
+are written to the PTY without passing through it. When the cleared box holds
+that prompt, compared with every wrap, indent and line break taken out, Restore
+and Copy use it exactly (`restoredText` in `lib/claudeComposer.ts`). Anything
+else — queued messages glued to it, a prompt edited with the arrow keys or
+recalled from history, a collapsed paste — is rebuilt from the rows, a best
+guess that joins a row reaching the edge to the next one with a space.
 
 **One at a time, in order.** Each target has its own FIFO queue and at most one
 injection in flight. Injection itself is a bracketed paste plus a verified
@@ -1006,6 +1013,7 @@ it would be told about a failure.
 | `composer` | Text from an earlier push may still sit in the target's input box (its submit failed and the clear was not confirmed); nothing is typed until the pane shows activity newer than that push |
 | `pty-blocked` | Being typed in, but the target's terminal has stopped reading input; held for as long as that lasts |
 | `mid-turn` | Target agent is working (never reported for a vendor that queues input mid-turn) |
+| `foreground` | Plain terminal only: a program other than the shell has its tty (a quiet command, an editor, a password prompt); someone has to finish it first |
 | `settling` | Target just went quiet; waiting for it to settle (same exemption) |
 | `paused` | Delivery is paused for the window |
 | `gone` | Target pane no longer exists |
@@ -1160,8 +1168,13 @@ logged.
    button opens Settings → Channels.
 
 One pane ↔ one location. A binding survives window reloads, pane rebuilds,
-group detach and workspace switches; it ends only when you unbind it (or close
-the pane for real). A message for a bound pane that is not online is answered
+group detach, workspace switches and closing the pane; it ends only when it is
+unlinked: the chip's ✕, *Disconnect* in the channel monitor, or `/unlink` in the
+chat (asked once more; typed `unlink` on Mattermost). Closing a pane for real
+parks its binding as **dormant**: the chat is told, with buttons to wake it or
+unlink, and the channel monitor lists it as asleep with a **Wake** button of
+its own. A child topic the mirror opened for a sub-pane still goes with that
+pane. A message for a bound pane that is not online is answered
 in the Navide language ("the Navide window it belongs to is not open, or the
 pane was closed") and the binding is kept. For a minute after Navide starts, a
 pane that has not registered yet is waited for instead. Once the binding knows
@@ -1182,6 +1195,15 @@ message:
   a day. A wake refused before anything opened does not count.
 - A wake (button or typed `/wake`) for a pane that is already online is
   answered that it is online and is never sent to the CLI.
+- A closed pane's conversation is woken the same way: the window opens a pane
+  onto it. A workspace folder gone from the computer is refused up front.
+- When the conversation cannot be resumed (or none was ever recorded), the
+  chat is offered **🆕 New conversation** (typed: `/wake_new`): a new pane of
+  the same CLI in the same workspace, under the binding's name, bound to the
+  chat. The CLI and the folder come from Navide's own records; the chat cannot
+  name either. The same limits apply.
+- When the conversation is already open in another pane that no chat drives,
+  the binding follows it there instead of refusing.
 - The first 40 characters of each kept message are stored in `navide.db`
   (`channels.wake_kept`, `channels.wake_lost`) until sent or reported; see
   privacy.md.

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createUiZoomStore, initialUiScaleFrom } from './ui-zoom-store'
+import { lockPageZoom } from './web-contents-zoom'
 import {
   clampUiScale,
   DEFAULT_UI_SCALE,
@@ -216,5 +217,50 @@ describe('initialUiScaleFrom', () => {
     } else {
       expect(branch).toBe(main)
     }
+  })
+})
+
+describe('cold start with a stored scale, then a Settings change', () => {
+  // The web-contents-created wiring in index.ts: a page is tracked by the store
+  // and pinned by lockPageZoom, both fed from the store created from the stored
+  // ui_settings value.
+  function page(store: ReturnType<typeof createUiZoomStore>) {
+    const listeners = new Map<string, () => void>()
+    let loaded = false
+    const contents = {
+      setZoomFactor: vi.fn(() => {
+        if (!loaded) throw new Error('Render frame was disposed before WebFrameMain could be accessed')
+      }),
+      setVisualZoomLevelLimits: vi.fn(() => Promise.resolve()),
+      isDestroyed: vi.fn(() => false),
+      on: vi.fn((event: string, listener: () => void) => { listeners.set(event, listener) }),
+    }
+    store.track(contents)
+    lockPageZoom(contents as never, () => store.get(), () => undefined)
+    return {
+      contents,
+      load() {
+        loaded = true
+        listeners.get('did-navigate')?.()
+        listeners.get('did-finish-load')?.()
+      },
+    }
+  }
+
+  it('moves the main window and a plugin window to the new scale', () => {
+    const store = createUiZoomStore(initialUiScaleFrom({ [UI_SCALE_SETTING_KEY]: '1.25' }))
+    const main = page(store)
+    const gitWindow = page(store)
+    // A broadcast while they are still loading must not drop them.
+    store.set(1.25)
+    main.load()
+    gitWindow.load()
+    expect(main.contents.setZoomFactor).toHaveBeenLastCalledWith(1.25)
+
+    store.set(1.1)
+
+    expect(main.contents.setZoomFactor).toHaveBeenLastCalledWith(1.1)
+    expect(gitWindow.contents.setZoomFactor).toHaveBeenLastCalledWith(1.1)
+    expect(store.size()).toBe(2)
   })
 })

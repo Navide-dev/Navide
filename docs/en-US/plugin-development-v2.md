@@ -197,10 +197,9 @@ holds only the publication metadata (`pyproject.toml`, `README.md`).
   than `API_VERSION`, an archive holding anything beyond the SDK sources and
   their metadata (tests, caches, fixtures or private files), and a wheel that
   declares a dependency.
-- `node scripts/verify-plugin-standalone.mjs navide-plans` builds the Plans
-  backend in an isolated Python environment from the plugin's
-  `backend/requirements.txt` with that wheel; `--registry` installs the SDK
-  from PyPI instead.
+- [navide-plans](https://github.com/Navide-dev/navide-plans) builds its
+  backend in its own uv environment, locked to that wheel as attached to the
+  `plugin-packages-1.0.0` GitHub Release.
 
 **Local publication** (the first release): `scripts/publish-python-plugin-sdk.sh
 --publish`, which runs `uv publish` with the user's own PyPI credential.
@@ -2838,31 +2837,21 @@ first launch without a network works as before. Removing a bundled plugin
 (the opt-out) still leaves the id alone.
 
 Because the installed copy wins a tie, content must never change under a
-released version. `plugins/official-plugin-fingerprints.json` is the release
-baseline: each plugin's version and a fingerprint of the tracked sources its
-package is built from (its directory, the `packages/plugin-*` workspace packages
-its bundle really contains, without the `plugin-sdk` command-line tools in
-`bin/`, and, for Plans, the `navide_plugin_sdk` Python modules its backend
-bundles; tests and Markdown excluded) as of the last App release tag. Nothing
-of the Host is an input: its UI strings live in `src/renderer/src/i18n/locales`
-and its backend in `agent_team_backend`, so a Host-only change never asks for a
-plugin bump; `node scripts/official-plugin-fingerprints.mjs --probe <path>`
-names the plugins a change to one file would move. When a plugin's content differs from
-that baseline, its version must be higher than the baseline version: bump it
-once in the plugin's `manifest.json`, its `package.json` and
-`officialPluginVersions.ts`, and later changes in the same release cycle need
-no further bump. A version below the baseline is always refused.
-`tests/infrastructure/officialPluginFingerprints.test.ts` checks this on every
-PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
+released version. The first-party plugins are built in their own
+repositories and the App bundles the version `officialPluginVersions.ts`
+pins, as the official Registry signed it; the Registry refuses to publish a
+version twice, so a released version's content cannot change.
 
 navide.git reaches its Git operations over a first-party bridge, not a
 public capability: the Host maps the `git.*` requests in
 `src/shared/gitBridgeContract.json` (78 requests and 3 events, version 1.0.0)
 for that package alone, and there is no public `git` namespace. The plugin
-keeps a copy of the contract it is built against
-(`plugins/navide-git/src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`);
-both sides test their copy against a frozen digest, the Host additionally
-against its capability map and backend handlers. Adding a message is a minor
+keeps a copy of the contract it is built against (in
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git),
+`src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`); both sides
+test their copy against a frozen digest, the Host additionally against its
+capability map and backend handlers, and the Host serves a plugin built
+against the same major and a lower or equal minor.patch. Adding a message is a minor
 contract version and removing or renaming one a major, released in the Host
 before a Git version that needs it (raising Git's `engines.navide`). See
 `RELEASING.md` ("Releasing navide.git on its own").
@@ -2878,11 +2867,7 @@ Mini-IDE in `gitMessages.ts` and `miniIdeMessages.ts`, Plans and Browser in
 show stays in plugin-ui. `tests/infrastructure/i18nOwnership.test.ts` fails
 when code references a string its own catalogs do not ship.
 
-Each first-party plugin also runs its own tests:
-`plugins/<dir>/vitest.config.ts` (built by `vitest.plugin.ts`) collects that
-directory alone, and the root `vitest.config.ts` no longer collects
-`plugins/**`. `pnpm test:plugins` runs every plugin's unit suite, one plugin
-at a time.
+Each first-party plugin runs its own tests in its own repository.
 
 ### First-party production Plans package
 

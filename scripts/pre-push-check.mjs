@@ -9,13 +9,10 @@
 // no-sync uv forms (the venvs are left alone). What runs depends on the
 // change since origin/main, working tree included, like `vitest --changed`:
 //   - always: the repository-scanning guards `vitest --changed` cannot select
-//     (they read the tree instead of importing it), tests/infrastructure, the
-//     official plugin fingerprints;
-//   - by path: Python compile and ruff, lockfile parity, typecheck, the guards
-//     that need built packages, the whole i18n test folder, the contract
-//     fixtures, the marketplace checks;
-//   - last: `vitest --changed`, once for the root config and once for each
-//     App-bundled plugin's own config, and scripts/changed-backend-tests.mjs.
+//     (they read the tree instead of importing it), tests/infrastructure;
+//   - by path: Python compile and ruff, lockfile parity, typecheck, the whole
+//     i18n test folder, the contract fixtures, the marketplace checks;
+//   - last: `vitest --changed` and scripts/changed-backend-tests.mjs.
 //
 // Only one run happens at a time across all worktrees of this clone: a lockfile
 // in the shared git directory queues the others, and a dead holder's lock is
@@ -44,14 +41,6 @@ const BACKEND_TEMP = /tmp_path|mkdtemp|TemporaryDirectory/
 // Scanners the patterns above miss: they name a temporary directory themselves.
 const FRONTEND_SCAN_EXTRA = ['src/main/crossPlatformTestHygiene.test.ts']
 const BACKEND_SCAN_EXTRA = ['backend/tests/test_cross_platform_test_hygiene.py']
-// Scanners owned by the artifacts project, whose setup builds the public
-// packages first (about 100 s): they run only when a package could have moved.
-const ARTIFACT_GUARD = /^plugins\/[^/]+\/tests\//
-// Each App-bundled plugin runs its tests through its own Vitest config; the
-// root config collects only the Host (`unit`) and the workspace packages.
-const PLUGIN_DIRS = ['navide-browser', 'navide-git', 'navide-mini-ide', 'navide-plans']
-const pluginVitest = (dir) => ['pnpm', 'vitest', 'run', '--config', `plugins/${dir}/vitest.config.ts`]
-const pluginOf = (file) => PLUGIN_DIRS.find((dir) => file.startsWith(`plugins/${dir}/`))
 
 const I18N_TESTS = 'packages/plugin-ui/src/foundation/i18n/__tests__'
 const REGISTRY = 'marketplace/registry'
@@ -97,12 +86,9 @@ function scanGuards(localeChanged) {
     .filter((file) => !(localeChanged && file.startsWith(`${I18N_TESTS}/`)))
   const backend = discover('backend/tests/*.py', BACKEND_SCAN, BACKEND_TEMP).concat(BACKEND_SCAN_EXTRA)
   const unique = [...new Set(frontend)]
-  const ofPlugin = (dir, artifacts) =>
-    unique.filter((file) => pluginOf(file) === dir && ARTIFACT_GUARD.test(file) === artifacts)
   return {
-    frontend: unique.filter((file) => !pluginOf(file) && !file.startsWith('packages/')),
+    frontend: unique.filter((file) => !file.startsWith('packages/')),
     packages: unique.filter((file) => file.startsWith('packages/')),
-    plugins: PLUGIN_DIRS.map((dir) => ({ dir, unit: ofPlugin(dir, false), artifacts: ofPlugin(dir, true) })),
     backend: [...new Set(backend)],
   }
 }
@@ -116,7 +102,6 @@ function buildPlan(changed) {
   const guards = scanGuards(localeChanged)
   const when = (condition, reason, check) => (condition ? check : { name: check.name, skip: reason })
   return [
-    { name: 'official plugin fingerprints', argv: ['node', 'scripts/official-plugin-fingerprints.mjs'] },
     when(py.length > 0, 'no Python file changed', {
       name: 'compile changed Python',
       // compile() rather than py_compile: nothing lands in __pycache__.
@@ -144,15 +129,6 @@ function buildPlan(changed) {
       name: `scanning guards (${guards.packages.length} package)`,
       argv: ['pnpm', 'vitest', 'run', '--project', 'packages', ...guards.packages],
     }),
-    ...guards.plugins.map(({ dir, unit }) => when(unit.length > 0, `no ${dir} scanner`, {
-      name: `scanning guards (${unit.length} ${dir})`,
-      argv: [...pluginVitest(dir), '--project', dir, ...unit],
-    })),
-    ...guards.plugins.map(({ dir, artifacts }) =>
-      when(artifacts.length > 0 && changed.some((file) => /^(plugins|packages)\//.test(file)), 'no plugin or package changed', {
-        name: `scanning guards (${artifacts.length} ${dir} package)`,
-        argv: [...pluginVitest(dir), '--project', `${dir}-artifacts`, ...artifacts],
-      })),
     { name: 'tests/infrastructure', argv: ['pnpm', 'run', 'test:infrastructure'] },
     when(localeChanged, 'no locale changed', {
       name: 'i18n tests folder',
@@ -180,10 +156,6 @@ function buildPlan(changed) {
       isolated: true,
     }),
     { name: 'vitest --changed', argv: ['pnpm', 'vitest', 'run', '--changed', BASE] },
-    ...PLUGIN_DIRS.map((dir) => ({
-      name: `vitest --changed (${dir})`,
-      argv: [...pluginVitest(dir), '--project', dir, '--changed', BASE, '--passWithNoTests'],
-    })),
     { name: 'changed backend tests', argv: ['node', 'scripts/changed-backend-tests.mjs'] },
   ]
 }

@@ -642,11 +642,30 @@ def live_main_window_ids() -> set[str]:
     }
 
 
+#: Counts host.register successes, so the newest Host registration is known.
+_host_registrations = 0
+
+
+def note_host_registration(session: "Session") -> None:
+    """Stamp a session that just registered as the Host (see host.register)."""
+    global _host_registrations
+    _host_registrations += 1
+    session.host_registration = _host_registrations
+
+
 async def unicast_host(event: dict[str, Any]) -> bool:
-    """Send one internal agent request to the authenticated Electron Host."""
-    for session in list(_SESSIONS):
-        if session.dead or not session.host_authenticated:
-            continue
+    """Send one internal agent request to the authenticated Electron Host.
+
+    The newest registration first: the Host keeps one connection and registers it again
+    on every reconnect, so an older authenticated session is one it has left. The backend
+    may not have seen that socket close yet (Windows, while the Host reconnects at
+    startup), and a request sent there is never answered."""
+    hosts = sorted(
+        (s for s in list(_SESSIONS) if not s.dead and s.host_authenticated),
+        key=lambda s: s.host_registration,
+        reverse=True,
+    )
+    for session in hosts:
         try:
             await session.send_json(event)
         except Exception as err:  # noqa: BLE001
@@ -796,6 +815,8 @@ class Session:
         # handoffs. The bearer is registered over this WebSocket and never
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
+        # Order of the host.register that authenticated it (note_host_registration).
+        self.host_registration = 0
         self.plans_backend_v2 = False
         # Built-in Navide plugins the user disabled, as the Host registered them.
         self.disabled_plugins: frozenset[str] = frozenset()
@@ -3373,6 +3394,27 @@ def _hook_tool_key(payload: dict) -> str:
 _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 
 
+def _is_shell_tool(payload: dict) -> bool:
+    """Whether a tool-result payload is of a tool the Shipped Log reads."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    return str(payload.get("tool_name") or "") in deploy_detect.SHELL_TOOLS
+
+
+def _note_ship_detection(vendor: str, pane_id: str, ws_path: str, event_kind: str, payload: dict) -> int | None:
+    """Hand a tool result to the Shipped Log's deploy-command detector, unless
+    the user turned the plugin off. Returns the recorded row id or None."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    if deploy_detect.PLUGIN_ID in host_disabled_plugins():
+        return None
+    pane = agent_messaging.current(pane_id)
+    return deploy_detect.observe(
+        ws_path, pane=str(getattr(pane, "name", "") or pane_id), vendor=vendor,
+        ok=event_kind == "post_tool_use", payload=payload,
+    )
+
+
 def _record_hook_file_write(
     vendor: str,
     pane_id: str,
@@ -3604,6 +3646,14 @@ async def cli_hook(vendor: str, request: Request) -> Any:
                 )
         except Exception as err:  # noqa: BLE001
             log.warning("preview record from %s hook failed: %s", vendor, err)
+    if event_kind in _TOOL_RESULT_EVENTS and pane_id and ws_path and _is_shell_tool(payload):
+        # Shipped Log: a deploy command that just ran is recorded as an
+        # unconfirmed hint. Records only; this answer never reaches the CLI.
+        # Checked here first so most tool results never queue for the db thread.
+        try:
+            await run_in_db_thread(_note_ship_detection, vendor, pane_id, ws_path, event_kind, payload)
+        except Exception as err:  # noqa: BLE001
+            log.warning("shipped-log detection from %s hook failed: %s", vendor, err)
     # Stop-hook delivery: a claude pane with a message waiting is told to keep
     # going and act on it, instead of stopping and being typed at afterwards.
     # Only claude, because only its Stop hook can block — and only its hook

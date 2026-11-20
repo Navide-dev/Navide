@@ -116,6 +116,45 @@ async def test_unicast_host_skips_unauthenticated_sessions() -> None:
         app._SESSIONS.update(previous)
 
 
+class _InsertionOrdered(dict):  # type: ignore[type-arg]
+    """``app._SESSIONS`` iterated in insertion order (a set's order follows the hashes)."""
+
+    def add(self, item: Any) -> None:
+        self[item] = None
+
+    def discard(self, item: Any) -> None:
+        self.pop(item, None)
+
+
+@pytest.mark.asyncio
+async def test_unicast_host_goes_to_the_newest_registration_not_a_left_behind_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Host reconnects (Windows startup) while the backend still holds its old,
+    authenticated session: requests (proxy lookups, PDF renders, agent capabilities) go
+    to the connection that registered last, whatever order the sessions are held in."""
+    token = "host-" + "fake-" + "token"
+    monkeypatch.setattr(app, "_HOST_SESSION_TOKEN", token)
+    sessions = _InsertionOrdered()
+    monkeypatch.setattr(app, "_SESSIONS", sessions)
+    stale, live = _session(), _session()
+    for session in (stale, live):
+        sessions.add(session)
+        await app.handle_message(session, {"id": "r", "type": "host.register", "payload": {"token": token}})
+    stale.websocket.sent.clear()  # type: ignore[attr-defined]
+    live.websocket.sent.clear()  # type: ignore[attr-defined]
+
+    assert await app.unicast_host({"type": "channels.pdf_render.request"}) is True
+    assert stale.websocket.sent == []  # type: ignore[attr-defined]
+    assert live.websocket.sent == [{"type": "channels.pdf_render.request"}]  # type: ignore[attr-defined]
+
+    # Registering again (a feature change, or the old socket's last word) makes it the newest.
+    await app.handle_message(stale, {"id": "r2", "type": "host.register", "payload": {"token": token}})
+    stale.websocket.sent.clear()  # type: ignore[attr-defined]
+    assert await app.unicast_host({"type": "x"}) is True
+    assert stale.websocket.sent == [{"type": "x"}]  # type: ignore[attr-defined]
+
+
 @pytest.mark.asyncio
 async def test_mcp_handoff_registers_before_host_notification_and_keeps_identity_host_owned(
     monkeypatch: pytest.MonkeyPatch,

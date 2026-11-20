@@ -95,6 +95,11 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
                             account=_account(p))
     if msg_type == "channels.unbind":
         return await m.unbind(_s(p, "pane_id"), reason=_s(p, "reason"), pane_name=_s(p, "pane_name"))
+    if msg_type == "channels.park":
+        return await m.park(_s(p, "pane_id"), pane_name=_s(p, "pane_name"), workspace_path=_s(p, "workspace_path"),
+                            session_id=_s(p, "session_id"), agent=_s(p, "agent"))
+    if msg_type == "channels.wake":
+        return await m.wake_from_app(_s(p, "pane_id"), fresh=bool(p.get("fresh")))
     if msg_type == "channels.rebind":
         return await m.rebind(_s(p, "from_pane_id"), _s(p, "to_pane_id"))
     if msg_type == "channels.set_binding_options":
@@ -125,7 +130,7 @@ MESSAGE_TYPES = (
     "channels.set_global_enabled",
     "channels.remove", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.reject",
     "channels.link.create", "channels.allow.list", "channels.allow.remove", "channels.locations", "channels.bind",
-    "channels.unbind", "channels.rebind", "channels.bindings", "channels.set_binding_options",
+    "channels.unbind", "channels.park", "channels.wake", "channels.rebind", "channels.bindings", "channels.set_binding_options",
     "channels.overview", "channels.unbind_many", "channels.focus_pane",
     "channels.get_share_open_notify", "channels.set_share_open_notify", "channels.share_targets",
     "channels.agent_request.list", "channels.agent_request.decide", "channels.agent_request.finish",

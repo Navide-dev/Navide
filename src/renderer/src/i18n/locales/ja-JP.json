@@ -398,6 +398,7 @@
     "hold-starting": "送信先のペインは起動中です",
     "hold-typing": "送信先のペインで入力中です",
     "hold-mid-turn": "送信先のエージェントはターンの処理中です",
+    "hold-foreground": "送信先ターミナルのシェルの前でプログラムが動いています（コマンド、エディタ、パスワード入力など）",
     "hold-settling": "送信先の状態が安定するのを待っています",
     "hold-composer": "入力欄に前回送信した内容が残っています",
     "hold-model-switch": "送信先のペインはモデルを切り替え中です",
@@ -1596,7 +1597,6 @@
         "loadFailedHint": "接続を確認して再試行してください。インストール済みの Navide プラグインはそのまま使えます。",
         "errorDetails": "詳細",
         "info": "情報",
-        "detailTabs": "Navide プラグインの詳細",
         "installVersion": "{version} をインストール",
         "versionLabel": "バージョン {version}",
         "otherTarget": "このプラットフォーム向けではありません（{target}）",
@@ -1643,11 +1643,50 @@
           "target": "プラットフォーム",
           "channel": "チャンネル",
           "downloads": "ダウンロード数",
-          "status": "状態"
+          "status": "状態",
+          "trust": "署名",
+          "capabilities": "権限"
         },
         "prereleaseAvailable": "プレリリース {version} あり",
         "buildOwnHint": "自分で作ってみませんか？",
-        "buildOwn": "Navide プラグインを作る"
+        "buildOwn": "Navide プラグインを作る",
+        "installCard": "インストール",
+        "disabledBadge": "無効",
+        "actionsNote": "どの操作も、変更する前に確認を求めます。",
+        "enableInExtensions": "この Navide プラグインは Navide によって停止されました。「Navide プラグイン」ページで停止時の動作を確認してから再度有効にしてください。",
+        "actionFailed": "完了できませんでした: {error}",
+        "verifiedDomain": "検証済み · {domain}",
+        "riskBanner": "この Navide プラグインは機密性の高い機能を要求しています: {list}。インストール前に確認してください。",
+        "riskItem": "{cap}（{hint}）",
+        "screenshots": "スクリーンショット",
+        "screenshotLabel": "スクリーンショット {n}",
+        "ratingTitle": "評価",
+        "rateOnWeb": "ウェブサイトで評価",
+        "report": "報告",
+        "ratingSignIn": "評価と報告は Navide マーケットプレイスのウェブサイトで行い、Navide Cloud へのサインインが必要です。",
+        "capabilityHint": {
+          "fs": "ファイルの読み書き",
+          "shell": "シェルコマンドの実行",
+          "terminal": "ターミナルでのコマンド実行",
+          "aiCli": "AI CLI エージェントの操作",
+          "web": "あなたのログインでウェブサイトを閲覧し保持",
+          "agentMessages": "エージェント間のメッセージ本文の読み取り",
+          "secrets": "自身の API キーを端末上で暗号化して保持",
+          "agentNotify": "許可後、エージェントのペインに通知"
+        },
+        "intro": {
+          "title": "検証済みの Navide プラグインで、Navide を自分好みに。",
+          "signed": "Registry 署名済みパッケージ",
+          "permissions": "インストール前に権限を表示",
+          "inApp": "インストールは必ず Navide 内で確認"
+        },
+        "footer": {
+          "label": "Navide マーケットプレイスのリンク",
+          "removed": "削除された Navide プラグイン",
+          "docs": "開発者ドキュメント",
+          "discussions": "ディスカッション",
+          "security": "セキュリティ"
+        }
       },
       "developerMode": {
         "errors": {
@@ -9402,7 +9441,8 @@
       "manage": "workspace で管理 →",
       "locked-title": "アプリが管理するシステムジョブです。その workspace の自己改善パネルから変更してください",
       "managed-by": "workspace で管理",
-      "name": "自己改善 · {workspace}"
+      "name": "自己改善 · {workspace}",
+      "locked-title-shipped-log": "App が管理するシステムスケジュール：そのワークスペースのリリース記録パネルで変更してください"
     },
     "add": "＋ 新規",
     "empty": "スケジュールされたジョブはまだありません",
@@ -9435,7 +9475,11 @@
       "interrupted": "スキップ：中断",
       "budget_global": "スキップ：agent の 1 日の合計に到達",
       "expired": "期限切れ：agent のジョブが 7 日間更新されていません",
-      "unknown": "スキップ"
+      "unknown": "スキップ",
+      "empty": "スキップ：リリースなし",
+      "no_chat": "スキップ：紐づいた個別チャットがありません",
+      "plugin_disabled": "スキップ：リリース記録が無効です",
+      "workspace_gone": "スキップ：ワークスペースのフォルダがありません"
     },
     "fail-reason": {
       "no_window": "この job の workspace を開いている Navide ウィンドウがありません。workspace を開いてから、もう一度実行してください。",
@@ -10186,6 +10230,11 @@
       "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。",
       "unnamed-pane": "名前のないペイン",
       "pane-closed": "閉じています",
+      "pane-dormant": "休止中・起こせます",
+      "pane-dormant-hint": "pane は閉じられましたが、チャットとの接続は残っています。ここかチャットから起こせます。不要なら接続を切ってください。",
+      "wake": "起こす",
+      "waking": "起こしています…",
+      "wake-label": "{pane} を起こし、{channel} との会話に戻す",
       "chat-id": "チャット {id}"
     }
   },
@@ -12518,5 +12567,74 @@
     "disconnected-body": "コンテナ内の CLI は停止しました。再接続すると同じコンテナで新しいセッションを開きます。",
     "reconnect": "再接続",
     "close-pane": "ペインを閉じる"
+  },
+  "shippedLog": {
+    "menu": {
+      "open": "リリース記録"
+    },
+    "title": "リリース記録",
+    "close": "閉じる",
+    "loading": "読み込み中…",
+    "window": {
+      "today": "今日",
+      "yesterday": "昨日",
+      "7d": "7 日",
+      "30d": "30 日"
+    },
+    "count": "リリース {n} 件",
+    "pending": "確認待ちのデプロイコマンド {n} 件",
+    "empty": "この期間のリリースはありません",
+    "verb": {
+      "added": "追加",
+      "fixed": "修正",
+      "changed": "変更"
+    },
+    "basis": {
+      "agent": "記録",
+      "branch": "デプロイブランチ",
+      "tag": "タグ",
+      "hook": "検出",
+      "ci": "CI"
+    },
+    "kind": {
+      "commit": "Commit",
+      "config": "本番設定",
+      "migration": "DB マイグレーション",
+      "other": "その他"
+    },
+    "sensitive": "機密",
+    "edited": "書き換え済み",
+    "detected": "デプロイコマンドを検出（未確認）",
+    "confirm": "リリース済みにする",
+    "dismiss": "無視",
+    "edit": "説明を編集",
+    "save": "保存",
+    "cancel": "キャンセル",
+    "reset": "元に戻す",
+    "mark-sensitive": "機密にする（チャットには件数のみ）",
+    "add-title": "1 件追加",
+    "add": "追加",
+    "summary-placeholder": "何が変わったかを一文で（値は書かない）",
+    "ref-placeholder": "commit hash・設定 key・チケット番号（任意）",
+    "config-title": "本番設定の登録",
+    "config-hint": "名前と場所だけを登録し、値は書きません。値に見える内容は拒否されます。",
+    "config-empty": "登録された設定はまだありません",
+    "config-key": "key（例：mail.sender）",
+    "config-label": "名前",
+    "config-location": "場所（例：SSM /app/prod/mail_from）",
+    "config-environment": "環境（既定 production）",
+    "config-note": "メモ",
+    "remove": "削除",
+    "digest-title": "毎日の要約",
+    "digest-hint": "Navide が紐づいた個別チャットへ直接送ります。ペインは起こさず、ペインの利用枠も使いません。機密項目と検出コマンドは件数のみです。",
+    "digest-enabled": "毎日、直近 24 時間の記録を送る",
+    "digest-at": "時刻",
+    "digest-tz": "タイムゾーン",
+    "digest-skip-empty": "リリースがない日は送らない",
+    "digest-next": "次回：{time}",
+    "digest-run": "今すぐ 1 回送る",
+    "digest-sent": "送信を予約しました",
+    "error-at": "時刻は HH:MM 形式で入力してください",
+    "error-tz": "不明なタイムゾーン"
   }
 }

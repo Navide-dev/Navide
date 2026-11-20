@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import secrets
 from typing import Any
 
 import httpx
 import pytest
 
+from agent_team_backend import app
 from agent_team_backend.channels import proxy
+
+# Windows' monotonic clock ticks coarsely, so a fallback expiry can read a
+# hair past its TTL there (5.000000000000028 on CI) while still being the short one.
+_CLOCK_SLACK_S = 0.05
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +97,101 @@ async def test_no_host_or_no_answer_falls_back_to_the_default(monkeypatch: pytes
     monkeypatch.setattr(proxy, "ANSWER_TIMEOUT_S", 0.05)
     _host_answers(monkeypatch, None, [])
     assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
+
+
+async def test_each_fallback_is_logged_and_kept_only_briefly(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(proxy, "ANSWER_TIMEOUT_S", 0.05)
+    caplog.set_level(logging.INFO, logger=proxy.__name__)
+    secret = "pw" + secrets.token_hex(4)
+    key = ("https", "api.telegram.org", 443)
+
+    def kept_for() -> float:
+        return proxy._cache[key][0] - proxy.time.monotonic()
+
+    async def no_host(event: dict[str, Any]) -> bool:
+        return False
+
+    async def failing_host(event: dict[str, Any]) -> bool:
+        asyncio.get_running_loop().call_soon(
+            proxy._pending.resolve, event["payload"]["request_id"], {"ok": False, "error": "boom"})
+        return True
+
+    monkeypatch.setattr(proxy, "_unicast_host", no_host)
+    assert await proxy.resolve(f"https://user:{secret}@api.telegram.org/") is proxy.DEFAULT
+    assert "no Host session" in caplog.text
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
+    proxy.clear_cache()
+    _host_answers(monkeypatch, None, [])
+    assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
+    assert "did not answer" in caplog.text
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
+    proxy.clear_cache()
+    monkeypatch.setattr(proxy, "_unicast_host", failing_host)
+    assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
+    assert "could not resolve" in caplog.text
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
+    assert secret not in caplog.text and "user" not in caplog.text
+    assert proxy.FALLBACK_CACHE_TTL_S < proxy.CACHE_TTL_S / 5
+
+    # Once the fallback lapses the Host, answering now, is asked again; its answer is kept the full minute.
+    monkeypatch.setattr(proxy, "FALLBACK_CACHE_TTL_S", 0.05)
+    proxy.clear_cache()
+    monkeypatch.setattr(proxy, "_unicast_host", no_host)
+    assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
+    await asyncio.sleep(0.1)
+    _host_answers(monkeypatch, "PROXY pac.corp:8080", [])
+    assert await proxy.resolve("https://api.telegram.org/") == "http://pac.corp:8080"
+    assert kept_for() > proxy.CACHE_TTL_S - 5
+
+
+class _InsertionOrdered(dict):  # type: ignore[type-arg]
+    """``app._SESSIONS`` iterated in insertion order (a set's order follows the hashes)."""
+
+    def add(self, item: Any) -> None:
+        self[item] = None
+
+    def discard(self, item: Any) -> None:
+        self.pop(item, None)
+
+
+class _HostSocket:
+    """A Host connection: the live one answers proxy lookups, a stale one never does."""
+
+    def __init__(self, answers: bool) -> None:
+        self.answers = answers
+        self.lookups = 0
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        if data.get("type") != proxy.REQUEST_TYPE:
+            return
+        self.lookups += 1
+        if self.answers:
+            asyncio.get_running_loop().call_soon(
+                proxy._pending.resolve, data["payload"]["request_id"], {"ok": True, "rules": "PROXY pac.corp:8080"})
+
+
+async def test_a_host_session_left_behind_by_a_reconnect_is_not_the_one_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows VM: the Host's socket reconnects at startup and the backend still holds the
+    old, authenticated session. The lookup went to it, waited out the timeout and fell
+    back to a direct connection; the Host's live connection is the one to ask."""
+    token = "host-" + secrets.token_hex(8)
+    monkeypatch.setattr(app, "_HOST_SESSION_TOKEN", token)
+    monkeypatch.setattr(proxy, "ANSWER_TIMEOUT_S", 0.2)
+    stale, live = _HostSocket(answers=False), _HostSocket(answers=True)
+    sessions = _InsertionOrdered()
+    monkeypatch.setattr(app, "_SESSIONS", sessions)
+    for socket in (stale, live):
+        session = app.Session(socket)  # type: ignore[arg-type]
+        sessions.add(session)
+        await app.handle_message(session, {"id": "r", "type": "host.register", "payload": {"token": token}})
+        assert session.host_authenticated is True
+
+    assert await proxy.resolve("https://api.telegram.org/bot1/getUpdates") == "http://pac.corp:8080"
+    assert (stale.lookups, live.lookups) == (0, 1)
 
 
 async def test_an_answer_is_reused_until_it_expires(monkeypatch: pytest.MonkeyPatch) -> None:
