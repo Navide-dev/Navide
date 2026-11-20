@@ -3373,6 +3373,20 @@ def _hook_tool_key(payload: dict) -> str:
 _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 
 
+def _note_ship_detection(vendor: str, pane_id: str, ws_path: str, event_kind: str, payload: dict) -> int | None:
+    """Hand a tool result to the Shipped Log's deploy-command detector, unless
+    the user turned the plugin off. Returns the recorded row id or None."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    if deploy_detect.PLUGIN_ID in host_disabled_plugins():
+        return None
+    pane = agent_messaging.current(pane_id)
+    return deploy_detect.observe(
+        ws_path, pane=str(getattr(pane, "name", "") or pane_id), vendor=vendor,
+        ok=event_kind == "post_tool_use", payload=payload,
+    )
+
+
 def _record_hook_file_write(
     vendor: str,
     pane_id: str,
@@ -3604,6 +3618,13 @@ async def cli_hook(vendor: str, request: Request) -> Any:
                 )
         except Exception as err:  # noqa: BLE001
             log.warning("preview record from %s hook failed: %s", vendor, err)
+    if event_kind in _TOOL_RESULT_EVENTS and pane_id and ws_path:
+        # Shipped Log: a deploy command that just ran is recorded as an
+        # unconfirmed hint. Records only; this answer never reaches the CLI.
+        try:
+            await run_in_db_thread(_note_ship_detection, vendor, pane_id, ws_path, event_kind, payload)
+        except Exception as err:  # noqa: BLE001
+            log.warning("shipped-log detection from %s hook failed: %s", vendor, err)
     # Stop-hook delivery: a claude pane with a message waiting is told to keep
     # going and act on it, instead of stopping and being typed at afterwards.
     # Only claude, because only its Stop hook can block — and only its hook
