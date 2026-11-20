@@ -5089,6 +5089,60 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     await expect(handler(null, { namespace: 'acme', name: 7 })).rejects.toThrow(/invalid/)
   })
 
+  /** A Registry connection that never answers: it settles only when aborted. */
+  function stalled(_url: unknown, init?: RequestInit): Promise<never> {
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+    })
+  }
+
+  it('times out a stalled detail request instead of waiting forever, and a retry succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(stalled)
+      .mockImplementation(async (url: unknown) =>
+        String(url) === `${BASE}/acme/demo`
+          ? { ok: true, status: 200, async json() { return { namespace: 'acme', name: 'demo', versions: [] } } }
+          : { ok: false, status: 404, async json() { return {} } }
+      )
+    global.fetch = fetchMock as unknown as typeof fetch
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG, undefined, {
+      marketplaceFetchTimeoutMs: 20,
+    })
+    const handler = handlers.get('plugins:marketplaceDetail')!
+    await expect(handler(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/timeout|abort/i)
+    const detail = (await handler(null, { namespace: 'acme', name: 'demo' })) as { name: unknown }
+    expect(detail.name).toBe('demo')
+  })
+
+  it('treats a stalled README request as no README', async () => {
+    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) === `${BASE}/acme/demo/readme`) return stalled(url, init)
+      return { ok: true, status: 200, async json() { return { namespace: 'acme', name: 'demo', versions: [] } } }
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG, undefined, {
+      marketplaceFetchTimeoutMs: 20,
+    })
+    const detail = (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })) as {
+      name: unknown
+      readme: unknown
+    }
+    expect(detail.name).toBe('demo')
+    expect(detail.readme).toBeNull()
+  })
+
+  it('gives every Marketplace Registry read a deadline', async () => {
+    const fetchMock = respond({})
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG)
+    await Promise.resolve(handlers.get('plugins:marketplaceSearch')!(null, 'demo')).catch(() => undefined)
+    await Promise.resolve(handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })).catch(() => undefined)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+    for (const call of fetchMock.mock.calls as unknown as Array<[unknown, RequestInit | undefined]>) {
+      expect(call[1]?.signal).toBeInstanceOf(AbortSignal)
+    }
+  })
+
   it('reports only strictly newer Registry versions of official-registry packages', async () => {
     const row = (version: string, target = 'universal', yanked = false) => ({ version, target, yanked })
     const host = `${process.platform}-${process.arch}`
@@ -5406,7 +5460,7 @@ describe('Marketplace discovery (Phase 1)', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       `${ROOT}/extensions/acme/demo/1.0.0/assets/assets/icon.png`
     )
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual({ redirect: 'error' })
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error', signal: expect.any(AbortSignal) })
   })
 
   it('refuses SVG, oversized and unsafe-path icons', async () => {
