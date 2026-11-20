@@ -4,7 +4,7 @@ import { matchAwaitingInput } from '../cliAwaitingInput'
 import { parseMenuOptions, resolveAnswerKeys } from '../paneAnswerKeys'
 import { createKickoffReporter } from '../spawnKickoff'
 import {
-  answerStartupPrompt, decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone,
+  answerStartupPrompt, decideStartupPrompt, readContinueNotice, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone,
   type StartupPromptRecord,
 } from '../startupPrompts'
 
@@ -556,5 +556,88 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
     const prompt = readStartupPrompt('claude', wrapAt(screenFor(VIEW), 22))
     expect(prompt).toMatchObject({ kind: 'claude.add-dir', cursorOn: 'No, exit' })
     expect(decideStartupPrompt(prompt!, { navideDirs: [VIEW] })).toMatchObject({ action: 'auto', choose: 'Yes, add it' })
+  })
+})
+
+describe('launch screens behind TRUST_DIALOG_PATTERNS: which get a bare Enter', () => {
+  // (b) informational, Enter only goes on — strings from the installed Codex
+  // binary (vendor/aarch64-apple-darwin/bin/codex).
+  const CODEX_FRESH_DB = [
+    '  Codex detected a damaged local database, moved it into a backup folder, and will',
+    '  continue startup with a fresh database.',
+    '  Backup folder: unavailable',
+    '',
+    '  Continuing startup with a fresh local database...',
+    '',
+    '  Press Enter to continue.',
+  ].join('\n')
+  // (a) screens where Enter grants, signs in, selects or resumes something.
+  const GRANTING: Array<[string, string, string]> = [
+    // Codex onboarding (updatePrompt.test.ts AFTER_ESC): Enter starts a sign-in.
+    ['codex', 'sign-in', [
+      "  Welcome to Codex, OpenAI's command-line coding agent",
+      '  Choose how you want to use Codex.',
+      '› 1. Sign in with ChatGPT',
+      '  2. Sign in with Device Code',
+      '  Press enter to continue',
+    ].join('\n')],
+    // Codex full access confirmation: "Yes, continue anyway" grants it.
+    ['codex', 'full access', [
+      '  With full access, it can edit any file on your computer and run commands with network, without your approval.',
+      '› Yes, continue anyway  Apply full access for this session',
+      '  Go back without enabling full access',
+    ].join('\n')],
+    // Claude Code 2.1.330 org sign-in: "Yes, continue" applies an organization's settings.
+    ['claude', 'org sign-in', [
+      " Continue only if this is your account; that organization's settings will then apply to this machine.",
+      ' ❯ Yes, continue',
+      '   Go back',
+    ].join('\n')],
+    // Claude Code 2.1.330 usage limit reset: Enter resumes the task (spends usage).
+    ['claude', 'usage reset', ' Your usage limit has reset\n Press enter to continue'],
+    // Claude Code 2.1.330 managed settings: "allow Claude Code to use …" (it cannot start).
+    ['claude', 'managed providers', " Your organization's managed settings allow Claude Code to use no API provider at all"],
+    // Qwen Code's /agents wizard footer: Enter selects a step's option.
+    ['qwen', 'agents wizard', ' Step 1: Choose Location\n Press Enter to continue, ↑↓ to navigate, Esc to cancel'],
+  ]
+
+  it('(b) dismisses Codex\'s fresh-database notice, wrapped or not', () => {
+    expect(readContinueNotice('codex', CODEX_FRESH_DB)).toBe('codex.fresh-database-notice')
+    const narrow = CODEX_FRESH_DB.split('\n').flatMap((l) => l.match(/.{1,22}/g) ?? ['']).join('\n')
+    expect(readContinueNotice('codex', narrow)).toBe('codex.fresh-database-notice')
+  })
+
+  it('(b) only for its own vendor, live at the bottom of the screen', () => {
+    expect(readContinueNotice('claude', CODEX_FRESH_DB)).toBe('')
+    expect(readContinueNotice('codex', `${CODEX_FRESH_DB}\n${'later output '.repeat(30)}`)).toBe('')
+  })
+
+  it('(a) never gets a bare Enter, and is no prompt Navide answers', () => {
+    for (const [agentKey, name, screen] of GRANTING) {
+      expect(readContinueNotice(agentKey, screen), name).toBe('')
+      expect(readStartupPrompt(agentKey, screen), name).toBeNull()
+    }
+  })
+
+  it('(a) a folder trust dialog it cannot decide is held, not pressed', async () => {
+    const sent: string[] = []
+    let t = 0
+    const watch = await settleStartupPrompts({
+      agentKey: 'claude',
+      readScreen: () => claudeTrustLive(WORKSPACE, null),
+      navideDirs: () => [],
+      workspace: () => WORKSPACE,
+      awaiting: () => true,
+      ready: () => false,
+      alive: () => true,
+      send: async (keys) => { sent.push(keys); return true },
+      sleep: async () => { t += 250 },
+      now: () => t,
+      settleMs: 0,
+      timeoutMs: 15_000,
+      record: () => {},
+    })
+    expect(watch.outcome).toBe('blocked')
+    expect(sent).toEqual([])
   })
 })

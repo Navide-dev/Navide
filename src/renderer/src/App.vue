@@ -225,7 +225,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
-import { answerStartupPrompt, decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
+import { answerStartupPrompt, decideStartupPrompt, readContinueNotice, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -7732,6 +7732,18 @@ async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string
   return waitStartupPromptGone(startupPromptDeps(pane.agentKey, pane.id), STARTUP_PROMPT_HOLD_MS)
 }
 
+/** Enter on the informational launch screen live on this pane, when it is one
+ *  of lib/startupPrompts' CONTINUE_NOTICES; false (nothing pressed) otherwise. */
+async function pressContinueNotice(paneId: string): Promise<boolean> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return false
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const rule = readContinueNotice(pane.agentKey, deps.readScreen())
+  if (!rule || !(await deps.send('\r'))) return false
+  pipelineLog(`✓ dismissed informational launch screen ${rule} (pane ${paneId.slice(0, 8)})`)
+  return true
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
   if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
@@ -7757,7 +7769,10 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
         pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
         return true
       }
-      // Not read as a trust dialog on the screen: nothing is pressed. A bare
+      // An informational screen Enter only dismisses (lib/startupPrompts
+      // CONTINUE_NOTICES) is dismissed as before.
+      if (await pressContinueNotice(paneId)) return true
+      // Anything else not read as a trust dialog: nothing is pressed. A bare
       // Enter here landed on "No, exit", or trusted a folder that is not the
       // pane's own; the kickoff's watch reports whatever is left.
       pipelineLog(`⏸ left a startup dialog it could not read alone (pane ${paneId.slice(0, 8)})`)
@@ -8242,6 +8257,7 @@ function scheduleInjection(pane: ActivePane): void {
           syncViews()
           return
         }
+        if (trust.outcome === 'none') await pressContinueNotice(pane.id)
         await waitForQuiet(pane.id, 2000, 2500)
         if (!paneAlive(pane.id)) return
       }

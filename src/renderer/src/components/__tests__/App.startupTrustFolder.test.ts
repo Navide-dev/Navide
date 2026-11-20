@@ -31,6 +31,16 @@ describe('startup trust dialog: Enter only for the pane\'s own workspace', () =>
     expect(late).not.toContain("'terminal.input'")
   })
 
+  it('a bare Enter goes only to an informational screen startupPrompts names', () => {
+    const fn = body('async function pressContinueNotice')
+    expect(fn.indexOf('readContinueNotice(pane.agentKey')).toBeGreaterThan(-1)
+    expect(fn.indexOf('readContinueNotice(pane.agentKey')).toBeLessThan(fn.indexOf("deps.send('\\r')"))
+    expect(fn).toContain("if (!rule ||")
+    expect(body('async function dismissStartupDialog')).toContain('pressContinueNotice(paneId)')
+    const late = body('function scheduleInjection')
+    expect(late).toContain("if (trust.outcome === 'none') await pressContinueNotice(pane.id)")
+  })
+
   it('reads enough of the screen for a dialog a narrow pane wraps to forty-odd rows', () => {
     expect(body('function startupPromptDeps')).toContain('readScreenTail?.(STARTUP_PROMPT_SCREEN_LINES)')
     expect(Number(/const STARTUP_PROMPT_SCREEN_LINES = (\d+)/.exec(appSource)?.[1])).toBeGreaterThanOrEqual(80)

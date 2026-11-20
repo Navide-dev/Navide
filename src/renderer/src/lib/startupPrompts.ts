@@ -19,6 +19,9 @@
  * | `workspace-trust.own-workspace` | A CLI's workspace trust dialog at launch (Claude Code "Accessing workspace: <dir> … Yes, I trust this folder", Codex "Trust this folder?", "Do you trust the contents of this directory?"), answered on its trust option: Claude Code's is selected by reading where the cursor is and moving it there first (2.1.329 draws "No, exit" first with the cursor on it), never answered when the cursor cannot be read; any other vendor's with Enter on its default (trust) option | the dialog names `<dir>` and it is exactly the pane's own workspace (`workspace`), the folder the user opened; not a parent, not a folder inside it | The user opened that workspace in Navide and asked for a pane in it; any other folder, or a dialog that names none, is theirs to judge. Vendors with a trust watcher of their own (`startupTrust`, Grok) are left to it. |
  * | `claude.add-dir.navide-skills-view` | Claude Code's "Adding a new directory: <dir> … This session hasn't worked here before" (No, exit / Yes, add it) | `<dir>` is one of the directories Navide itself handed this pane with `--add-dir` (the spawn reports them as `navide_dirs`) AND it is Navide's managed-skills view (`…/runtime/skills-views/claude`) | Navide built that folder out of the skills the user enabled for Claude and added it to the pane itself; "Yes, add it" holds for this session only and writes nothing. It is the folder the convenience feature claude.skills-trust pre-trusts; this covers a spawn where that record could not be written (lock held, feature off). |
  *
+ * Apart from these, Enter goes only to an informational launch screen that
+ * grants nothing (CONTINUE_NOTICES below, each matched whole for its vendor).
+ *
  * Everything else is left to a person or to the caller's cli_answer_prompt:
  * any other folder (for an add-dir prompt the pane's workspace included — a
  * folder Claude asks to add is not the one the user opened), a prompt this
@@ -158,6 +161,33 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
   const cursorOn = m[3] ? ADD_DIR_OPTIONS[0] : m[4] ? ADD_DIR_OPTIONS[1] : ''
   const prompt = collapse(m[0].slice(0, m[0].length - m[5].length))
   return { kind: 'claude.add-dir', folder: m[1], prompt, options: [...ADD_DIR_OPTIONS], cursorOn }
+}
+
+// Launch screens that only inform: Enter there grants, signs in or selects
+// nothing, it only goes on. Each is matched whole, for its own vendor, with
+// its footer at the bottom of the screen; "continue" anywhere else is not one
+// of these (Codex's sign-in screen says "Press enter to continue" too, and
+// Enter there starts a sign-in).
+const CONTINUE_NOTICES: ReadonlyArray<{ agentKey: string; rule: string; re: RegExp }> = [
+  {
+    // Codex: "Codex detected a damaged local database, moved it into a backup
+    // folder, and will continue startup with a fresh database. … Continuing
+    // startup with a fresh local database... Press Enter to continue."
+    agentKey: 'codex',
+    rule: 'codex.fresh-database-notice',
+    re: new RegExp(
+      `${loose('Codex detected a damaged local database')}.{0,600}?${loose('Press Enter to continue')} ?\\.?(.{0,200})$`,
+      'i',
+    ),
+  },
+]
+
+/** The informational launch screen live on this pane's screen that Enter
+ *  only dismisses (CONTINUE_NOTICES), by its rule name; '' when there is
+ *  none. Anything else is never answered with a bare Enter. */
+export function readContinueNotice(agentKey: string, screen: string): string {
+  const text = collapse(screen)
+  return CONTINUE_NOTICES.find((notice) => notice.agentKey === agentKey && notice.re.test(text))?.rule ?? ''
 }
 
 /** Whether Navide answers `prompt` by itself (see the allowlist above).
