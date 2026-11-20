@@ -6754,10 +6754,11 @@ export class FrontendPluginManager {
     const client = this.wsClient
     if (url) {
       if (!client) {
-        // Connect eagerly if a running plugin already needs the backend, so
-        // server-push events (git.changed) flow without waiting for the first
-        // capability call. Otherwise ensureBackend() connects lazily later.
-        if (this.anyPluginNeedsBackend()) this.ensureBackend()
+        // Connect now, plugin or not: the backend reaches the Host (channel
+        // proxy lookups, PDF rendering, agent tools) only through this
+        // session's host.register, and server-push events (git.changed) flow
+        // without waiting for a first capability call.
+        this.ensureBackend()
         return
       }
       if (client.isHealthyFor(url)) {
@@ -6784,8 +6785,7 @@ export class FrontendPluginManager {
   /** Rebuild the backend transport after the machine wakes. Not expressible as
    *  setBackendWsUrl: the url has not changed, so it would short-circuit on
    *  isHealthyFor — which reports healthy for a socket whose TCP connection
-   *  died during sleep. No-op when no plugin has needed the backend yet;
-   *  ensureBackend() still connects lazily on the first call. */
+   *  died during sleep. No-op before the first backend url is known. */
   reconnectAfterResume(): void {
     this.editorAiCapability.closeAll()
     this.wsClient?.reconnectNow('system resumed')
@@ -10141,15 +10141,6 @@ export class FrontendPluginManager {
         this.emitToInstance(plugin.instanceId, 'nav.backend_status', { status })
       }
     }
-  }
-
-  /** True when any running plugin declares a non-empty `requires` (i.e. needs
-   *  the backend for calls and/or events; `ping`-only plugins don't). */
-  private anyPluginNeedsBackend(): boolean {
-    for (const plugin of this.running.values()) {
-      if (plugin.requires.length > 0) return true
-    }
-    return false
   }
 
   /** Whether the app is quitting; index.ts owns the quit flags. */
