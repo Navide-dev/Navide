@@ -30,6 +30,7 @@ import {
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
 import { readBodyCapped } from './readBodyCapped'
+import { fetchWithIdleTimeout } from './idleTimeoutFetch'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import { OFFICIAL_REGISTRY_API_URL } from '../../shared/marketplaceDeveloper'
 import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
@@ -1725,7 +1726,8 @@ export function registerPluginIpc(
       const encodedPath = path.split('/').map(encodeURIComponent).join('/')
       let dataUrl: string | null = null
       try {
-        const res = await registryFetch(
+        // A screenshot can be megabytes: slow but steady must still finish.
+        const res = await fetchWithIdleTimeout(
           `${marketplace.registryUrl.replace(/\/+$/, '')}/extensions/${namespace}/${name}/${encodeURIComponent(version)}/assets/${encodedPath}`,
           { redirect: 'error' }
         )

@@ -63,6 +63,7 @@ import {
 } from './pluginInstalledTrust'
 import { readZipEntries, readManifestFromEntries, type ZipEntry } from './pluginPackage'
 import { PACKAGE_DOWNLOAD_MAX_BYTES, readBodyCapped } from './readBodyCapped'
+import { fetchWithIdleTimeout } from './idleTimeoutFetch'
 import {
   parseInstalledManifest,
   assertManifestFiles,
@@ -235,7 +236,8 @@ export interface InstallerDeps {
 /** Default deps: global `fetch` (Electron main / Node 18+) + `node:fs`. */
 export const defaultInstallerDeps: InstallerDeps = {
   async download(url) {
-    const res = await fetch(url)
+    // A package is megabytes: no total deadline, only one for a stalled stream.
+    const res = await fetchWithIdleTimeout(url)
     if (!res.ok) throw new InstallError(`download failed: HTTP ${res.status}`)
     const bytes = await readBodyCapped(res, PACKAGE_DOWNLOAD_MAX_BYTES)
     if (!bytes) throw new InstallError(`download failed: the package is larger than ${PACKAGE_DOWNLOAD_MAX_BYTES} bytes`)
