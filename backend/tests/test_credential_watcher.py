@@ -911,3 +911,69 @@ async def test_a_navide_sign_in_in_progress_is_not_registered_twice(
     assert doc["defaults"]["cursor"] == work["id"]
     assert vault.identity("cursor", adding["id"])["email"] == "user_new"
     assert vault.identity("cursor")["email"] == "user_work"
+
+
+@pytest.mark.parametrize("agent_key", ["cursor", "copilot"])
+async def test_an_add_account_sign_in_keeps_its_name_through_the_real_harvest(
+    agent_key: str,
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The whole non-isolated Add Account round trip: the watcher sees the new
+    login mid-sign-in, the login poller harvests it (with its de-duplication),
+    then the watcher sees the previous login put back. Reconciling mid-login
+    used to register the account under its id, flip the active account to it,
+    and let the de-duplication fold the profile the user named into that one."""
+    from agent_team_backend import usage_service
+    from agent_team_backend.credential_vault import CredentialVault
+    from tests.test_credential_vault_keychain_vendors import COPILOT_CONFIG, FakeSecurity
+
+    sec = FakeSecurity()
+    vault = CredentialVault(
+        root=tmp_path / "vault-root", real_home=tmp_path / "vault-home",
+        security_runner=sec,
+        platform="darwin" if agent_key == "cursor" else "linux",
+    )
+    monkeypatch.setattr(app, "credential_vault", vault)
+    monkeypatch.delenv("COPILOT_HOME", raising=False)
+    monkeypatch.setattr(usage_service, "_login_pane_running", lambda *_args: False)
+    copilot_config = tmp_path / "vault-home" / ".copilot" / "config.json"
+
+    def sign_in(who: str) -> None:
+        if agent_key == "cursor":
+            _cursor_sign_in(sec, who)
+            return
+        copilot_config.parent.mkdir(parents=True, exist_ok=True)
+        copilot_config.write_text(COPILOT_CONFIG.replace(
+            '"lastLoggedInUser": { "host": "https://github.com", "login": "alice" }',
+            f'"lastLoggedInUser": {{ "host": "https://github.com", "login": "{who}" }}',
+        ), encoding="utf-8")
+
+    work = store.create(agent_key=agent_key, name="Work")
+    store.set_default(agent_key, work["id"])
+    sign_in("alice")
+    vault.capture(agent_key, work["id"])
+    adding = store.create(agent_key=agent_key, name="Named by the user")
+    vault.login_spawn_env(agent_key, adding["id"])
+    sign_in("bob")  # the login pane finished signing in
+
+    expected = [(work["id"], "Work"), (adding["id"], "Named by the user")]
+
+    def profiles() -> list[tuple[str, str]]:
+        return [(p["id"], p["name"]) for p in store.list()["profiles"]]
+
+    await reconcile_live_account(agent_key)
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+
+    assert await usage_service._harvest_login_home_locked(vault, agent_key, adding["id"])
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+
+    await reconcile_live_account(agent_key)
+    assert profiles() == expected
+    assert store.list()["defaults"][agent_key] == work["id"]
+    assert vault.identity(agent_key)["email"] == "alice"
+    assert vault.identity(agent_key, adding["id"])["email"] == "bob"
