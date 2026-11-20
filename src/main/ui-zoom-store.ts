@@ -58,7 +58,10 @@ export function createUiZoomStore(initial: unknown = DEFAULT_UI_SCALE): UiZoomSt
     try {
       contents.setZoomFactor(scale)
     } catch {
-      tracked.delete(contents)
+      // Only a destroyed WebContents is done for. A failure while it is still
+      // loading (its render frame does not exist yet) is transient: keep it,
+      // or it never hears of a later change. Its load applies get() itself.
+      if (contents.isDestroyed()) tracked.delete(contents)
     }
   }
 

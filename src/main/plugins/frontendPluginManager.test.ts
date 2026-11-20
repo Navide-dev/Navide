@@ -11470,6 +11470,31 @@ describe('first-party Git private bridge', () => {
     expect(socket.sent).toHaveLength(1)
   })
 
+  it('holds a capability call made before the backend first comes up and sends it once it does', async () => {
+    const { mgr, view } = await openGitView()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+
+    const operation = publicCall(view, 'shell', 'gitStatus', { repositoryPath: '.' }, 'early-git-status')
+    await new Promise((r) => setTimeout(r, 20))
+    mgr.setBackendWsUrl('ws://early-git-status-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request.type).toBe('git.status')
+    socket.receive({ id: request.id, type: request.type, ok: true, payload: { branch: 'main' }, error: null, timestamp: '' })
+    await expect(operation).resolves.toEqual({ reqId: 'early-git-status', ok: true, result: { branch: 'main' } })
+  })
+
+  it('still fails fast once a backend that was up has stopped', async () => {
+    const { mgr, view } = await openGitView()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    mgr.setBackendWsUrl('ws://stopped-backend-test')
+    mgr.setBackendWsUrl(null)
+    await expect(publicCall(view, 'shell', 'gitStatus', { repositoryPath: '.' }, 'stopped-git-status'))
+      .resolves.toMatchObject({ reqId: 'stopped-git-status', ok: false })
+  })
+
   it('passes on the shell.run cut disclosure as the broker sent it, and nothing else changes', async () => {
     const { mgr, view } = await openGitView()
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
@@ -15117,6 +15142,8 @@ describe('first-party Git private bridge', () => {
 
   it('releases an interactive credential owner when the backend is unavailable', async () => {
     const { mgr, view } = await openGitView()
+    mgr.setBackendWsUrl('ws://git-stopped-backend-test')
+    mgr.setBackendWsUrl(null)
     mgr.setGitAccountHandlers({
       available: async () => true,
       list: () => [],

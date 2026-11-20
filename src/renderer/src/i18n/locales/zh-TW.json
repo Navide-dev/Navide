@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml：Grok 分格記下你信任某個資料夾後，Navide 會把那個資料夾的設定接在這個檔的最後面。只有分格開啟的工作區或它底下的資料夾，才會共享到 ~/.grok。只加入檔案裡還沒有的資料夾，你自己的設定、註解與排版都不會變動。每次修改前都會備份；關閉這項會只移除 Navide 接上去的那段文字，檔案回到原本的內容（檔案是 Navide 建立的就整個移除）",
         "cost": "在一個 Grok 分格信任過的資料夾，每個新開或重建的 Grok 分格都會再問一次。"
       },
+      "claude_skills-trust": {
+        "name": "信任 Claude 技能資料夾",
+        "benefit": "新的 Claude 分格直接進到輸入框，不會先問要不要信任 Navide 的技能資料夾。",
+        "purpose": "Claude 分格不會再要求信任 Navide 用來提供技能的資料夾",
+        "writes": "~/.claude.json（或帳號自己 Claude 資料夾裡的 .claude.json）：Navide 只加一筆信任紀錄 projects[<Navide 資料>/runtime/skills-views/claude].hasTrustDialogAccepted，對象是 Navide 自己建立、以 --add-dir 交給每個 Claude 分格的技能連結資料夾。不會信任其他任何資料夾，檔案其他內容一律保留。寫入時使用 Claude Code 自己的設定鎖，只在紀錄不存在時寫，寫入前先備份，關閉時只移除這一筆紀錄",
+        "cost": "每個有提供技能的新 Claude 分格，都會先針對 Navide 的技能資料夾問「Adding a new directory」。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor 分格可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",
@@ -9021,11 +9028,19 @@
     "alternate": "其他安裝",
     "unknown-version": "無法取得版本",
     "keep-primary": "若 Navide 顯示的作用中 binary 是你預期的版本，請保留它。",
-    "remove-alternate": "使用原本的套件管理工具移除其他安裝；不需要關閉 macOS 安全機制。",
+    "remove-alternate": {
+      "darwin": "使用原本的套件管理工具移除其他安裝；不需要關閉 macOS 安全機制。",
+      "win32": "使用原本的套件管理工具移除其他安裝；不需要關閉 Windows 安全機制。",
+      "linux": "使用原本的套件管理工具移除其他安裝；不需要關閉 Linux 安全機制。"
+    },
     "run-doctor": "執行 CLI 診斷後回到這裡重新偵測。",
     "open-terminal": "開啟診斷終端機",
     "use-version": "讓 Navide 使用 {version}",
-    "use-version-note": "這個動作安全且可還原：只會變更 Navide 啟動的執行檔，不會解除安裝任何套件，也不會降低 macOS 安全性。",
+    "use-version-note": {
+      "darwin": "這個動作安全且可還原：只會變更 Navide 啟動的執行檔，不會解除安裝任何套件，也不會降低 macOS 安全性。",
+      "win32": "這個動作安全且可還原：只會變更 Navide 啟動的執行檔，不會解除安裝任何套件，也不會降低 Windows 安全性。",
+      "linux": "這個動作安全且可還原：只會變更 Navide 啟動的執行檔，不會解除安裝任何套件，也不會降低 Linux 安全性。"
+    },
     "remove-installation": "移除此安裝…",
     "removal-blocked": "目前無法移除：找不到另一套可用的安裝。請先修復或安裝另一套，再重新偵測。",
     "update-current": "目前 {version}",

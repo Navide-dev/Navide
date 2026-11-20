@@ -752,12 +752,29 @@ def _wire_command(
                 log.warning("%s for %s is unusable, left unchanged: %s", wiring.config_env, agent_key, err)
                 errors.append(f"{wiring.config_env} is not a valid JSON object ({err}); left unchanged")
         return command
-    if not wiring.flag or str(view) in text:
+    if not wiring.flag:
+        return command
+    if wiring.flag_needs_trust:
+        from agent_team_backend.convenience_wiring import trust_claude_skills_view_gated
+
+        trust_claude_skills_view_gated(view, env)
+    if str(view) in text:
         return command
     suffix = " ".join(
         f"{wiring.flag} {osplat.paths.quote_arg(value)}" for value in flag_values(wiring, view, cwd)
     )
     return _append_to_command(command, suffix) if suffix else command
+
+
+def handed_dirs(agent_key: str, command: Any) -> list[str]:
+    """The skills view this spawn handed a CLI whose flag needs trust, when
+    the command carries it — what a launch prompt about it may be answered
+    for (lib/startupPrompts.ts). Empty otherwise."""
+    wiring = skills_wiring(agent_key or "")
+    if wiring is None or not wiring.flag_needs_trust:
+        return []
+    view = str(agent_view_root(agent_key))
+    return [view] if view in _command_text(command) else []
 
 
 def _managed_root(store: SkillsStore | None) -> Path:

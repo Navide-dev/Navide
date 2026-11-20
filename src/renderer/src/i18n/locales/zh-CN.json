@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml：Grok 分格记下你信任某个文件夹后，Navide 会把那个文件夹的设置接在这个档的最后面。只有分格打开的工作区或它底下的文件夹，才会共享到 ~/.grok。只加入文件里还没有的文件夹，你自己的设置、注解与排版都不会变动。每次修改前都会备份；关闭这项会只移除 Navide 接上去的那段文字，文件回到原本的内容（文件是 Navide 创建的就整个移除）",
         "cost": "在一个 Grok 分格信任过的文件夹，每个新开或重建的 Grok 分格都会再问一次。"
       },
+      "claude_skills-trust": {
+        "name": "信任 Claude 技能文件夹",
+        "benefit": "新的 Claude 窗格直接进入输入框，不会先询问是否信任 Navide 的技能文件夹。",
+        "purpose": "Claude 窗格不会再要求信任 Navide 用来提供技能的文件夹",
+        "writes": "~/.claude.json（或账号自己 Claude 文件夹中的 .claude.json）：Navide 只添加一条信任记录 projects[<Navide 数据>/runtime/skills-views/claude].hasTrustDialogAccepted，对象是 Navide 自己建立、通过 --add-dir 交给每个 Claude 窗格的技能链接文件夹。不会信任其他任何文件夹，文件其他内容一律保留。写入时使用 Claude Code 自己的配置锁，只在记录不存在时写入，写入前先备份，关闭时只移除这一条记录",
+        "cost": "每个提供了技能的新 Claude 窗格，都会先针对 Navide 的技能文件夹询问“Adding a new directory”。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor 分格可以使用 Navide 的 MCP 工具，例如传讯、计划与调度。",
@@ -9021,11 +9028,19 @@
     "alternate": "其他安装",
     "unknown-version": "无法取得版本",
     "keep-primary": "若 Navide 显示的作用中 binary 是你预期的版本，请保留它。",
-    "remove-alternate": "使用原本的套件管理工具移除其他安装；不需要关闭 macOS 安全机制。",
+    "remove-alternate": {
+      "darwin": "使用原本的套件管理工具移除其他安装；不需要关闭 macOS 安全机制。",
+      "win32": "使用原本的套件管理工具移除其他安装；不需要关闭 Windows 安全机制。",
+      "linux": "使用原本的套件管理工具移除其他安装；不需要关闭 Linux 安全机制。"
+    },
     "run-doctor": "运行 CLI 诊断后回到这里重新侦测。",
     "open-terminal": "打开诊断终端",
     "use-version": "让 Navide 使用 {version}",
-    "use-version-note": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 macOS 安全性。",
+    "use-version-note": {
+      "darwin": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 macOS 安全性。",
+      "win32": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 Windows 安全性。",
+      "linux": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 Linux 安全性。"
+    },
     "remove-installation": "移除此安装…",
     "removal-blocked": "目前无法移除：找不到另一套可用的安装。请先修复或安装另一套，再重新侦测。",
     "update-current": "当前 {version}",

@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml：Grok pane がフォルダーを信頼したと記録すると、Navide はそのフォルダーの設定をこのファイルの末尾に追記します。~/.grok に共有されるのは、pane を開いたワークスペースとその中のフォルダーだけです。ファイルにまだないフォルダーだけを追加し、ご自身の設定・コメント・書式は変更しません。変更のたびにバックアップを取り、オフにすると Navide が追記したテキストだけを取り除き、ファイルを元の内容に戻します（Navide が作成したファイルなら削除します）",
         "cost": "ある Grok pane で信頼したフォルダーについて、新しく開く・再構築する Grok pane ごとに再度確認されます。"
       },
+      "claude_skills-trust": {
+        "name": "Claude のスキルフォルダーを信頼",
+        "benefit": "新しい Claude ペインは、Navide のスキルフォルダーを信頼するか尋ねずにそのまま入力欄が開きます。",
+        "purpose": "Claude ペインが Navide のスキル配布フォルダーの信頼を求めなくなります",
+        "writes": "~/.claude.json（またはアカウント専用 Claude フォルダーの .claude.json）：Navide が作成し --add-dir ですべての Claude ペインに渡すスキルリンクのフォルダーについて、信頼レコード projects[<Navide データ>/runtime/skills-views/claude].hasTrustDialogAccepted を 1 件だけ追加します。他のフォルダーは一切信頼せず、ファイルの他の部分はそのまま残します。Claude Code 自身の設定ロックの下で、レコードがない場合にのみ書き込み、事前にバックアップし、オフにするとそのレコードだけを削除します",
+        "cost": "スキルが配布される新しい Claude ペインは、まず Navide のスキルフォルダーについて「Adding a new directory」と尋ねます。"
+      },
       "cursor_project-mcp": {
         "name": "Cursor 用 Navide MCP ツール",
         "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",
@@ -9021,11 +9028,19 @@
     "alternate": "別のインストール",
     "unknown-version": "バージョン不明",
     "keep-primary": "Navide が表示する使用中の実行ファイルが期待するバージョンであれば、それを残してください。",
-    "remove-alternate": "ほかのインストールは、元のパッケージマネージャーを使って削除してください。macOS のセキュリティを無効にしないでください。",
+    "remove-alternate": {
+      "darwin": "ほかのインストールは、元のパッケージマネージャーを使って削除してください。macOS のセキュリティを無効にしないでください。",
+      "win32": "ほかのインストールは、元のパッケージマネージャーを使って削除してください。Windows のセキュリティを無効にしないでください。",
+      "linux": "ほかのインストールは、元のパッケージマネージャーを使って削除してください。Linux のセキュリティを無効にしないでください。"
+    },
     "run-doctor": "CLI の診断を実行してから、ここに戻って再検出してください。",
     "open-terminal": "診断用ターミナルを開く",
     "use-version": "Navide でバージョン {version} を使用",
-    "use-version-note": "安全で元に戻せる変更です。Navide が起動する実行ファイルだけを変更します。アンインストールや macOS のセキュリティの緩和は行いません。",
+    "use-version-note": {
+      "darwin": "安全で元に戻せる変更です。Navide が起動する実行ファイルだけを変更します。アンインストールや macOS のセキュリティの緩和は行いません。",
+      "win32": "安全で元に戻せる変更です。Navide が起動する実行ファイルだけを変更します。アンインストールや Windows のセキュリティの緩和は行いません。",
+      "linux": "安全で元に戻せる変更です。Navide が起動する実行ファイルだけを変更します。アンインストールや Linux のセキュリティの緩和は行いません。"
+    },
     "remove-installation": "このインストールを削除…",
     "removal-blocked": "ほかに動作するインストールが見つからないため、削除できません。先に修復するか別のコピーをインストールしてから、再検出してください。",
     "update-current": "現在 {version}",

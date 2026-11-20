@@ -95,4 +95,21 @@ describe('NotificationHost toast variants', () => {
     expect(document.querySelector('.toast')).toBeNull()
     wrapper.unmount()
   })
+  it("puts a titled toast's two buttons on one row and shows its icon once", async () => {
+    const wrapper = mount(NotificationHost, { attachTo: document.body })
+    useNotify().toast('cleared', {
+      duration: 0,
+      title: 'Prompt cleared in dev',
+      action: { label: 'Restore', run: () => {} },
+      secondaryAction: { label: 'Copy', run: () => {} },
+    })
+    await flushPromises()
+    const el = document.querySelector('.toast')!
+    const row = el.querySelector('.toast-actions')
+    expect(row).not.toBeNull()
+    expect(Array.from(row!.querySelectorAll('.toast-action')).map((b) => b.textContent)).toEqual(['Restore', 'Copy'])
+    expect((el.textContent ?? '').split('ℹ').length - 1).toBe(1)
+    expect(el.querySelector('.toast-band')?.textContent?.trim()).toBe('Prompt cleared in dev')
+    wrapper.unmount()
+  })
 })

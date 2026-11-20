@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: khi một pane Grok ghi nhận bạn đã tin cậy một thư mục, Navide nối mục của thư mục đó vào cuối tệp này. Chỉ workspace mà pane được mở, hoặc thư mục bên trong nó, mới được chia sẻ sang ~/.grok. Chỉ thêm các thư mục mà tệp chưa nhắc tới; mục, chú thích và bố cục của bạn không bao giờ bị thay đổi. Tệp được sao lưu trước mỗi lần thay đổi, và khi tắt tính năng này, đúng phần văn bản Navide đã nối sẽ bị gỡ, nên tệp trở về như cũ (hoặc tệp bị gỡ nếu do Navide tạo ra)",
         "cost": "Thư mục bạn đã tin cậy trong một pane Grok sẽ bị hỏi lại trong mọi pane Grok mới hoặc được dựng lại."
       },
+      "claude_skills-trust": {
+        "name": "Tin cậy thư mục skill của Claude",
+        "benefit": "Ô Claude mới mở thẳng vào ô nhập thay vì hỏi trước có tin cậy thư mục skill của Navide không.",
+        "purpose": "Ô Claude không còn hỏi tin cậy thư mục Navide dùng để cung cấp skill",
+        "writes": "~/.claude.json (hoặc .claude.json trong thư mục Claude riêng của tài khoản): Navide chỉ thêm một bản ghi tin cậy, projects[<dữ liệu Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, cho thư mục liên kết skill do Navide tạo và trao cho mọi ô Claude bằng --add-dir. Không tin cậy thư mục nào khác, phần còn lại của tệp được giữ nguyên. Việc ghi diễn ra dưới khóa cấu hình của chính Claude Code và chỉ khi chưa có bản ghi; tệp được sao lưu trước, và tắt tính năng sẽ xóa đúng bản ghi đó",
+        "cost": "Mỗi ô Claude mới có skill được cung cấp sẽ hỏi \"Adding a new directory\" về thư mục skill của Navide trước tiên."
+      },
       "cursor_project-mcp": {
         "name": "Công cụ MCP của Navide cho Cursor",
         "benefit": "Các pane Cursor có được công cụ MCP của Navide, như nhắn tin, Plan và lên lịch.",
@@ -9021,11 +9028,19 @@
     "alternate": "Bản cài thay thế",
     "unknown-version": "Không có thông tin phiên bản",
     "keep-primary": "Giữ tệp thực thi đang dùng mà Navide hiển thị nếu đó đúng là phiên bản bạn muốn.",
-    "remove-alternate": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của macOS.",
+    "remove-alternate": {
+      "darwin": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của macOS.",
+      "win32": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của Windows.",
+      "linux": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của Linux."
+    },
     "run-doctor": "Chạy công cụ chẩn đoán của CLI, rồi quay lại đây và phát hiện lại.",
     "open-terminal": "Mở Terminal chẩn đoán",
     "use-version": "Dùng phiên bản {version} trong Navide",
-    "use-version-note": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của macOS.",
+    "use-version-note": {
+      "darwin": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của macOS.",
+      "win32": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của Windows.",
+      "linux": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của Linux."
+    },
     "remove-installation": "Gỡ bản cài này…",
     "removal-blocked": "Không gỡ được vì không tìm thấy bản cài nào khác chạy được. Hãy sửa hoặc cài một bản khác trước, rồi phát hiện lại.",
     "update-current": "Hiện tại {version}",

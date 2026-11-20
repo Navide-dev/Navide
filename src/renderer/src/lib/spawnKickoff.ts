@@ -321,6 +321,12 @@ export function paneStillStarting(input: { status: string | undefined; cleanByte
   return input.status === 'starting' || input.cleanBytes <= 0
 }
 
+/** What the reporter can tell cli_open_agent: an attempt's verdict, or that
+ *  the pane is stopped on a launch prompt Navide does not answer by itself
+ *  (lib/startupPrompts.ts) — then `extra` carries its `prompt` and `options`,
+ *  and the task is held and typed once the prompt is gone. */
+export type ReportedKickoff = KickoffVerdict | 'blocked-by-prompt'
+
 /** One-shot reporter for the `agent_spawn.kickoff` event.
  *
  *  cli_open_agent blocks on exactly one verdict per request: a second is
@@ -337,12 +343,13 @@ export function createKickoffReporter(opts: {
   requestId: string | undefined
   paneId: string
   send: (payload: Record<string, unknown>) => void
-}): (kickoff: KickoffVerdict, reason?: string) => void {
+}): (kickoff: ReportedKickoff, reason?: string, extra?: Record<string, unknown>) => void {
   let reported = false
-  return (kickoff, reason) => {
+  return (kickoff, reason, extra) => {
     if (!opts.requestId || reported) return
     reported = true
     const payload: Record<string, unknown> = {
+      ...extra,
       request_id: opts.requestId,
       pane_id: opts.paneId,
       kickoff,

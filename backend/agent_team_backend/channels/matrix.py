@@ -32,6 +32,7 @@ from urllib.parse import quote
 
 import httpx
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, error_text, send_request
 from .base import (
     STALL_WATCHDOG_S,
@@ -121,6 +122,7 @@ class MatrixAdapter:
                 headers={"Authorization": f"Bearer {self._token}"},
                 # The long-poll holds the connection for sync_timeout; read must outlast it.
                 timeout=httpx.Timeout(self._sync_timeout_ms / 1000.0 + 30.0, connect=10.0),
+                **proxy.client_options(),
             )
         return self._client
 

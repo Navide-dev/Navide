@@ -1252,7 +1252,13 @@ async def cli_open_agent(
     submitted — or `kickoff: "failed"`: the injection could not be verified
     after a bounded retry, or no verdict arrived in time. A failed kickoff is
     still `ok: true` (the pane is open; do NOT open it again) and comes with
-    `hint` and the window's reason in `advisories`. FOLLOW THE HINT: when the
+    `hint` and the window's reason in `advisories`.
+    `kickoff: "blocked-by-prompt"`: the CLI stopped on a launch prompt Navide
+    does not answer by itself (only an allowlisted one, such as Claude Code
+    asking to add Navide's own skills folder, is answered for you, and logged
+    in ui_diagnostics). The answer carries `prompt`, `options` and
+    `prompt_fingerprint` for cli_answer_prompt; the task is held and typed
+    once the prompt is gone, so do not resend it. FOLLOW THE HINT: when the
     window saw the task not go in, it says to resend with cli_send to the
     returned address; when the window could not tell (its text may be sitting
     in the composer, or it was still typing when the deadline hit), it says to
@@ -1695,6 +1701,23 @@ async def cli_open_agent(
     kickoff = str(kickoff_verdict.get("kickoff") or "")
     if kickoff == "sent":
         result["kickoff"] = "sent"
+    elif kickoff == "blocked-by-prompt":
+        # The CLI stopped on a launch prompt Navide does not answer by itself.
+        # The window holds the task and types it once the prompt is gone, so
+        # this is neither "sent" nor a reason to resend.
+        prompt = str(kickoff_verdict.get("prompt") or "")
+        raw_options = kickoff_verdict.get("options")
+        options = [str(o) for o in raw_options] if isinstance(raw_options, list) else []
+        result["kickoff"] = "blocked-by-prompt"
+        result["prompt"] = prompt
+        result["options"] = options
+        result["prompt_fingerprint"] = _prompt_fingerprint(prompt, options)
+        result["hint"] = (
+            f"the pane is stopped on a launch prompt Navide does not answer by itself; the task is "
+            f"held and is typed as soon as the prompt is gone — do NOT resend it. Read `prompt`, then "
+            f"answer with cli_answer_prompt(target=\"{result['address']}\", answer=..., "
+            f"prompt_fingerprint=...) or leave it for the user; the pane is open, do not open another"
+        )
     elif kickoff == "failed":
         result["kickoff"] = "failed"
         result["hint"] = (

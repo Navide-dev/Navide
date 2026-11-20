@@ -181,7 +181,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.44 MCP disconnected (previous pin c6ba7476…): the
 #: cli_get_status and cli_list_targets descriptions document
 #: `mcp: "disconnected"`. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "ce06b1f21d5abef47584a28c9a58836d6f161dcc45364f8f97b78bd437bdbfa0"
+#: Re-pinned for 0.2.46 launch prompts (previous pin ce06b1f2…): the
+#: cli_open_agent description documents `kickoff: "blocked-by-prompt"` with
+#: `prompt`, `options` and `prompt_fingerprint`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "0bf220a3719025bfd8da8b67dfe8eebb4d7e1ce6e685590938163393fda0c775"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -304,6 +307,12 @@ def _isolated(tmp_path, monkeypatch) -> Any:
         pass
 
     monkeypatch.setattr(app, "broadcast", quiet_broadcast)
+
+    async def no_window(_workspace_path: str, _timeout: float) -> bool:
+        return False
+
+    # No window holds any workspace unless a test says so.
+    monkeypatch.setattr(core, "_probe_window", no_window)
     yield
     # The result helper is module state: no test leaves another its process,
     # a failed start's wait for the next try, or its state.
@@ -445,7 +454,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect D (previous pin 8e682fa5…).
 #: Re-pinned with MAIN for 0.2.43 MCP disconnect F (previous pin 82ce0a41…).
 #: Re-pinned with MAIN for 0.2.44 MCP disconnected (previous pin 12601f4d…).
-ACP_ON_TOOLS_LIST_SHA256 = "9b4f8389a403bc212fef468b3732aa5238c7b5621bc02413925c427802fc94c7"
+#: Re-pinned with MAIN for 0.2.46 launch prompts (previous pin 9b4f8389…).
+ACP_ON_TOOLS_LIST_SHA256 = "e94a55fb0e63870e446c59cefc3306fc9682940290ce9aa2d650133112edcf7b"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
@@ -685,6 +695,35 @@ async def test_external_and_host_callers_need_the_external_switch(host: FakeHost
         # workspace_path is the core's, never the plugin's argument.
         assert request["payload"] == {"arguments": {"block_id": "b1"}}
         assert _accepted_by_host_parser(request)
+
+
+async def test_an_external_caller_names_a_workspace_a_window_holds_with_no_pane_yet(host: FakeHost, monkeypatch) -> None:
+    held = "/ws/window-only"
+    probed: list[str] = []
+
+    async def window_holds(workspace_path: str, _timeout: float) -> bool:
+        probed.append(workspace_path)
+        return workspace_path == held
+
+    monkeypatch.setattr(core, "_probe_window", window_holds)
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    for workspace_path in ("/ws/window-only/sub", "/ws/window-onl", "/ws/not-open", "relative", ""):
+        body = _body(await core.server.call_tool("devmap_read", {"workspace_path": workspace_path}))
+        assert body["error_code"] == "BAD_REQUEST" and "workspace_path" in body["error"], workspace_path
+    assert host.requests == []
+    # A relative or empty path is refused before any window is asked.
+    assert probed == ["/ws/window-only/sub", "/ws/window-onl", "/ws/not-open"]
+
+    await core.server.call_tool("devmap_read", {"workspace_path": "/ws/window-only/", "block_id": "b1"})
+    assert [r["target"]["workspace_path"] for r in host.requests] == [held]
+
+
+async def test_the_workspace_path_refusal_says_what_is_checked(host: FakeHost, monkeypatch) -> None:
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    body = _body(await core.server.call_tool("devmap_read", {"workspace_path": "/ws/not-open"}))
+    assert "window_ready" in body["error"]
 
 
 async def test_an_external_caller_on_windows_names_an_open_drive_letter_workspace(host: FakeHost, monkeypatch) -> None:

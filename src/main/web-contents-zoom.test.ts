@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { lockPageZoom } from './web-contents-zoom'
+import { interfaceScalePolicy, lockPageZoom } from './web-contents-zoom'
 
 const FRAME_DISPOSED = 'Render frame was disposed before WebFrameMain could be accessed'
 
@@ -148,5 +148,23 @@ describe('lockPageZoom', () => {
     listeners.get('did-finish-load')?.()
 
     expect(contents.setZoomFactor).toHaveBeenCalledWith(1)
+  })
+})
+
+describe('interfaceScalePolicy', () => {
+  it('pins a <webview> guest to the interface scale on load, without tracking it', () => {
+    // Restarting at 125% measured the left-sidebar views (Plans, Git,
+    // Browser) at 1.0: their guests were pinned to 1 on load.
+    const policy = interfaceScalePolicy('webview', () => 1.25)
+    expect(policy.factor()).toBe(1.25)
+    expect(policy.track).toBe(false)
+  })
+
+  it('tracks every other WebContents and pins it to the same scale', () => {
+    for (const type of ['window', 'browserView', 'backgroundPage', 'remote']) {
+      const policy = interfaceScalePolicy(type, () => 1.25)
+      expect(policy).toMatchObject({ track: true })
+      expect(policy.factor()).toBe(1.25)
+    }
   })
 })

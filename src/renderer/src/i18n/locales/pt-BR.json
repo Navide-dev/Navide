@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: quando um pane do Grok registra que você confiou em uma pasta, o Navide acrescenta a entrada dessa pasta ao final deste arquivo. Somente o workspace em que o pane foi aberto, ou uma pasta dentro dele, é compartilhado com ~/.grok. Só são adicionadas pastas que o arquivo ainda não menciona; suas próprias entradas, comentários e formatação nunca são alterados. O arquivo recebe um backup antes de cada alteração, e desativar este recurso de conveniência remove exatamente o texto que o Navide acrescentou, de modo que o arquivo volta a ser o que era (ou é removido, se o Navide o criou)",
         "cost": "Uma pasta em que você confiou em um pane do Grok é perguntada de novo em cada pane do Grok novo ou reconstruído."
       },
+      "claude_skills-trust": {
+        "name": "Pasta de skills do Claude confiável",
+        "benefit": "Novos painéis do Claude abrem direto na entrada em vez de perguntar primeiro se devem confiar na pasta de skills do Navide.",
+        "purpose": "Os painéis do Claude não pedem para confiar na pasta pela qual o Navide entrega skills",
+        "writes": "~/.claude.json (ou o .claude.json da pasta do Claude própria de uma conta): o Navide adiciona um único registro de confiança, projects[<dados do Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, para a pasta de links de skills que ele cria e entrega a cada painel do Claude com --add-dir. Nenhuma outra pasta é considerada confiável e o restante do arquivo é mantido. A gravação ocorre sob o bloqueio de configuração do próprio Claude Code e só quando o registro falta; o arquivo é copiado antes, e desligar remove exatamente esse registro",
+        "cost": "Cada novo painel do Claude que recebe skills pergunta primeiro \"Adding a new directory\" sobre a pasta de skills do Navide."
+      },
       "cursor_project-mcp": {
         "name": "Ferramentas MCP do Navide para o Cursor",
         "benefit": "Os panes do Cursor recebem as ferramentas MCP do Navide, como mensagens, planos e agendamento.",
@@ -9021,11 +9028,19 @@
     "alternate": "Instalação alternativa",
     "unknown-version": "Versão indisponível",
     "keep-primary": "Mantenha o binário ativo mostrado pelo Navide se ele for a versão esperada.",
-    "remove-alternate": "Remova as instalações alternativas usando o gerenciador de pacotes original; não desative a segurança do macOS.",
+    "remove-alternate": {
+      "darwin": "Remova as instalações alternativas usando o gerenciador de pacotes original; não desative a segurança do macOS.",
+      "win32": "Remova as instalações alternativas usando o gerenciador de pacotes original; não desative a segurança do Windows.",
+      "linux": "Remova as instalações alternativas usando o gerenciador de pacotes original; não desative a segurança do Linux."
+    },
     "run-doctor": "Execute o diagnóstico da CLI, depois volte aqui e detecte novamente.",
     "open-terminal": "Abrir terminal de diagnóstico",
     "use-version": "Usar a versão {version} no Navide",
-    "use-version-note": "Isto é seguro e reversível: altera apenas o executável que o Navide inicia. Não desinstala nada nem enfraquece a segurança do macOS.",
+    "use-version-note": {
+      "darwin": "Isto é seguro e reversível: altera apenas o executável que o Navide inicia. Não desinstala nada nem enfraquece a segurança do macOS.",
+      "win32": "Isto é seguro e reversível: altera apenas o executável que o Navide inicia. Não desinstala nada nem enfraquece a segurança do Windows.",
+      "linux": "Isto é seguro e reversível: altera apenas o executável que o Navide inicia. Não desinstala nada nem enfraquece a segurança do Linux."
+    },
     "remove-installation": "Remover esta instalação…",
     "removal-blocked": "A remoção não está disponível porque nenhuma outra instalação funcional foi encontrada. Repare ou instale outra cópia primeiro e depois detecte novamente.",
     "update-current": "Atual {version}",

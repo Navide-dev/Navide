@@ -348,6 +348,10 @@ class SkillsWiring:
     # Layout the view directory must have for this CLI to find skills below
     # the path we hand it; empty means the skills sit directly in the view.
     view_layout: tuple[str, ...] = ()
+    # The CLI asks the user to trust a directory handed to ``flag`` unless its
+    # config holds a trust record for it (claude's ``--add-dir``), so the view
+    # is recorded as trusted before the spawn (convenience claude.skills-trust).
+    flag_needs_trust: bool = False
     # Substring whose presence in a command means the spawn is already wired.
     already_wired: str = ""
 

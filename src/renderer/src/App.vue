@@ -223,12 +223,14 @@ import {
 } from './lib/ptyInputBlock'
 import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
-  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
+  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
+import { decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
+import { notePaneRecordWrite, workspaceCheckGaveUp } from './lib/restoreDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
@@ -3695,6 +3697,13 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
       return pane ? sendSessionMarkerBootstrap(pane, tag) : Promise.resolve(false)
     },
     dismissStartupDialog: (id) => dismissStartupDialog(id, DISMISS_TIMEOUT_MS),
+    // The pane path's own launch-prompt hold, so both decide and report alike.
+    holdForStartupPrompt: (id, report) => {
+      const agentKey = panes.value.find((p) => p.id === id)?.agentKey
+      return agentKey
+        ? holdKickoffForStartupPrompt(agentKey, id, STARTUP_PROMPT_WATCH_MS, report)
+        : Promise.resolve(false)
+    },
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
     waitForPromptReady: async (id, timeoutMs) => {
@@ -3769,7 +3778,10 @@ async function createStandaloneRequestedPane(
     profileId: req.profileId,
   })
   if (!paneId) return null
-  void sendQuiet<ProjectPayload>('manual_pane.spawn', {
+  // Still not awaited (the spawn answers its caller first), but a record that
+  // never reached the project document is recorded: the pane would be missing
+  // after the next restart with nothing to say why (lib/restoreDiagnostics.ts).
+  void notePaneRecordWrite(sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: workspacePath,
     pane_id: paneId,
     agent: req.agentKey,
@@ -3791,7 +3803,7 @@ async function createStandaloneRequestedPane(
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
     ...(req.profileId ? { profile_id: req.profileId } : {}),
-  })
+  }), { workspacePath, name: req.name, paneId }, recordDiagnostic)
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
     pane_id: paneId,
@@ -3893,6 +3905,94 @@ function kickoffPacing(paneId: string): { awaitReady: (timeoutMs: number) => Pro
   }
 }
 
+// How long a new pane's first screen is watched for a launch prompt, how long
+// a task held behind one waits for it to be answered, and the pause each key
+// into Claude's dialog needs (it ignores keys for 500 ms after it arms).
+const STARTUP_PROMPT_WATCH_MS = 15_000
+const STARTUP_PROMPT_HOLD_MS = 10 * 60_000
+const STARTUP_PROMPT_KEY_SETTLE_MS = 700
+
+function startupPromptDeps(agentKey: string, paneId: string) {
+  return {
+    agentKey,
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    navideDirs: () => ((paneRefs[paneId]?.navideDirs as unknown as string[] | undefined) ?? []),
+    workspace: () => panes.value.find((p) => p.id === paneId)?.workspacePath ?? '',
+    awaiting: () => paneRefs[paneId]?.displayStatus === 'awaiting',
+    ready: () => promptReadyNow({
+      status: paneRefs[paneId]?.displayStatus as string | undefined,
+      cleanBytes: paneCleanBytes(paneId),
+      quietMs: Date.now() - Number((paneRefs[paneId]?.lastRawActivityAt as unknown as number | undefined) ?? 0),
+      quietNeededMs: PROMPT_READY_QUIET_MS,
+    }),
+    alive: () => paneAlive(paneId),
+    send: async (keys: string) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return false
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      return true
+    },
+    sleep,
+    now: Date.now,
+    settleMs: STARTUP_PROMPT_KEY_SETTLE_MS,
+  }
+}
+
+/** Watch a new pane's first screen for a launch prompt before its task is
+ *  typed (lib/startupPrompts.ts). Every answer Navide gives and every prompt
+ *  it leaves alone is recorded in ui_diagnostics and the error ledger. A
+ *  prompt it leaves alone is reported to cli_open_agent as
+ *  "blocked-by-prompt" with the prompt and its options, and the task waits
+ *  until somebody answers it. False when the kickoff ended here. */
+async function holdKickoffForStartupPrompt(
+  agentKey: string,
+  paneId: string,
+  timeoutMs: number,
+  report: (kickoff: ReportedKickoff, reason?: string, extra?: Record<string, unknown>) => void,
+): Promise<boolean> {
+  const deps = startupPromptDeps(agentKey, paneId)
+  const watch = await settleStartupPrompts({
+    ...deps,
+    timeoutMs,
+    record: (entry) => {
+      recordDiagnostic({
+        level: 'warn',
+        code: entry.answered ? 'spawn.startup-prompt-answered' : 'spawn.startup-prompt-held',
+        message: entry.answered
+          ? `answered a launch prompt by rule ${entry.rule} (folder ${entry.folder}): ${entry.why}`
+          : `left a launch prompt for a person${entry.folder ? ` (folder ${entry.folder})` : ''}: ${entry.why}`,
+        paneId,
+      })
+      pipelineLog(`${entry.answered ? '✓ answered' : '⏸ held on'} launch prompt (pane ${paneId.slice(0, 8)}): ${entry.why}`)
+    },
+  })
+  if (watch.outcome === 'clear') return paneAlive(paneId)
+  const screen = deps.readScreen()
+  report('blocked-by-prompt', watch.why, {
+    prompt: awaitingPromptText(screen),
+    options: parseMenuOptions(screen),
+    folder: watch.prompt?.folder ?? '',
+  })
+  if (await waitStartupPromptGone(deps, STARTUP_PROMPT_HOLD_MS)) return true
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (pane && paneAlive(paneId)) {
+    pane.kickoffStatus = 'failed'
+    recordDiagnostic({
+      level: 'warn',
+      code: 'spawn.startup-prompt-unanswered',
+      message: `the launch prompt was not answered within ${STARTUP_PROMPT_HOLD_MS / 60_000} min; the task was not typed`,
+      paneId,
+    })
+  }
+  return false
+}
+
 /** Wait for a freshly created pane's CLI to reach its prompt, then inject its
  *  task. Slow by nature: a cold CLI can take tens of seconds to print its
  *  first byte.
@@ -3945,14 +4045,23 @@ async function kickoffRequestedPane(
       await dismissStartupDialog(paneId, DISMISS_TIMEOUT_MS)
       await waitForStartupActivity(paneId)
     }
+    // A launch prompt the task must not be typed into: answered when it is on
+    // the allowlist, otherwise reported and the task held (lib/startupPrompts).
+    if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, STARTUP_PROMPT_WATCH_MS, emitKickoffVerdict))) return false
     // A resumed CLI reloads its transcript before it prints or listens —
     // observed 20-30s of silence on a real claude session — so the deadline a
     // fresh banner fits in would type the kickoff into a CLI not yet reading.
     const promptReadyTimeoutMs = opts.resume
       ? KICKOFF_PROMPT_READY_TIMEOUT_RESUME_MS
       : KICKOFF_PROMPT_READY_TIMEOUT_MS
-    const promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
+    let promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
     if (!paneAlive(paneId)) return false
+    // A prompt that showed up late never lets the gate open: look once more.
+    if (!promptReady) {
+      if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, 1_000, emitKickoffVerdict))) return false
+      promptReady = await waitForPromptReady(paneId, PROMPT_READY_QUIET_MS + 1_000)
+      if (!paneAlive(paneId)) return false
+    }
     // Sampled once, with the gate's answer: a pane that has printed nothing is
     // still initialising and is not typed into (runKickoffAttempts); one that
     // is printing but never read idle+quiet is typed into as before.
@@ -4366,10 +4475,21 @@ async function handleMcpSpawnRequest(ev: {
     // 建立失敗).
     report({ ok: true, paneId, name: childName, advisories: gate.advisories })
     const standaloneEvidence: StandaloneKickoffEvidence = {}
+    // One verdict per request: a launch prompt reported as blocked-by-prompt
+    // is the answer, and the verdict judged below is then dropped, as on the
+    // pane path.
+    const reportStandalone = createKickoffReporter({
+      requestId: ev.request_id,
+      paneId,
+      send: (payload) => {
+        backend.send('agent_spawn.kickoff', payload).catch(() => { /* the tool call times out and says so */ })
+      },
+    })
     try {
       await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
         resume: !!(ev.session_id ?? '').trim(),
         evidence: standaloneEvidence,
+        report: reportStandalone,
         ...(ev.submit === false ? { prefill: true } : {}),
       })
     } catch { /* judged below on whatever evidence was recorded */ }
@@ -4380,12 +4500,7 @@ async function handleMcpSpawnRequest(ev: {
     // 'sent'. Hard-coding 'unverified' here reported every external spawn as
     // failed, the task already running (Linux VM 0.2.38).
     const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task, prefill: ev.submit === false })
-    backend.send('agent_spawn.kickoff', {
-      request_id: ev.request_id,
-      pane_id: paneId,
-      kickoff: verdict.kickoff,
-      ...(verdict.reason ? { reason: verdict.reason } : {}),
-    }).catch(() => { /* the tool call times out and says so */ })
+    reportStandalone(verdict.kickoff, verdict.reason)
     return
   }
   // Shut the injection window before the caller learns this pane's name, not
@@ -7541,6 +7656,33 @@ function watchStartupTrust(paneId: string, agentKey: string, folder: string): vo
   startupTrustWatches.set(paneId, watch)
 }
 
+/** Why the workspace trust dialog live on this pane is left to a person: it
+ *  names a folder other than the pane's own workspace, or none
+ *  (lib/startupPrompts.ts). '' when there is no such dialog, or Enter may
+ *  answer it. */
+function heldWorkspaceTrust(paneId: string): string {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return ''
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  if (prompt?.kind !== 'workspace-trust') return ''
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  return decision.action === 'block' ? decision.why : ''
+}
+
+/** Role injection's hold on a trust dialog left to a person: recorded, then
+ *  wait for whoever answers it. False when it was not answered in time. */
+async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string): Promise<boolean> {
+  recordDiagnostic({
+    level: 'warn',
+    code: 'spawn.startup-prompt-held',
+    message: `left a launch prompt for a person: ${why}`,
+    paneId: pane.id,
+  })
+  pipelineLog(`${tag} ⏸ startup trust dialog left for a person: ${why}`)
+  return waitStartupPromptGone(startupPromptDeps(pane.agentKey, pane.id), STARTUP_PROMPT_HOLD_MS)
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
   if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
@@ -7554,6 +7696,13 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
+      // Enter trusts the folder: only the pane's own workspace. Any other
+      // folder is reported (the kickoff's blocked-by-prompt) and left alone.
+      const held = heldWorkspaceTrust(paneId)
+      if (held) {
+        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${held}`)
+        return false
+      }
       if (ref.sessionId) {
         await backend.send('terminal.input', {
           terminal_session_id: ref.sessionId as string,
@@ -7960,7 +8109,15 @@ function scheduleInjection(pane: ActivePane): void {
     pipelineLog(`${tag} watching for startup dialog (up to ${DISMISS_TIMEOUT_MS / 1000}s)`)
     const dismissed = await dismissStartupDialog(pane.id, DISMISS_TIMEOUT_MS)
     if (!paneAlive(pane.id)) return
-    if (!dismissed) {
+    const heldTrust = dismissed ? '' : heldWorkspaceTrust(pane.id)
+    if (heldTrust && !(await waitHeldWorkspaceTrust(pane, heldTrust, tag))) {
+      pane.injectionStatus = 'failed'
+      setPrepStatus(pane, 'failed')
+      syncViews()
+      return
+    }
+    if (!paneAlive(pane.id)) return
+    if (!dismissed && !heldTrust) {
       pipelineLog(`${tag} no dialog detected — proceeding`)
       // Dump the buffer head so we can diagnose unrecognised CLI startup
       // screens. Trim to ~300 chars and replace whitespace runs for one-line
@@ -8016,7 +8173,16 @@ function scheduleInjection(pane: ActivePane): void {
     }
     if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
-      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
+      const lateHeld = TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) ? heldWorkspaceTrust(pane.id) : ''
+      if (lateHeld) {
+        if (!(await waitHeldWorkspaceTrust(pane, lateHeld, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
+        }
+        if (!paneAlive(pane.id)) return
+      } else if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
         const r = paneRefs[pane.id]
         if (r?.sessionId) {
@@ -12548,6 +12714,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     screen: (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '',
     answer: a.answer,
     expected: a.expected,
+    navideDirs: (ref.navideDirs as unknown as string[] | undefined) ?? [],
   })
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
@@ -14350,6 +14517,9 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
       }
       return
     }
+    // Out of retries: the window goes on as if the workspace were new, with
+    // none of its panes. Say so, or a missing restore leaves no trace.
+    recordDiagnostic(workspaceCheckGaveUp(path, workspaceCheckRetries + 1))
   } else {
     workspaceCheckRetries = 0
   }

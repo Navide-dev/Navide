@@ -172,6 +172,13 @@
         "writes": "~/.grok/trusted_folders.toml: cuando un pane de Grok registra que confiaste en una carpeta, Navide añade la entrada de esa carpeta al final de este archivo. Solo se comparte con ~/.grok el área de trabajo en la que se abrió el pane, o una carpeta dentro de ella. Solo se añaden las carpetas que el archivo aún no menciona; tus propias entradas, comentarios y formato nunca se modifican. El archivo se copia antes de cada cambio, y al desactivar esta función se quita exactamente el texto que añadió Navide, así que el archivo vuelve a estar como estaba (o se elimina si lo creó Navide)",
         "cost": "Una carpeta en la que confiaste en un pane de Grok se vuelve a preguntar en cada pane de Grok nuevo o reconstruido."
       },
+      "claude_skills-trust": {
+        "name": "Carpeta de skills de Claude de confianza",
+        "benefit": "Los nuevos paneles de Claude se abren directamente en la entrada en lugar de preguntar primero si confiar en la carpeta de skills de Navide.",
+        "purpose": "Los paneles de Claude no piden confiar en la carpeta con la que Navide entrega skills",
+        "writes": "~/.claude.json (o el .claude.json de la carpeta de Claude propia de una cuenta): Navide añade un único registro de confianza, projects[<datos de Navide>/runtime/skills-views/claude].hasTrustDialogAccepted, para la carpeta de enlaces de skills que crea y entrega a cada panel de Claude con --add-dir. No se confía en ninguna otra carpeta y el resto del archivo se conserva. Se escribe bajo el bloqueo de configuración del propio Claude Code y solo si falta el registro; antes se hace una copia de seguridad, y al desactivarlo se elimina exactamente ese registro",
+        "cost": "Cada nuevo panel de Claude que recibe skills pregunta primero «Adding a new directory» sobre la carpeta de skills de Navide."
+      },
       "cursor_project-mcp": {
         "name": "Herramientas MCP de Navide para Cursor",
         "benefit": "Los panes de Cursor obtienen las herramientas MCP de Navide, como mensajería, planes y programación.",
@@ -9021,11 +9028,19 @@
     "alternate": "Instalación alternativa",
     "unknown-version": "Versión no disponible",
     "keep-primary": "Conserva el binario activo que muestra Navide si es la versión que esperas.",
-    "remove-alternate": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de macOS.",
+    "remove-alternate": {
+      "darwin": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de macOS.",
+      "win32": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de Windows.",
+      "linux": "Quita las instalaciones alternativas con su gestor de paquetes original; no desactives la seguridad de Linux."
+    },
     "run-doctor": "Ejecuta el diagnóstico de la CLI, vuelve aquí y vuelve a detectar.",
     "open-terminal": "Abrir terminal de diagnóstico",
     "use-version": "Usar la versión {version} en Navide",
-    "use-version-note": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de macOS.",
+    "use-version-note": {
+      "darwin": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de macOS.",
+      "win32": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de Windows.",
+      "linux": "Es seguro y reversible: solo cambia el ejecutable que inicia Navide. No desinstala nada ni debilita la seguridad de Linux."
+    },
     "remove-installation": "Quitar esta instalación…",
     "removal-blocked": "No se puede quitar porque no se ha encontrado ninguna otra instalación que funcione. Repara o instala primero otra copia y vuelve a detectar.",
     "update-current": "Actual {version}",

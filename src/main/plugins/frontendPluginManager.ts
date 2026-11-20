@@ -20,6 +20,7 @@ import type {
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
+import { PROXY_RESOLVE_REQUEST, handleProxyResolveRequest } from '../channel-proxy'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
 import { webPolicyDeniedMessage } from '../browserAgentStrings'
 import { composePluginFrameQuery } from './pluginContributionQuery'
@@ -1092,6 +1093,8 @@ const GIT_HOST_FS_MUTATION_TYPES = new Set([
 
 /** How long a picker search waits for the plugin's own file query to finish. */
 const FILE_PICKER_SLOT_WAIT_MS = 5_000
+/** How long a capability call made before the backend first comes up waits for it. */
+const BACKEND_STARTUP_WAIT_MS = 60_000
 
 const PUBLIC_FS_WS_TYPES: Readonly<Record<string, string>> = {
   'fs.readFile': 'fs.read_file',
@@ -1732,6 +1735,11 @@ export class FrontendPluginManager {
   private ipcReady = false
   /** Backend WS url as last reported by main, or null when no backend is up. */
   private backendWsUrl: string | null = null
+  /** True once main has reported a backend url at least once. Before that
+   *  (app start, window restore) capability calls wait for the backend
+   *  instead of failing; after it, a stopped backend fails fast. */
+  private backendUrlEverKnown = false
+  private readonly backendUrlWaiters = new Set<() => void>()
   /** Main-process-only bearer used to authenticate this Host WS session. */
   private backendHostToken: string | null = null
   private hostSessionRegistered = false
@@ -5186,7 +5194,7 @@ export class FrontendPluginManager {
       if (!requestedPath || !isAbsolute(String(payload.path))) {
         return buildError(reqId, 'BAD_REQUEST', 'worktree path must be an existing absolute path')
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
       try {
         const response = await client.send<{ worktrees?: unknown }>('git.worktrees', {
@@ -5399,7 +5407,7 @@ export class FrontendPluginManager {
       wsPayload.target_dir = cloneTarget
       delete wsPayload.target_grant
     }
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) {
       if (credentialOwner) this.releaseGitCredentialOwner(credentialOwner)
       return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
@@ -5453,7 +5461,7 @@ export class FrontendPluginManager {
   ): Promise<CapabilityResponse> {
     const adapter = this.miniIdeLegacyPreferences
     if (!adapter) return buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'mini-IDE preferences are unavailable')
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) return buildError(call.reqId, 'BACKEND_ERROR', 'backend not connected')
     try {
       if (wsType === 'ui.settings.get') {
@@ -5526,7 +5534,7 @@ export class FrontendPluginManager {
       if (plugin.capabilityContext?.runtimeBinding?.audience !== 'git-left' || !plugin.workspacePath) {
         return buildError(reqId, 'CAPABILITY_DENIED', 'legacy Git selection is unavailable')
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
       try {
         const response = await client.send<{ project?: { ui_git_tab_repo?: unknown } | null }>(
@@ -5993,7 +6001,7 @@ export class FrontendPluginManager {
           'terminal session is not owned by this view'
         )
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) {
         return buildError(call.reqId, 'BACKEND_ERROR', 'backend not connected')
       }
@@ -6739,6 +6747,10 @@ export class FrontendPluginManager {
   setBackendWsUrl(url: string | null): void {
     if (this.backendWsUrl !== url) this.editorAiCapability.closeAll()
     this.backendWsUrl = url
+    if (url) {
+      this.backendUrlEverKnown = true
+      for (const wake of [...this.backendUrlWaiters]) wake()
+    }
     const client = this.wsClient
     if (url) {
       if (!client) {
@@ -9019,7 +9031,7 @@ export class FrontendPluginManager {
     beforeDispatch?: () => boolean,
     timeoutMs = 10_000,
   ): Promise<unknown> {
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) throw new Error('backend not connected')
     const response = await client.send(wsType, payload, timeoutMs, {
       ...(beforeDispatch ? { beforeDispatch } : {}),
@@ -9330,7 +9342,7 @@ export class FrontendPluginManager {
       }
     }
     if (plan.address === 'ui.shareChatTargets') type = 'channels.share_targets'
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) return { ok: false, code: 'BACKEND_UNAVAILABLE', message: 'backend not connected' }
     const response = await client.send(type, payload, 60_000, {
       beforeDispatch: () => this.publicPlanCanDispatch(plan, plugin),
@@ -9481,7 +9493,7 @@ export class FrontendPluginManager {
     ) {
       throw new Error(`AI CLI profile '${requestedStartProfileId}' is not available`)
     }
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) throw new Error('backend not connected')
     if (plan.address === 'aiCli.resumeSession') {
       const persistView = args.persistView === true
@@ -10177,6 +10189,25 @@ export class FrontendPluginManager {
   /** Lazily create + connect the backend transport, subscribing to the
    *  server-push events the broker forwards. Returns null when no backend url
    *  is known yet. */
+  /** Fallback for capability calls whose ensureBackend() came back null: a
+   *  call made before main has reported the first backend url waits for it
+   *  (bounded) rather than failing with "backend not connected" — plugin
+   *  views restored at app start run before the backend is up. Once a
+   *  backend has been known, a stopped one still fails fast. */
+  private async waitForFirstBackend(): Promise<WsClient | null> {
+    if (this.backendUrlEverKnown) return null
+    await new Promise<void>((resolve) => {
+      const wake = (): void => {
+        clearTimeout(timer)
+        this.backendUrlWaiters.delete(wake)
+        resolve()
+      }
+      const timer = setTimeout(wake, BACKEND_STARTUP_WAIT_MS)
+      this.backendUrlWaiters.add(wake)
+    })
+    return this.ensureBackend()
+  }
+
   private ensureBackend(): WsClient | null {
     if (!this.backendWsUrl) return null
     if (!this.wsClient) {
@@ -10246,6 +10277,10 @@ export class FrontendPluginManager {
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
+      })
+      client.on(PROXY_RESOLVE_REQUEST, (payload) => {
+        // Same rule: only the live client answers.
+        if (this.wsClient === client) void handleProxyResolveRequest(client, payload)
       })
       client.connect(this.backendWsUrl)
     }

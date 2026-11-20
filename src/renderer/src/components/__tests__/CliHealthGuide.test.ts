@@ -5,6 +5,7 @@ import CliHealthGuide from '../CliHealthGuide.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import type { CliHealthEntry, CliHealthStatus, OnboardStatus } from '../../composables/useOnboarding'
+import { setPlatformId, type PlatformId } from '../../../../shared/osplat'
 
 // The update runs in an embedded xterm; happy-dom has no canvas for it.
 vi.mock('@xterm/xterm', () => ({
@@ -93,6 +94,31 @@ describe('CliHealthGuide', () => {
     expect(wrapper.text()).toContain('/opt/homebrew/bin/claude')
     expect(wrapper.get('.ch-dialog').attributes('role')).toBe('dialog')
     expect(wrapper.get('.ch-dialog').attributes('aria-modal')).toBe('true')
+  })
+
+  it.each([
+    ['darwin', 'macOS', ['Windows', 'Linux']],
+    ['win32', 'Windows', ['macOS', 'Linux']],
+    ['linux', 'Linux', ['macOS', 'Windows']],
+  ] as Array<[PlatformId, string, string[]]>)('names the security of the platform it runs on (%s)', async (platform, os, others) => {
+    setPlatformId(platform)
+    try {
+      const mock = createMockBackend('connected')
+      wrapper = mount(CliHealthGuide, {
+        props: { backend: mock.backend, initialHealth: health },
+        global: { plugins: [i18n] },
+      })
+      const detectNote = wrapper.get('.ch-actions-note').text()
+      expect(detectNote).toContain(os)
+      for (const other of others) expect(detectNote).not.toContain(other)
+
+      await wrapper.get('.ch-footer .ch-btn.primary').trigger('click')
+      const repair = wrapper.get('.ch-card.repair ol').text()
+      expect(repair).toContain(os)
+      for (const other of others) expect(repair).not.toContain(other)
+    } finally {
+      setPlatformId('darwin')
+    }
   })
 
   it('persists the exact fingerprint when the user skips the guide', async () => {

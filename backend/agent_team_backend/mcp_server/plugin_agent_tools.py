@@ -804,13 +804,18 @@ def _caller_object(caller: Any) -> dict[str, Any]:
 
 
 _WORKSPACE_PATH_REQUIRED = (
-    "a caller without a pane must pass workspace_path: the absolute path of a workspace open in a "
-    "Navide window (see workspace_list); it is not forwarded to the plugin"
+    "a caller without a pane must pass workspace_path: the absolute path of a workspace a Navide "
+    "window holds, with or without panes (workspace_list: window_ready true or has_live_panes true); "
+    "it is not forwarded to the plugin"
 )
 
 
-def _open_workspace(requested: Any) -> str | None:
-    """``requested`` as a workspace a Navide window has open, or None."""
+async def _open_workspace(requested: Any) -> str | None:
+    """``requested`` as a workspace a Navide window has open, or None.
+
+    A workspace with a pane in it is known here without asking; one a window
+    holds with no pane yet is confirmed by asking the windows, which match the
+    exact folder (never a parent or a child of it)."""
     from agent_team_backend import agent_messaging
 
     if not isinstance(requested, str) or not os.path.isabs(requested):
@@ -828,6 +833,9 @@ def _open_workspace(requested: Any) -> str | None:
     for workspace in agent_messaging.workspaces():
         if key(workspace) == key(wanted):
             return workspace
+    core = _server()
+    if await core._probe_window(wanted, core._WINDOW_PROBE_TIMEOUT_S):  # noqa: SLF001
+        return wanted
     return None
 
 
@@ -920,7 +928,7 @@ async def _answer(
             return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
         # Taken out before the plugin's schema check and never forwarded.
         arguments = dict(arguments)
-        workspace = _open_workspace(arguments.pop("workspace_path", None)) or ""
+        workspace = await _open_workspace(arguments.pop("workspace_path", None)) or ""
         audit["arguments"] = arguments
         if not workspace:
             return refuse(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")

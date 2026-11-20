@@ -110,20 +110,26 @@ describe('the kickoff verdict reaches the waiting cli_open_agent call', () => {
   // boolean, which says true on buffer growth alone — the evidence the pane
   // path refuses to call sent. One word meaning two strengths depending on the
   // path is how a caller stops looking at a pane that never got its task.
+  // That every exit of the standalone sequence sends exactly one verdict, with
+  // its reason, is driven for real in lib/__tests__/standalonePaneTask.test.ts
+  // ("the standalone kickoff reaches cli_open_agent exactly once"); this pins
+  // only that the handler runs that sequence through the one-shot reporter.
   it('the standalone path reports its kickoff too — judged on its evidence, so the call never waits 45s', () => {
     const handler = block('async function handleMcpSpawnRequest(ev: {', '\nfunction describeSpawnRefusal(')
     const standaloneReport = handler.indexOf('report({ ok: true, paneId, name: childName, advisories: gate.advisories })')
     expect(standaloneReport).toBeGreaterThan(-1)
-    const emit = handler.indexOf("backend.send('agent_spawn.kickoff'", standaloneReport)
-    expect(emit).toBeGreaterThan(standaloneReport)
-    const payload = handler.slice(emit, emit + 400)
+    const standalone = handler.slice(standaloneReport, handler.indexOf('\n    return\n', standaloneReport))
+    expect(standalone).toContain('const reportStandalone = createKickoffReporter({')
+    expect(standalone).toContain('requestId: ev.request_id')
+    expect(standalone).toContain("backend.send('agent_spawn.kickoff', payload)")
+    expect(standalone).toContain('report: reportStandalone')
     // Neither word hard-coded: a fixed 'unverified' reported every external
     // spawn as failed with the task running; a fixed 'sent' would hide a real miss.
-    expect(payload).toContain('kickoff: verdict.kickoff')
-    expect(payload).not.toContain("kickoff: 'unverified'")
-    expect(payload).not.toContain("kickoff: 'sent'")
-    expect(handler.slice(standaloneReport, emit)).toContain('standaloneKickoffVerdict(standaloneEvidence')
-    expect(payload).toContain('reason:')
+    const verdict = standalone.indexOf('standaloneKickoffVerdict(standaloneEvidence')
+    expect(verdict).toBeGreaterThan(-1)
+    expect(standalone.indexOf('reportStandalone(verdict.kickoff, verdict.reason)')).toBeGreaterThan(verdict)
+    expect(standalone).not.toContain("reportStandalone('unverified'")
+    expect(standalone).not.toContain("reportStandalone('sent'")
   })
 
   it('a kickoff that never reached a verdict (early return / throw) is reported failed, not left pending', () => {
