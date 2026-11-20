@@ -459,3 +459,102 @@ describe('Claude Code\'s trust menu, in either order', () => {
     expect(pane.state.sent).toEqual([])
   })
 })
+
+describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () => {
+  // The terminal wraps every row at `cols`, mid-word included ("Yes, I trust
+  // this f" / "older"), and the rendered screen joins the rows with line
+  // breaks — what readScreenTail returns for a pane that narrow.
+  const wrapAt = (screen: string, cols: number): string => screen.split('\n')
+    .flatMap((line) => (line.length <= cols ? [line] : line.match(new RegExp(`.{1,${cols}}`, 'g'))!))
+    .join('\n')
+  const tail = (screen: string, lines: number): string => screen.split('\n').slice(-lines).join('\n')
+
+  function narrowPane(folder: string, cols: number, lines = 120) {
+    const state = { cursor: 0, open: true, alive: true, sent: [] as string[] }
+    const options = ['No, exit', 'Yes, I trust this folder']
+    return {
+      state,
+      readScreen: () => (state.open ? tail(wrapAt(claudeTrustLive(folder, state.cursor as 0 | 1), cols), lines) : ' > '),
+      send: async (keys: string) => {
+        state.sent.push(keys)
+        if (keys === '\x1b[B') state.cursor = Math.min(state.cursor + 1, 1)
+        if (keys === '\r') {
+          state.open = false
+          state.alive = options[state.cursor] !== 'No, exit'
+        }
+        return true
+      },
+    }
+  }
+  const settle = (pane: ReturnType<typeof narrowPane>) => {
+    let t = 0
+    return settleStartupPrompts({
+      agentKey: 'claude',
+      readScreen: pane.readScreen,
+      navideDirs: () => [],
+      workspace: () => WORKSPACE,
+      // A dialog the watch cannot read still makes the pane read as awaiting.
+      awaiting: () => pane.state.open,
+      ready: () => !pane.state.open,
+      alive: () => pane.state.alive,
+      send: pane.send,
+      sleep: async () => { t += 250 },
+      now: () => t,
+      settleMs: 0,
+      timeoutMs: 15_000,
+      record: () => {},
+    })
+  }
+
+  it('wraps the options mid-word, as the VM pane did', () => {
+    const screen = wrapAt(claudeTrustLive(WORKSPACE), 22)
+    expect(screen).not.toContain('Trust this folder')
+    expect(screen).not.toContain('Yes, I trust this folder')
+    expect(screen.split('\n').length).toBeGreaterThan(25)
+  })
+
+  for (const cols of [20, 22, 25, 30]) {
+    it(`reads the menu and its cursor at ${cols} columns`, () => {
+      expect(readStartupPrompt('claude', wrapAt(claudeTrustLive(WORKSPACE), cols))).toMatchObject({
+        kind: 'workspace-trust', options: ['No, exit', 'Yes, I trust this folder'], cursorOn: 'No, exit',
+      })
+      expect(readStartupPrompt('claude', wrapAt(claudeTrustLive(WORKSPACE, 1), cols)))
+        .toMatchObject({ cursorOn: 'Yes, I trust this folder' })
+    })
+
+    it(`own workspace at ${cols} columns: moves onto Yes, then Enter`, async () => {
+      const pane = narrowPane(WORKSPACE, cols)
+      expect(await settle(pane)).toEqual({ outcome: 'clear' })
+      expect(pane.state.sent).toEqual(['\x1b[B', '\r'])
+      expect(pane.state.alive).toBe(true)
+    })
+
+    it(`parent, child and other folders at ${cols} columns: not one key`, async () => {
+      for (const folder of ['/Users/alex', `${WORKSPACE}/sub`, '/Users/alex/other']) {
+        const pane = narrowPane(folder, cols)
+        expect((await settle(pane)).outcome, folder).toBe('blocked')
+        expect(pane.state.sent, folder).toEqual([])
+      }
+    })
+  }
+
+  it('holds the own workspace, pressing nothing, when the screen read misses the dialog title', async () => {
+    // A 25-row read of a dialog wrapped to forty-odd rows: the menu without
+    // "Accessing workspace: <dir>" names no folder.
+    const pane = narrowPane(WORKSPACE, 22, 25)
+    expect((await settle(pane)).outcome).toBe('blocked')
+    expect(pane.state.sent).toEqual([])
+  })
+
+  it('never takes a path in the scrollback above the dialog for the folder it names', () => {
+    const screen = `$ cd ${WORKSPACE}\n${wrapAt(claudeTrustLive('/Users/alex/other'), 22)}`
+    expect(decideStartupPrompt(readStartupPrompt('claude', screen)!, { navideDirs: [], workspace: WORKSPACE }))
+      .toMatchObject({ action: 'block' })
+  })
+
+  it('reads the add-dir dialog wrapped mid-word too', () => {
+    const prompt = readStartupPrompt('claude', wrapAt(screenFor(VIEW), 22))
+    expect(prompt).toMatchObject({ kind: 'claude.add-dir', cursorOn: 'No, exit' })
+    expect(decideStartupPrompt(prompt!, { navideDirs: [VIEW] })).toMatchObject({ action: 'auto', choose: 'Yes, add it' })
+  })
+})

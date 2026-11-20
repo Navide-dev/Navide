@@ -3920,7 +3920,7 @@ function startupPromptDeps(agentKey: string, paneId: string) {
     agentKey,
     readScreen: () => {
       try {
-        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+        return (paneRefs[paneId]?.readScreenTail?.(STARTUP_PROMPT_SCREEN_LINES) as unknown as string) ?? ''
       } catch {
         return ''
       }
@@ -4792,6 +4792,9 @@ onUnmounted(() => {
 // clear what the hook raised. The box itself is its own wait in both cases
 // (applyScreenWatch), so the pane is no longer AWAITING once the box is gone.
 const AWAITING_SCREEN_LINES = 25
+// A launch dialog in a narrow pane wraps to forty-odd rows; its title, which
+// names the folder, has to be read with its menu (lib/startupPrompts.ts).
+const STARTUP_PROMPT_SCREEN_LINES = 120
 // Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
 const ANSWER_STEP_GAP_MS = 60
 // How long cli_set_model waits for claude's /model picker to show, and then
@@ -7754,14 +7757,11 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
         pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
         return true
       }
-      if (ref.sessionId) {
-        await backend.send('terminal.input', {
-          terminal_session_id: ref.sessionId as string,
-          data: '\r'
-        })
-      }
-      pipelineLog(`✓ dismissed startup dialog (pane ${paneId.slice(0, 8)})`)
-      return true
+      // Not read as a trust dialog on the screen: nothing is pressed. A bare
+      // Enter here landed on "No, exit", or trusted a folder that is not the
+      // pane's own; the kickoff's watch reports whatever is left.
+      pipelineLog(`⏸ left a startup dialog it could not read alone (pane ${paneId.slice(0, 8)})`)
+      return false
     }
     const bytes = paneCleanBytes(paneId)
     if (bytes !== lastSize) {
@@ -8241,13 +8241,6 @@ function scheduleInjection(pane: ActivePane): void {
           setPrepStatus(pane, 'failed')
           syncViews()
           return
-        }
-        const r = trust.outcome === 'none' ? paneRefs[pane.id] : undefined
-        if (r?.sessionId) {
-          await backend.send('terminal.input', {
-            terminal_session_id: r.sessionId as string,
-            data: '\r'
-          })
         }
         await waitForQuiet(pane.id, 2000, 2500)
         if (!paneAlive(pane.id)) return

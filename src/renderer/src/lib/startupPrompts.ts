@@ -69,32 +69,46 @@ const BOX = /[─-╿]/g
 const collapse = (screen: string): string => screen.replace(BOX, ' ').replace(/\s+/g, ' ').trim()
 const noSpace = (path: string): string => path.replace(/\s+/g, '').replace(/\\/g, '/').replace(/(.)\/+$/, '$1')
 
+// A narrow pane wraps the dialog's own text, mid-word too ("Yes, I trust this
+// f" / "older"), and collapse() turns each break into a space, so a fixed
+// phrase is matched with an optional space between any two of its characters.
+const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const loose = (phrase: string): string => [...phrase.replace(/ /g, '')].map(escapeRe).join(' ?')
+const squash = (text: string): string => text.replace(/\s+/g, '')
+const FOOTER = loose('Enter to confirm · Esc to cancel')
+
 // Claude Code 2.1.329's dialog (verified against the installed binary and a
 // live render). The body between the question and the menu differs with the
 // window height, so it is skipped; the folder is everything between the title
 // and the first sentence, which a wrapped path splits with a line break.
 const CLAUDE_ADD_DIR = new RegExp(
-  'Adding a new directory: (.+?) This session hasn\'t worked here before\\. '
-    + 'Is this a directory you created or one you trust\\?(.{0,900}?)'
-    + ' ?(❯ ?)?No, exit ?(❯ ?)?Yes, add it ?Enter to confirm · Esc to cancel(.{0,200})$',
+  `${loose('Adding a new directory:')} (.+?) ${loose("This session hasn't worked here before.")} ?`
+    + `${loose('Is this a directory you created or one you trust?')}(.{0,1200}?)`
+    + ` ?(❯ ?)?${loose(ADD_DIR_OPTIONS[0])} ?(❯ ?)?${loose(ADD_DIR_OPTIONS[1])} ?${FOOTER}(.{0,200})$`,
 )
 
 // A CLI asking at launch whether to trust the folder it runs in. The menu and
 // wording differ by vendor and version; the question does not.
-const WORKSPACE_TRUST = [/Do you trust the contents/i, /Trust the contents of this/i, /Trust this folder/i]
+const WORKSPACE_TRUST = ['Do you trust the contents', 'Trust the contents of this', 'Trust this folder']
+  .map((phrase) => new RegExp(loose(phrase), 'i'))
+
+// Where Claude Code's trust dialog starts: the folder it names is read from
+// here on, so a path in the scrollback above it is never taken for it.
+const CLAUDE_TRUST_TITLE = new RegExp(loose('Accessing workspace:'), 'g')
 
 // Claude Code's trust menu, in either order: 2.1.329 draws "No, exit" first
 // with the cursor on it and no numbers (cancelFirst, focus "cancel"); older
 // builds drew "1. Yes, I trust this folder" first with the cursor on it.
-const CLAUDE_TRUST_OPTION = `(${CLAUDE_TRUST_YES}|No, exit)`
+const CLAUDE_TRUST_OPTIONS = [CLAUDE_TRUST_YES, 'No, exit']
+const CLAUDE_TRUST_OPTION = `(${CLAUDE_TRUST_OPTIONS.map(loose).join('|')})`
 const CLAUDE_TRUST_MENU = new RegExp(
-  `(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?`
-    + 'Enter to confirm · Esc to cancel(.{0,200})$',
+  `(❯ ?)?(?:\\d ?\\. ?)?${CLAUDE_TRUST_OPTION} ?(❯ ?)?(?:\\d ?\\. ?)?${CLAUDE_TRUST_OPTION} ?`
+    + `${FOOTER}(.{0,200})$`,
 )
+/** A menu option as read (a wrapped one has spaces in it), by its own name. */
+const trustOption = (read: string): string => CLAUDE_TRUST_OPTIONS.find((o) => squash(o) === squash(read)) ?? read
 
 const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/
-
-const escapeRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Whether `screen` names `folder` as a whole path: not a parent of it, not a
  *  folder inside it, not a longer name that starts with it. A path the CLI
@@ -130,9 +144,14 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
     if (agentKey !== 'claude') return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
     // Which option the cursor is on, read off the menu; '' when it cannot be.
     const menu = CLAUDE_TRUST_MENU.exec(text)
-    const options = menu && menu[2] !== menu[4] ? [menu[2], menu[4]] : []
+    const read = menu ? [trustOption(menu[2]), trustOption(menu[4])] : []
+    const options = read.length && read[0] !== read[1] ? read : []
     const cursorOn = options.length ? (menu![1] ? options[0] : menu![3] ? options[1] : '') : ''
-    return { kind: 'workspace-trust', folder: '', prompt: text, options, cursorOn, readCursor: true }
+    // The dialog from its last title on; without the title on screen it names
+    // no folder, and is left to a person.
+    const title = [...text.matchAll(CLAUDE_TRUST_TITLE)].pop()
+    const prompt = title ? text.slice(title.index) : ''
+    return { kind: 'workspace-trust', folder: '', prompt, options, cursorOn, readCursor: true }
   }
   // The tail after the footer is the CLI's own status line at most; a long
   // tail is a later screen, so this dialog is scrollback.
