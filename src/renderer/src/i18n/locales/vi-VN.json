@@ -9028,11 +9028,19 @@
     "alternate": "Bản cài thay thế",
     "unknown-version": "Không có thông tin phiên bản",
     "keep-primary": "Giữ tệp thực thi đang dùng mà Navide hiển thị nếu đó đúng là phiên bản bạn muốn.",
-    "remove-alternate": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của macOS.",
+    "remove-alternate": {
+      "darwin": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của macOS.",
+      "win32": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của Windows.",
+      "linux": "Gỡ các bản cài thay thế bằng trình quản lý gói ban đầu của chúng; đừng tắt bảo mật của Linux."
+    },
     "run-doctor": "Chạy công cụ chẩn đoán của CLI, rồi quay lại đây và phát hiện lại.",
     "open-terminal": "Mở Terminal chẩn đoán",
     "use-version": "Dùng phiên bản {version} trong Navide",
-    "use-version-note": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của macOS.",
+    "use-version-note": {
+      "darwin": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của macOS.",
+      "win32": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của Windows.",
+      "linux": "Việc này an toàn và có thể đảo ngược: nó chỉ thay đổi tệp thực thi mà Navide khởi chạy. Nó không gỡ cài đặt gì và không làm yếu bảo mật của Linux."
+    },
     "remove-installation": "Gỡ bản cài này…",
     "removal-blocked": "Không gỡ được vì không tìm thấy bản cài nào khác chạy được. Hãy sửa hoặc cài một bản khác trước, rồi phát hiện lại.",
     "update-current": "Hiện tại {version}",

@@ -9028,11 +9028,19 @@
     "alternate": "Alternate installation",
     "unknown-version": "Version unavailable",
     "keep-primary": "Keep the active binary shown by Navide if it is the version you expect.",
-    "remove-alternate": "Remove alternate installations using their original package manager; do not disable macOS security.",
+    "remove-alternate": {
+      "darwin": "Remove alternate installations using their original package manager; do not disable macOS security.",
+      "win32": "Remove alternate installations using their original package manager; do not disable Windows security.",
+      "linux": "Remove alternate installations using their original package manager; do not disable Linux security."
+    },
     "run-doctor": "Run the CLI diagnostic, then return here and re-detect.",
     "open-terminal": "Open Diagnostic Terminal",
     "use-version": "Use Version {version} in Navide",
-    "use-version-note": "This is safe and reversible: it changes only the executable Navide launches. It does not uninstall anything or weaken macOS security.",
+    "use-version-note": {
+      "darwin": "This is safe and reversible: it changes only the executable Navide launches. It does not uninstall anything or weaken macOS security.",
+      "win32": "This is safe and reversible: it changes only the executable Navide launches. It does not uninstall anything or weaken Windows security.",
+      "linux": "This is safe and reversible: it changes only the executable Navide launches. It does not uninstall anything or weaken Linux security."
+    },
     "remove-installation": "Remove This Installation…",
     "removal-blocked": "Removal is unavailable because no other working installation was found. Repair or install another copy first, then re-detect.",
     "update-current": "Current {version}",

@@ -9028,11 +9028,19 @@
     "alternate": "其他安装",
     "unknown-version": "无法取得版本",
     "keep-primary": "若 Navide 显示的作用中 binary 是你预期的版本，请保留它。",
-    "remove-alternate": "使用原本的套件管理工具移除其他安装；不需要关闭 macOS 安全机制。",
+    "remove-alternate": {
+      "darwin": "使用原本的套件管理工具移除其他安装；不需要关闭 macOS 安全机制。",
+      "win32": "使用原本的套件管理工具移除其他安装；不需要关闭 Windows 安全机制。",
+      "linux": "使用原本的套件管理工具移除其他安装；不需要关闭 Linux 安全机制。"
+    },
     "run-doctor": "运行 CLI 诊断后回到这里重新侦测。",
     "open-terminal": "打开诊断终端",
     "use-version": "让 Navide 使用 {version}",
-    "use-version-note": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 macOS 安全性。",
+    "use-version-note": {
+      "darwin": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 macOS 安全性。",
+      "win32": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 Windows 安全性。",
+      "linux": "这个动作安全且可还原：只会变更 Navide 启动的可执行文件，不会卸载任何套件，也不会降低 Linux 安全性。"
+    },
     "remove-installation": "移除此安装…",
     "removal-blocked": "目前无法移除：找不到另一套可用的安装。请先修复或安装另一套，再重新侦测。",
     "update-current": "当前 {version}",

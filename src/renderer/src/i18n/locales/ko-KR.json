@@ -9028,11 +9028,19 @@
     "alternate": "다른 설치",
     "unknown-version": "버전 정보 없음",
     "keep-primary": "Navide에 표시된 사용 중인 바이너리가 원하는 버전이면 그대로 두세요.",
-    "remove-alternate": "다른 설치는 원래 패키지 관리자로 제거하세요. macOS 보안 기능을 끄지 마세요.",
+    "remove-alternate": {
+      "darwin": "다른 설치는 원래 패키지 관리자로 제거하세요. macOS 보안 기능을 끄지 마세요.",
+      "win32": "다른 설치는 원래 패키지 관리자로 제거하세요. Windows 보안 기능을 끄지 마세요.",
+      "linux": "다른 설치는 원래 패키지 관리자로 제거하세요. Linux 보안 기능을 끄지 마세요."
+    },
     "run-doctor": "CLI 진단을 실행한 뒤 여기로 돌아와 다시 감지하세요.",
     "open-terminal": "진단 터미널 열기",
     "use-version": "Navide에서 버전 {version} 사용",
-    "use-version-note": "안전하고 되돌릴 수 있어요. Navide가 실행하는 실행 파일만 바뀌며, 아무것도 제거하지 않고 macOS 보안을 약화하지도 않아요.",
+    "use-version-note": {
+      "darwin": "안전하고 되돌릴 수 있어요. Navide가 실행하는 실행 파일만 바뀌며, 아무것도 제거하지 않고 macOS 보안을 약화하지도 않아요.",
+      "win32": "안전하고 되돌릴 수 있어요. Navide가 실행하는 실행 파일만 바뀌며, 아무것도 제거하지 않고 Windows 보안을 약화하지도 않아요.",
+      "linux": "안전하고 되돌릴 수 있어요. Navide가 실행하는 실행 파일만 바뀌며, 아무것도 제거하지 않고 Linux 보안을 약화하지도 않아요."
+    },
     "remove-installation": "이 설치 제거…",
     "removal-blocked": "정상 작동하는 다른 설치를 찾지 못해 제거할 수 없어요. 먼저 다른 사본을 복구하거나 설치한 뒤 다시 감지하세요.",
     "update-current": "현재 {version}",

@@ -7,6 +7,7 @@ import type {
   CliHealthCandidate, CliHealthEntry, CliHealthStatus, OnboardStatus, UpdateGate,
 } from '../composables/useOnboarding'
 import InstallTerminal from './InstallTerminal.vue'
+import { platformId } from '../../../shared/osplat'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -21,6 +22,8 @@ const { t } = useI18n()
 type Step = 'detect' | 'repair' | 'verify'
 const steps: Step[] = ['detect', 'repair', 'verify']
 const stepIndex = ref(0)
+/** The security notes name this platform's own protections. */
+const platform = platformId()
 const current = computed(() => steps[stepIndex.value])
 const health = ref(props.initialHealth)
 const checking = ref(false)
@@ -400,7 +403,7 @@ async function dismiss(): Promise<void> {
                 {{ $t('cli-health.removal-blocked') }}
               </p>
             </div>
-            <div class="ch-actions-note">{{ $t('cli-health.use-version-note') }}</div>
+            <div class="ch-actions-note">{{ $t(`cli-health.use-version-note.${platform}`) }}</div>
             <div v-if="entry.latest_version && entry.candidates.length > 1" class="ch-actions-note">
               {{ $t('cli-health.update-only-active') }}
             </div>
@@ -414,7 +417,7 @@ async function dismiss(): Promise<void> {
             <strong>{{ entry.label }}</strong>
             <ol>
               <li>{{ $t('cli-health.keep-primary') }}</li>
-              <li>{{ $t('cli-health.remove-alternate') }}</li>
+              <li>{{ $t(`cli-health.remove-alternate.${platform}`) }}</li>
               <li>{{ $t('cli-health.run-doctor') }}</li>
             </ol>
             <button class="ch-btn primary" @click="openDiagnostics(entry)">
