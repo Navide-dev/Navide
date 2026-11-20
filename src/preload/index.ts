@@ -511,6 +511,12 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   versions: MarketplaceVersionInfo[]
   /** Raw README markdown; rendered as text nodes, never as HTML. */
   readme: string | null
+  /** The publisher's DNS-verified domain; null on a Registry that sends none. */
+  verified_domain?: string | null
+  /** Package-relative screenshot paths of the latest version (raster only). */
+  screenshots?: string[]
+  /** This extension's page on the Registry website (rating, reporting). */
+  web_url?: string
 }
 
 export interface BackendResourceNoticeView {
@@ -557,6 +563,8 @@ export interface MarketplaceListResponse {
   total: number
   offset: number
   limit: number
+  /** The Registry website, for the page footer's links. */
+  site_url?: string
 }
 
 /** Card K4: the Developer Mode switch and the developer folders consented to. */
@@ -1548,6 +1556,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
       name: string
       version: string
       path: string
+      kind?: 'icon' | 'screenshot'
     }): Promise<string | null> => ipcRenderer.invoke('plugins:marketplaceIcon', args),
     marketplaceChangelog: (args: { namespace: string; name: string }): Promise<string | null> =>
       ipcRenderer.invoke('plugins:marketplaceChangelog', args),

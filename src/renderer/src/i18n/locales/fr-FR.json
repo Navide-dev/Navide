@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Vérifiez votre connexion et réessayez. Les plugins Navide installés continuent de fonctionner.",
         "errorDetails": "Détails",
         "info": "Informations",
-        "detailTabs": "Détails du plugin Navide",
         "installVersion": "Installer la version {version}",
         "versionLabel": "Version {version}",
         "otherTarget": "Pas pour cette plateforme ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Cible",
           "channel": "Canal",
           "downloads": "Téléchargements",
-          "status": "État"
+          "status": "État",
+          "trust": "Confiance",
+          "capabilities": "Capacités"
         },
         "prereleaseAvailable": "préversion {version} disponible",
         "buildOwnHint": "Envie de créer le vôtre ?",
-        "buildOwn": "Créer un plugin Navide"
+        "buildOwn": "Créer un plugin Navide",
+        "installCard": "Installer",
+        "disabledBadge": "Désactivée",
+        "actionsNote": "Chaque action demande une confirmation avant toute modification.",
+        "enableInExtensions": "Navide a arrêté ce plugin Navide. Consultez ce qu’il faisait sur la page Plugins Navide avant de le réactiver.",
+        "actionFailed": "Impossible de terminer : {error}",
+        "verifiedDomain": "vérifié · {domain}",
+        "riskBanner": "Ce plugin Navide demande des capacités sensibles : {list}. Vérifiez avant d’installer.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Captures d’écran",
+        "screenshotLabel": "Capture d’écran {n}",
+        "ratingTitle": "Note",
+        "rateOnWeb": "Noter sur le site",
+        "report": "Signaler",
+        "ratingSignIn": "La notation et le signalement se font sur le site du Navide Marketplace et nécessitent une connexion à Navide Cloud.",
+        "capabilityHint": {
+          "fs": "lit et écrit des fichiers",
+          "shell": "exécute des commandes shell",
+          "terminal": "exécute des commandes dans un terminal",
+          "aiCli": "pilote des agents CLI d’IA",
+          "web": "navigue sur des sites avec vos connexions et les conserve",
+          "agentMessages": "lit le texte des messages entre vos agents",
+          "secrets": "conserve ses propres clés d’API chiffrées sur votre appareil",
+          "agentNotify": "envoie des notifications à vos volets d’agent, une fois autorisé"
+        },
+        "intro": {
+          "title": "Faites de Navide le vôtre, avec des plugins Navide vérifiés.",
+          "signed": "Paquets signés par le Registry",
+          "permissions": "Autorisations affichées avant l’installation",
+          "inApp": "Chaque installation est confirmée dans Navide"
+        },
+        "footer": {
+          "label": "Liens du Navide Marketplace",
+          "removed": "Plugins Navide retirés",
+          "docs": "Documentation développeur",
+          "discussions": "Échanges",
+          "security": "Sécurité"
+        }
       },
       "developerMode": {
         "errors": {

@@ -1597,7 +1597,6 @@
         "loadFailedHint": "接続を確認して再試行してください。インストール済みの Navide プラグインはそのまま使えます。",
         "errorDetails": "詳細",
         "info": "情報",
-        "detailTabs": "Navide プラグインの詳細",
         "installVersion": "{version} をインストール",
         "versionLabel": "バージョン {version}",
         "otherTarget": "このプラットフォーム向けではありません（{target}）",
@@ -1644,11 +1643,50 @@
           "target": "プラットフォーム",
           "channel": "チャンネル",
           "downloads": "ダウンロード数",
-          "status": "状態"
+          "status": "状態",
+          "trust": "署名",
+          "capabilities": "権限"
         },
         "prereleaseAvailable": "プレリリース {version} あり",
         "buildOwnHint": "自分で作ってみませんか？",
-        "buildOwn": "Navide プラグインを作る"
+        "buildOwn": "Navide プラグインを作る",
+        "installCard": "インストール",
+        "disabledBadge": "無効",
+        "actionsNote": "どの操作も、変更する前に確認を求めます。",
+        "enableInExtensions": "この Navide プラグインは Navide によって停止されました。「Navide プラグイン」ページで停止時の動作を確認してから再度有効にしてください。",
+        "actionFailed": "完了できませんでした: {error}",
+        "verifiedDomain": "検証済み · {domain}",
+        "riskBanner": "この Navide プラグインは機密性の高い機能を要求しています: {list}。インストール前に確認してください。",
+        "riskItem": "{cap}（{hint}）",
+        "screenshots": "スクリーンショット",
+        "screenshotLabel": "スクリーンショット {n}",
+        "ratingTitle": "評価",
+        "rateOnWeb": "ウェブサイトで評価",
+        "report": "報告",
+        "ratingSignIn": "評価と報告は Navide マーケットプレイスのウェブサイトで行い、Navide Cloud へのサインインが必要です。",
+        "capabilityHint": {
+          "fs": "ファイルの読み書き",
+          "shell": "シェルコマンドの実行",
+          "terminal": "ターミナルでのコマンド実行",
+          "aiCli": "AI CLI エージェントの操作",
+          "web": "あなたのログインでウェブサイトを閲覧し保持",
+          "agentMessages": "エージェント間のメッセージ本文の読み取り",
+          "secrets": "自身の API キーを端末上で暗号化して保持",
+          "agentNotify": "許可後、エージェントのペインに通知"
+        },
+        "intro": {
+          "title": "検証済みの Navide プラグインで、Navide を自分好みに。",
+          "signed": "Registry 署名済みパッケージ",
+          "permissions": "インストール前に権限を表示",
+          "inApp": "インストールは必ず Navide 内で確認"
+        },
+        "footer": {
+          "label": "Navide マーケットプレイスのリンク",
+          "removed": "削除された Navide プラグイン",
+          "docs": "開発者ドキュメント",
+          "discussions": "ディスカッション",
+          "security": "セキュリティ"
+        }
       },
       "developerMode": {
         "errors": {

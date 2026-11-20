@@ -1597,7 +1597,6 @@
         "loadFailedHint": "Проверьте подключение и повторите попытку. Установленные плагины Navide продолжают работать.",
         "errorDetails": "Подробности",
         "info": "Сведения",
-        "detailTabs": "Сведения о плагине Navide",
         "installVersion": "Установить {version}",
         "versionLabel": "Версия {version}",
         "otherTarget": "Не для этой платформы ({target})",
@@ -1644,11 +1643,50 @@
           "target": "Платформа",
           "channel": "Канал",
           "downloads": "Загрузки",
-          "status": "Статус"
+          "status": "Статус",
+          "trust": "Доверие",
+          "capabilities": "Возможности"
         },
         "prereleaseAvailable": "доступна предварительная версия {version}",
         "buildOwnHint": "Хотите сделать свой?",
-        "buildOwn": "Создать плагин Navide"
+        "buildOwn": "Создать плагин Navide",
+        "installCard": "Установка",
+        "disabledBadge": "Отключено",
+        "actionsNote": "Каждое действие запрашивает подтверждение перед изменениями.",
+        "enableInExtensions": "Navide остановил этот плагин Navide. Прежде чем снова включить его, посмотрите на странице «Плагины Navide», что он делал.",
+        "actionFailed": "Не удалось завершить: {error}",
+        "verifiedDomain": "подтверждено · {domain}",
+        "riskBanner": "Этот плагин Navide запрашивает чувствительные возможности: {list}. Проверьте перед установкой.",
+        "riskItem": "{cap} ({hint})",
+        "screenshots": "Снимки экрана",
+        "screenshotLabel": "Снимок экрана {n}",
+        "ratingTitle": "Оценка",
+        "rateOnWeb": "Оценить на сайте",
+        "report": "Пожаловаться",
+        "ratingSignIn": "Оценки и жалобы оставляются на сайте Navide Marketplace и требуют входа в Navide Cloud.",
+        "capabilityHint": {
+          "fs": "читает и записывает файлы",
+          "shell": "выполняет команды оболочки",
+          "terminal": "выполняет команды в терминале",
+          "aiCli": "управляет агентами AI CLI",
+          "web": "посещает сайты с вашими входами и сохраняет их",
+          "agentMessages": "читает текст сообщений между вашими агентами",
+          "secrets": "хранит свои API-ключи в зашифрованном виде на вашем устройстве",
+          "agentNotify": "отправляет уведомления в панели агентов, когда вы это разрешите"
+        },
+        "intro": {
+          "title": "Настройте Navide под себя с проверенными плагинами Navide.",
+          "signed": "Пакеты, подписанные Registry",
+          "permissions": "Разрешения видны до установки",
+          "inApp": "Каждая установка подтверждается в Navide"
+        },
+        "footer": {
+          "label": "Ссылки Navide Marketplace",
+          "removed": "Удалённые плагины Navide",
+          "docs": "Документация для разработчиков",
+          "discussions": "Обсуждения",
+          "security": "Безопасность"
+        }
       },
       "developerMode": {
         "errors": {

@@ -1597,7 +1597,6 @@
         "loadFailedHint": "연결을 확인하고 다시 시도하세요. 설치된 Navide 플러그인은 계속 작동해요.",
         "errorDetails": "세부 정보",
         "info": "정보",
-        "detailTabs": "Navide 플러그인 세부 정보",
         "installVersion": "{version} 설치",
         "versionLabel": "버전 {version}",
         "otherTarget": "이 플랫폼용 아님({target})",
@@ -1644,11 +1643,50 @@
           "target": "대상",
           "channel": "채널",
           "downloads": "다운로드",
-          "status": "상태"
+          "status": "상태",
+          "trust": "서명",
+          "capabilities": "권한"
         },
         "prereleaseAvailable": "시험판 {version} 있음",
         "buildOwnHint": "직접 만들어 보고 싶나요?",
-        "buildOwn": "Navide 플러그인 만들기"
+        "buildOwn": "Navide 플러그인 만들기",
+        "installCard": "설치",
+        "disabledBadge": "사용 안 함",
+        "actionsNote": "모든 작업은 변경 전에 확인을 요청합니다.",
+        "enableInExtensions": "Navide가 이 Navide 플러그인을 중지했습니다. 다시 사용하기 전에 Navide 플러그인 페이지에서 중지 당시 하던 작업을 확인하세요.",
+        "actionFailed": "완료하지 못했습니다: {error}",
+        "verifiedDomain": "인증됨 · {domain}",
+        "riskBanner": "이 Navide 플러그인은 민감한 기능을 요청합니다: {list}. 설치 전에 확인하세요.",
+        "riskItem": "{cap}({hint})",
+        "screenshots": "스크린샷",
+        "screenshotLabel": "스크린샷 {n}",
+        "ratingTitle": "평점",
+        "rateOnWeb": "웹사이트에서 평가",
+        "report": "신고",
+        "ratingSignIn": "평가와 신고는 Navide 마켓플레이스 웹사이트에서 하며 Navide Cloud 로그인이 필요합니다.",
+        "capabilityHint": {
+          "fs": "파일 읽기 및 쓰기",
+          "shell": "셸 명령 실행",
+          "terminal": "터미널에서 명령 실행",
+          "aiCli": "AI CLI 에이전트 조작",
+          "web": "내 로그인으로 웹사이트를 탐색하고 유지",
+          "agentMessages": "에이전트 간 메시지 내용 읽기",
+          "secrets": "자체 API 키를 기기에 암호화해 보관",
+          "agentNotify": "허용하면 에이전트 창에 알림 전송"
+        },
+        "intro": {
+          "title": "검증된 Navide 플러그인으로 Navide를 내 방식대로.",
+          "signed": "Registry 서명 패키지",
+          "permissions": "설치 전 권한 공개",
+          "inApp": "모든 설치는 Navide에서 확인"
+        },
+        "footer": {
+          "label": "Navide 마켓플레이스 링크",
+          "removed": "삭제된 Navide 플러그인",
+          "docs": "개발자 문서",
+          "discussions": "토론",
+          "security": "보안"
+        }
       },
       "developerMode": {
         "errors": {

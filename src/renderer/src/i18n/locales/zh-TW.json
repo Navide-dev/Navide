@@ -1597,7 +1597,6 @@
         "loadFailedHint": "請檢查網路連線後重試；已安裝的 Navide 外掛不受影響。",
         "errorDetails": "詳細資訊",
         "info": "資訊",
-        "detailTabs": "Navide 外掛詳細內容",
         "installVersion": "安裝 {version}",
         "versionLabel": "版本 {version}",
         "otherTarget": "不適用此平台（{target}）",
@@ -1644,11 +1643,50 @@
           "target": "平台",
           "channel": "通道",
           "downloads": "下載次數",
-          "status": "狀態"
+          "status": "狀態",
+          "trust": "簽章",
+          "capabilities": "權限"
         },
         "prereleaseAvailable": "有預覽版 {version}",
         "buildOwnHint": "想自己做一個？",
-        "buildOwn": "開發 Navide 外掛"
+        "buildOwn": "開發 Navide 外掛",
+        "installCard": "安裝",
+        "disabledBadge": "已停用",
+        "actionsNote": "每個動作都會先請你確認，確認後才會變更。",
+        "enableInExtensions": "這個 Navide 外掛被停止了。請先到「Navide 外掛」頁看它當時在做什麼，再重新啟用。",
+        "actionFailed": "無法完成：{error}",
+        "verifiedDomain": "已驗證 · {domain}",
+        "riskBanner": "這個 Navide 外掛要求敏感能力：{list}。安裝前請先確認。",
+        "riskItem": "{cap}（{hint}）",
+        "screenshots": "截圖",
+        "screenshotLabel": "截圖 {n}",
+        "ratingTitle": "評分",
+        "rateOnWeb": "到網頁評分",
+        "report": "檢舉",
+        "ratingSignIn": "評分與檢舉在 Navide 市集網頁上進行，需要登入 Navide Cloud。",
+        "capabilityHint": {
+          "fs": "讀寫檔案",
+          "shell": "執行 shell 指令",
+          "terminal": "在終端機執行指令",
+          "aiCli": "操作 AI CLI 代理",
+          "web": "以你的登入身分瀏覽網站並保留登入",
+          "agentMessages": "讀取代理之間的訊息內容",
+          "secrets": "在你的裝置上加密保存自己的 API 金鑰",
+          "agentNotify": "經你同意後通知你的代理分格"
+        },
+        "intro": {
+          "title": "讓 Navide 更合你用，每個 Navide 外掛都經過驗證。",
+          "signed": "Registry 簽章套件",
+          "permissions": "安裝前揭露權限",
+          "inApp": "每次安裝都在 Navide 內確認"
+        },
+        "footer": {
+          "label": "Navide 市集連結",
+          "removed": "已移除的 Navide 外掛",
+          "docs": "開發者文件",
+          "discussions": "討論區",
+          "security": "資安"
+        }
       },
       "developerMode": {
         "errors": {
