@@ -125,9 +125,10 @@ publish_vsix() {
 # manifest is not the expected id and version.
 check_vsix() {
   local vsix="$1" target="$2" found
-  case " $KNOWN_TARGETS " in
+  # `universal` too: a frontend-only plugin built elsewhere (navide.git).
+  case " $KNOWN_TARGETS universal " in
     *" $target "*) ;;
-    *) echo "refusing: unknown target '$target' (known: $KNOWN_TARGETS)" >&2; exit 1 ;;
+    *) echo "refusing: unknown target '$target' (known: $KNOWN_TARGETS universal)" >&2; exit 1 ;;
   esac
   [ -f "$vsix" ] || { echo "refusing: no such package: $vsix" >&2; exit 1; }
   found="$(python3 -c 'import json, sys, zipfile

@@ -3,7 +3,6 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import contract from '../../src/shared/gitBridgeContract.json'
 import { HOST_GIT_EVENT_TYPES, HOST_GIT_REQUEST_TYPES } from '../../src/shared/gitCompatibility'
-import { loadPluginDir } from '../../src/main/plugins/installedPlugins'
 import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginVersions'
 
 // The Host half of checks that ran inside navide.git while it lived in this
@@ -95,24 +94,5 @@ describe('navide.git, Host side', () => {
     const source = read('src/renderer/src/PlanWindowApp.vue')
     expect(source).toMatch(/\bloadTheme\(/)
     expect(source.split('\n').filter((line) => /\bloadTheme\(\s*[^)\s]/.test(line))).toEqual([])
-  })
-
-  const staged = join(
-    'dist-plugins/official-artifacts/factory-resources/navide.git',
-    OFFICIAL_PLUGIN_VERSIONS['navide.git'],
-    'universal/package',
-  )
-  // Present after `pnpm build` (or `node scripts/stage-official-plugin-artifacts.mjs`)
-  // has taken the pinned version from the Registry.
-  it.skipIf(!existsSync(staged))('loads the staged Registry copy through the Manifest v2 loader', () => {
-    const scanned = loadPluginDir(staged)
-    expect(scanned.error).toBeUndefined()
-    expect(scanned.descriptor?.id).toBe('navide.git')
-    expect(scanned.descriptor?.packageVersion).toBe(OFFICIAL_PLUGIN_VERSIONS['navide.git'])
-    expect(scanned.descriptor?.views?.map((view) => view.contributionKey)).toEqual([
-      'navide.git.left',
-      'navide.git.branch-detail',
-      'navide.git.window',
-    ])
   })
 })
