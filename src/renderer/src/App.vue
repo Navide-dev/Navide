@@ -225,7 +225,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
-import { decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
+import { answerStartupPrompt, decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -7672,6 +7672,25 @@ function heldWorkspaceTrust(paneId: string): string {
   return decision.action === 'block' ? decision.why : ''
 }
 
+/** The one answer Navide gives a workspace trust dialog live on this pane
+ *  outside the kickoff's watch (lib/startupPrompts.ts): decided against the
+ *  pane's workspace, the cursor moved onto the trust option, and answered only
+ *  once the dialog has left the screen — a bare Enter landed on Claude Code
+ *  2.1.329's "No, exit", and a dialog still drawn after it was answered a
+ *  second time by the kickoff's watch, which then reported blocked-by-prompt.
+ *  'none' when no workspace trust dialog is on screen. */
+async function answerWorkspaceTrust(paneId: string): Promise<{ outcome: 'none' | 'answered' } | { outcome: 'held'; why: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return { outcome: 'none' }
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  if (prompt?.kind !== 'workspace-trust') return { outcome: 'none' }
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  if (decision.action === 'block') return { outcome: 'held', why: decision.why }
+  if (await answerStartupPrompt(pane.agentKey, prompt, decision.choose, deps)) return { outcome: 'answered' }
+  return { outcome: 'held', why: 'the trust option did not take on the trust dialog' }
+}
+
 /** Role injection's hold on a trust dialog left to a person: recorded, then
  *  wait for whoever answers it. False when it was not answered in time. */
 async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string): Promise<boolean> {
@@ -7698,12 +7717,17 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
-      // Enter trusts the folder: only the pane's own workspace. Any other
-      // folder is reported (the kickoff's blocked-by-prompt) and left alone.
-      const held = heldWorkspaceTrust(paneId)
-      if (held) {
-        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${held}`)
+      // Trust only the pane's own workspace. Any other folder, or a menu whose
+      // cursor cannot be read, is reported (the kickoff's blocked-by-prompt)
+      // and left alone.
+      const trust = await answerWorkspaceTrust(paneId)
+      if (trust.outcome === 'held') {
+        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${trust.why}`)
         return false
+      }
+      if (trust.outcome === 'answered') {
+        pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
+        return true
       }
       if (ref.sessionId) {
         await backend.send('terminal.input', {
@@ -8186,7 +8210,14 @@ function scheduleInjection(pane: ActivePane): void {
         if (!paneAlive(pane.id)) return
       } else if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
         pipelineLog(`${tag} late startup dialog detected — dismissing`)
-        const r = paneRefs[pane.id]
+        const trust = await answerWorkspaceTrust(pane.id)
+        if (trust.outcome === 'held' && !(await waitHeldWorkspaceTrust(pane, trust.why, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
+        }
+        const r = trust.outcome === 'none' ? paneRefs[pane.id] : undefined
         if (r?.sessionId) {
           await backend.send('terminal.input', {
             terminal_session_id: r.sessionId as string,

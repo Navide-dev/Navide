@@ -16,9 +16,18 @@ const body = (name: string): string => {
 describe('startup trust dialog: Enter only for the pane\'s own workspace', () => {
   it('dismissStartupDialog asks before it presses Enter', () => {
     const fn = body('async function dismissStartupDialog')
-    const asked = fn.indexOf('heldWorkspaceTrust(paneId)')
+    const asked = fn.indexOf('answerWorkspaceTrust(paneId)')
     expect(asked).toBeGreaterThan(-1)
     expect(asked).toBeLessThan(fn.indexOf("data: '\\r'"))
+  })
+
+  it('answers a trust dialog through the shared answerer, which moves the cursor and waits for it to leave', () => {
+    const fn = body('async function answerWorkspaceTrust')
+    expect(fn).toContain('workspace: pane.workspacePath')
+    expect(fn).toContain('answerStartupPrompt(pane.agentKey, prompt, decision.choose, deps)')
+    // The late-dialog path of role injection uses it too, not a bare Enter.
+    const late = body('function scheduleInjection')
+    expect(late.indexOf('answerWorkspaceTrust(pane.id)')).toBeGreaterThan(late.indexOf('late startup dialog detected'))
   })
 
   it('compares the dialog with the pane\'s workspace', () => {
@@ -28,7 +37,8 @@ describe('startup trust dialog: Enter only for the pane\'s own workspace', () =>
 
   it('role injection holds on a held dialog, on first sight and late', () => {
     const fn = body('function scheduleInjection')
-    expect(fn.match(/waitHeldWorkspaceTrust\(pane, /g)).toHaveLength(2)
+    // First sight, late, and a late answer that did not take.
+    expect(fn.match(/waitHeldWorkspaceTrust\(pane, /g)).toHaveLength(3)
     const late = fn.indexOf('late startup dialog detected')
     expect(fn.indexOf('const lateHeld')).toBeGreaterThan(-1)
     expect(fn.indexOf('const lateHeld')).toBeLessThan(late)
