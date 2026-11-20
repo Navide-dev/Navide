@@ -664,6 +664,22 @@ holding delivery a minute after the last keystroke either way. Without that a
 single `1` would park the pane for good — every later message stuck on
 `typing`, and the pane reported busy to everything that asks.
 
+**A prompt an interrupt put back is cleared first (claude panes).** An
+interrupt makes Claude Code put the prompt it was working on back in its input
+box, and an injection typed after it would submit both as one prompt. Before
+typing, Navide reads the box off the screen (`lib/claudeComposer.ts`) and
+empties it with Ctrl-U unless it holds your unsent line. When the cleared text
+was your own prompt, a toast offers Restore, which pastes it back without
+pressing Enter, and Copy.
+
+Restore rebuilds the text from the box's rows, and that is a best guess: a
+line break you typed exactly where the row reaches the box's right edge reads
+as the TUI's own wrap, so Restore joins the two lines with a space. The
+original is not on screen to read. Claude Code wraps the box itself and draws
+each row separately, so xterm records no soft wrap (`isWrapped` is false on
+every row) and the PTY stream carries the same rows. Check a restored
+multi-line prompt before sending it; Copy has the same text.
+
 **One at a time, in order.** Each target has its own FIFO queue and at most one
 injection in flight. Injection itself is a bracketed paste plus a verified
 submit — if the pane never echoes the text back, the message is failed rather

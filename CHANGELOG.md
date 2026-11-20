@@ -17,6 +17,10 @@ All notable released changes to Navide will be documented in this file. The form
 - Interface scale: after restarting Navide at 125%, the left-sidebar views (Plans, Git, Browser) showed at 100% inside the 125% window until the scale was changed again. Their `<webview>` pages were pinned to 100% each time they loaded, overriding the scale they had inherited from the window. They are now pinned to the interface scale like every other page, and still follow later changes from their window.
 - New panes opened in another workspace (`cli_open_agent` with `target_workspace`) or by `ui.pane.create`: a launch prompt was not checked before the task was typed, so the task could be typed into it, Enter included. These panes now go through the same launch-prompt check as other new panes: an allowlisted prompt is answered, and any other prompt is reported as `kickoff: "blocked-by-prompt"` with the prompt and its options. The task is held and typed once the prompt is answered, and nothing is typed if nobody answers it.
 
+### Known limitations
+
+- Messaging (0.2.45): Restore on the toast for a prompt Navide cleared from a Claude Code input box rebuilds the text from the box's rows. A line break typed exactly where a row reaches the box's right edge reads as Claude Code's own wrap, so the restored text has a space there instead of the break. Claude Code wraps the box itself, so neither the terminal nor its output records which rows were wrapped. Restore never presses Enter; check a restored multi-line prompt before sending it. See "A prompt an interrupt put back is cleared first" in `docs/en-US/inter-cli-messaging.md`.
+
 ## [0.2.45] — 2026-11-20
 
 ### Added
