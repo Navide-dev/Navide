@@ -29,8 +29,10 @@
  * - claude's "Adding a new directory" dialog at launch (lib/startupPrompts.ts)
  *   draws "No, exit / Yes, add it" without numbers and takes no hotkey: the
  *   arrows move the cursor and Enter confirms. "allow" (or option 2) moves to
- *   "Yes, add it" — an answer that holds for this session only — and "deny"
- *   (option 1) is Esc, the dialog's own "No, exit", which ends the CLI.
+ *   "Yes, add it" only for a folder the spawn handed the pane itself (the
+ *   allowlist in startupPrompts.ts): adding any other folder trusts it for the
+ *   session and is refused here. "deny" (option 1) is Esc, the dialog's own
+ *   "No, exit", which ends the CLI.
  *
  * Free text is the only input the remote sender shapes, and it is typed into
  * the text box the question offered, as one line with no control characters.
@@ -40,7 +42,7 @@
  */
 
 
-import { ADD_DIR_OPTIONS, readStartupPrompt, type StartupPrompt } from './startupPrompts'
+import { ADD_DIR_OPTIONS, decideStartupPrompt, readStartupPrompt, type StartupPrompt } from './startupPrompts'
 export type PaneAnswer =
   | { kind: 'permission'; choice: 'allow' | 'deny' }
   | { kind: 'question'; option: number; text?: string }
@@ -459,6 +461,9 @@ export function resolveAnswerKeys(input: {
    *  path's Guard screen); when given, the keys go in only while the same
    *  prompt is still on screen, so a prompt that replaced it is never answered. */
   expected?: { prompt: string; options: string[] }
+  /** Folders the spawn handed this pane itself (`navide_dirs`): the only ones
+   *  Claude's "Adding a new directory" dialog may be accepted for from here. */
+  navideDirs?: readonly string[]
 }): AnswerKeys {
   const { agentKey, answer } = input
   if (input.displayStatus !== 'awaiting') return { ok: false, error: 'pane is not awaiting' }
@@ -492,7 +497,7 @@ export function resolveAnswerKeys(input: {
 
   if (agentKey === 'claude') {
     const addDir = readStartupPrompt('claude', input.screen)
-    if (addDir) return addDirKeys(addDir, answer)
+    if (addDir) return addDirKeys(addDir, answer, input.navideDirs ?? [])
   }
   const options = parseMenuOptions(input.screen)
   if (!options.length) return { ok: false, error: 'no option menu on screen' }
@@ -515,12 +520,19 @@ export function resolveAnswerKeys(input: {
 
 /** Keys for Claude's "Adding a new directory" dialog: Esc is its "No, exit";
  *  "Yes, add it" is reached with Down from wherever the cursor is, then Enter. */
-function addDirKeys(prompt: StartupPrompt, answer: PaneAnswer): AnswerKeys {
+function addDirKeys(prompt: StartupPrompt, answer: PaneAnswer, navideDirs: readonly string[]): AnswerKeys {
   const option = answer.kind === 'permission' ? (answer.choice === 'allow' ? 2 : 1) : answer.kind === 'question' ? answer.option : 0
   if (answer.kind === 'multi' || (answer.kind === 'question' && answer.text !== undefined) || (option !== 1 && option !== 2)) {
     return { ok: false, error: 'the dialog has two options: 1 (No, exit) and 2 (Yes, add it)' }
   }
   if (option === 1) return { ok: true, keys: ESC }
+  // "Yes, add it" trusts the folder for the session: its skills, commands and
+  // hooks load and can run commands. Only the allowlisted case Navide would
+  // answer by itself is accepted from an agent or a chat; any other folder is
+  // the user's to trust at the computer. Refusing is always allowed.
+  if (decideStartupPrompt(prompt, { navideDirs }).action !== 'auto') {
+    return { ok: false, error: `adding ${prompt.folder} trusts it for this session; accept it at the computer` }
+  }
   const moves = prompt.cursorOn === ADD_DIR_OPTIONS[1] ? [] : [DOWN]
   return { ok: true, keys: [...moves, '\r'].join(''), steps: [...moves, '\r'] }
 }

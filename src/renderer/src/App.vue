@@ -12645,6 +12645,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     screen: (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '',
     answer: a.answer,
     expected: a.expected,
+    navideDirs: (ref.navideDirs as unknown as string[] | undefined) ?? [],
   })
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }

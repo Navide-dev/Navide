@@ -199,7 +199,9 @@ describe('cli_answer_prompt keys for the dialog', () => {
   const status = { displayStatus: 'awaiting', awaitingKind: 'permission' }
   it('allow moves to "Yes, add it" and confirms; deny is Esc ("No, exit")', () => {
     const screen = screenFor(VIEW)
-    expect(resolveAnswerKeys({ agentKey: 'claude', ...status, screen, answer: { kind: 'permission', choice: 'allow' } }))
+    expect(resolveAnswerKeys({
+      agentKey: 'claude', ...status, screen, answer: { kind: 'permission', choice: 'allow' }, navideDirs: [VIEW],
+    }))
       .toEqual({ ok: true, keys: '\x1b[B\r', steps: ['\x1b[B', '\r'] })
     expect(resolveAnswerKeys({ agentKey: 'claude', ...status, screen, answer: { kind: 'permission', choice: 'deny' } }))
       .toEqual({ ok: true, keys: '\x1b' })
@@ -222,5 +224,21 @@ describe('createKickoffReporter', () => {
       kickoff: 'blocked-by-prompt',
       reason: 'why',
     }])
+  })
+})
+
+describe('cli_answer_prompt never trusts a folder Navide did not hand the pane', () => {
+  const status = { displayStatus: 'awaiting', awaitingKind: 'permission' }
+  it('refuses allow and option 2 for any other folder, and still lets it be refused', () => {
+    const screen = screenFor('/Users/alex/elsewhere')
+    for (const answer of [{ kind: 'permission', choice: 'allow' }, { kind: 'question', option: 2 }] as const) {
+      const keys = resolveAnswerKeys({ agentKey: 'claude', ...status, screen, answer, navideDirs: [VIEW] })
+      expect(keys.ok).toBe(false)
+    }
+    expect(resolveAnswerKeys({ agentKey: 'claude', ...status, screen, answer: { kind: 'permission', choice: 'allow' } }).ok)
+      .toBe(false)
+    expect(resolveAnswerKeys({
+      agentKey: 'claude', ...status, screen, answer: { kind: 'permission', choice: 'deny' }, navideDirs: [VIEW],
+    })).toEqual({ ok: true, keys: '\x1b' })
   })
 })
