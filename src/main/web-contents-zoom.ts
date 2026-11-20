@@ -55,3 +55,20 @@ export function lockPageZoom(
   })
   contents.on('zoom-changed', pinPageZoom)
 }
+
+/**
+ * How the interface scale reaches a WebContents of this `type`.
+ *
+ * Every page is pinned to the scale on load. A `<webview>` guest is not
+ * tracked: Electron hands it its embedder's zoom whenever that changes, and
+ * the guest does not compound it (a 110% embedder measures a 1.1 guest, not
+ * 1.21). A native WebContentsView composites outside the DOM and gets no such
+ * hand-down, so the store tracks it. Pinning a guest to 1 on load, as before,
+ * showed the left-sidebar views at 100% inside a 125% window after a restart.
+ */
+export function interfaceScalePolicy(
+  type: string,
+  scale: () => number,
+): { track: boolean; factor: () => number } {
+  return { track: type !== 'webview', factor: scale }
+}

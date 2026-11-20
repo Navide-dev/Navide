@@ -121,7 +121,7 @@ import {
   writeBackendPluginActivationCatalog,
 } from './plugins/pluginBackendActivationCatalog'
 import { registerStorageIpc } from './storage-ipc'
-import { lockPageZoom } from './web-contents-zoom'
+import { interfaceScalePolicy, lockPageZoom } from './web-contents-zoom'
 import { createUiZoomStore, initialUiScaleFrom, type UiZoomStore } from './ui-zoom-store'
 import { installContextMenu, registerTerminalContextMenu } from './context-menu'
 import { inAppUpdateSupported, initUpdater } from './updater'
@@ -6216,16 +6216,15 @@ app.on('web-contents-created', (_e, contents) => {
   // here is what lets one Settings change scale all windows at once — including
   // the plugin bundles, which have their own documents and no host preload.
   //
-  // A <webview> guest is laid out inside an already-scaled host document and
-  // shares its embedder's zoom, so scaling it again would compound. A native
-  // WebContentsView composites outside the DOM and does need its own factor.
+  // Which WebContents the store tracks, and why a <webview> guest is not:
+  // interfaceScalePolicy (web-contents-zoom.ts).
   const zoom = uiZoomStore()
-  const scalable = contents.getType() !== 'webview'
-  if (scalable) {
+  const scale = interfaceScalePolicy(contents.getType(), () => zoom.get())
+  if (scale.track) {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(contents, () => (scalable ? zoom.get() : 1), warnMain)
+  lockPageZoom(contents, scale.factor, warnMain)
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
