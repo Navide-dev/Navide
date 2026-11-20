@@ -225,6 +225,7 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
         )
         return
     session.host_authenticated = True
+    app.note_host_registration(session)
     features = payload.get("features", {})
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])

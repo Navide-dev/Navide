@@ -642,11 +642,30 @@ def live_main_window_ids() -> set[str]:
     }
 
 
+#: Counts host.register successes, so the newest Host registration is known.
+_host_registrations = 0
+
+
+def note_host_registration(session: "Session") -> None:
+    """Stamp a session that just registered as the Host (see host.register)."""
+    global _host_registrations
+    _host_registrations += 1
+    session.host_registration = _host_registrations
+
+
 async def unicast_host(event: dict[str, Any]) -> bool:
-    """Send one internal agent request to the authenticated Electron Host."""
-    for session in list(_SESSIONS):
-        if session.dead or not session.host_authenticated:
-            continue
+    """Send one internal agent request to the authenticated Electron Host.
+
+    The newest registration first: the Host keeps one connection and registers it again
+    on every reconnect, so an older authenticated session is one it has left. The backend
+    may not have seen that socket close yet (Windows, while the Host reconnects at
+    startup), and a request sent there is never answered."""
+    hosts = sorted(
+        (s for s in list(_SESSIONS) if not s.dead and s.host_authenticated),
+        key=lambda s: s.host_registration,
+        reverse=True,
+    )
+    for session in hosts:
         try:
             await session.send_json(event)
         except Exception as err:  # noqa: BLE001
@@ -796,6 +815,8 @@ class Session:
         # handoffs. The bearer is registered over this WebSocket and never
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
+        # Order of the host.register that authenticated it (note_host_registration).
+        self.host_registration = 0
         self.plans_backend_v2 = False
         # Built-in Navide plugins the user disabled, as the Host registered them.
         self.disabled_plugins: frozenset[str] = frozenset()
