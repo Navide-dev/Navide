@@ -44,6 +44,7 @@ import httpx
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, ReconnectNow, error_text, send_request, ws_keepalive
 from .base import (
     STALL_WATCHDOG_S,
@@ -116,7 +117,8 @@ class DingTalkAdapter:
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0))
+            self._client = httpx.AsyncClient(base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0),
+                                             **proxy.client_options())
         return self._client
 
     async def start(self, emit: Emit) -> None:
@@ -154,7 +156,7 @@ class DingTalkAdapter:
 
     async def _connect_once(self) -> None:
         url = await self._open_connection()
-        async with ws_connect(url, max_size=None, ping_interval=None) as ws:
+        async with ws_connect(url, max_size=None, ping_interval=None, proxy=await proxy.ws_proxy(url)) as ws:
             self._loop.mark_ready()
             keepalive = asyncio.create_task(ws_keepalive(ws, self._loop.touch, self._ping_interval_s))
             try:

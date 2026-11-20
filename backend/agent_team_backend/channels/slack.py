@@ -44,6 +44,7 @@ from urllib.parse import urlsplit
 import httpx
 from websockets.asyncio.client import connect as ws_connect
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, ReconnectNow, download_to, media_client, send_request, ws_keepalive
 from .base import (
     STALL_WATCHDOG_S,
@@ -145,7 +146,7 @@ class SlackAdapter:
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
-                base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0),
+                base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0), **proxy.client_options(),
             )
         return self._client
 
@@ -206,7 +207,7 @@ class SlackAdapter:
         url = str(opened.get("url") or "")
         if not url:
             raise ConnectionError("apps.connections.open returned no url")
-        async with ws_connect(url, max_size=None, ping_interval=None) as ws:
+        async with ws_connect(url, max_size=None, ping_interval=None, proxy=await proxy.ws_proxy(url)) as ws:
             keepalive = asyncio.create_task(ws_keepalive(ws, self._loop.touch, self._ping_interval_s))
             try:
                 async for raw in ws:

@@ -14558,6 +14558,11 @@ from .channels import pdf as channels_pdf  # noqa: E402
 
 handler(channels_pdf.RESULT_TYPE)(channels_pdf.handle_result)
 
+# The Host's answer to a channel's PAC proxy lookup (channels/proxy.py).
+from .channels import proxy as channels_proxy  # noqa: E402
+
+handler(channels_proxy.RESULT_TYPE)(channels_proxy.handle_result)
+
 # ── Navide Guard (guard.*) ──
 # Renderer-only: ws request types, unreachable through MCP ui_invoke.
 from .guard import ws_api as guard_ws_api  # noqa: E402
