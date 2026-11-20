@@ -39,7 +39,7 @@ describe('navide.git, Host side', () => {
     const parsed = parseManifestV2(JSON.parse(read('tests/fixtures/navide-browser/manifest.json')) as Record<string, unknown>)
     expect(parsed.id).toBe('navide.browser')
     const backend = parsed.backend!
-    expect([...new Set(backend.agentTools!.map((tool) => tool.method))].sort()).toEqual([...backend.methods].sort())
+    expect([...new Set(backend.agentTools!.map((tool) => tool.method))].sort()).toEqual([...(backend.methods ?? [])].sort())
   })
 
   it('keeps no private feature package system', () => {

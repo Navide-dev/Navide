@@ -13,6 +13,10 @@ import pytest
 from agent_team_backend import app
 from agent_team_backend.channels import proxy
 
+# Windows' monotonic clock ticks coarsely, so a fallback expiry can read a
+# hair past its TTL there (5.000000000000028 on CI) while still being the short one.
+_CLOCK_SLACK_S = 0.05
+
 
 @pytest.fixture(autouse=True)
 def _no_fixed_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -117,17 +121,17 @@ async def test_each_fallback_is_logged_and_kept_only_briefly(
     monkeypatch.setattr(proxy, "_unicast_host", no_host)
     assert await proxy.resolve(f"https://user:{secret}@api.telegram.org/") is proxy.DEFAULT
     assert "no Host session" in caplog.text
-    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
     proxy.clear_cache()
     _host_answers(monkeypatch, None, [])
     assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
     assert "did not answer" in caplog.text
-    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
     proxy.clear_cache()
     monkeypatch.setattr(proxy, "_unicast_host", failing_host)
     assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
     assert "could not resolve" in caplog.text
-    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S
+    assert kept_for() <= proxy.FALLBACK_CACHE_TTL_S + _CLOCK_SLACK_S
     assert secret not in caplog.text and "user" not in caplog.text
     assert proxy.FALLBACK_CACHE_TTL_S < proxy.CACHE_TTL_S / 5
 

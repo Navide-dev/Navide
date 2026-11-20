@@ -6,11 +6,13 @@
 // This scans the shipped renderer and plugin sources, not a mounted app, so
 // a command registered anywhere (App.vue included) is caught.
 import { describe, expect, it } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import nodePath, { join, resolve } from 'node:path'
 
 const ROOT = resolve(__dirname, '../../../../..')
-const SCAN = ['src/renderer/src', 'plugins', 'packages']
+// plugins/ is gone since the official plugins moved to their own repositories
+// (0.2.46); scan it only where a checkout still has one.
+const SCAN = ['src/renderer/src', 'plugins', 'packages'].filter((dir) => existsSync(dir))
 
 function sources(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
