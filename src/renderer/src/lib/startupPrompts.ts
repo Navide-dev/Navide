@@ -16,7 +16,7 @@
  *
  * | rule | prompt | answered only when | why |
  * |---|---|---|---|
- * | `workspace-trust.own-workspace` | A CLI's workspace trust dialog at launch (Claude Code "Accessing workspace: <dir> … Yes, I trust this folder", Codex "Trust this folder?", "Do you trust the contents of this directory?"), answered with Enter on its default (trust) option | the dialog names `<dir>` and it is exactly the pane's own workspace (`workspace`), the folder the user opened; not a parent, not a folder inside it | The user opened that workspace in Navide and asked for a pane in it; any other folder, or a dialog that names none, is theirs to judge. Vendors with a trust watcher of their own (`startupTrust`, Grok) are left to it. |
+ * | `workspace-trust.own-workspace` | A CLI's workspace trust dialog at launch (Claude Code "Accessing workspace: <dir> … Yes, I trust this folder", Codex "Trust this folder?", "Do you trust the contents of this directory?"), answered on its trust option: Claude Code's is selected by reading where the cursor is and moving it there first (2.1.329 draws "No, exit" first with the cursor on it), never answered when the cursor cannot be read; any other vendor's with Enter on its default (trust) option | the dialog names `<dir>` and it is exactly the pane's own workspace (`workspace`), the folder the user opened; not a parent, not a folder inside it | The user opened that workspace in Navide and asked for a pane in it; any other folder, or a dialog that names none, is theirs to judge. Vendors with a trust watcher of their own (`startupTrust`, Grok) are left to it. |
  * | `claude.add-dir.navide-skills-view` | Claude Code's "Adding a new directory: <dir> … This session hasn't worked here before" (No, exit / Yes, add it) | `<dir>` is one of the directories Navide itself handed this pane with `--add-dir` (the spawn reports them as `navide_dirs`) AND it is Navide's managed-skills view (`…/runtime/skills-views/claude`) | Navide built that folder out of the skills the user enabled for Claude and added it to the pane itself; "Yes, add it" holds for this session only and writes nothing. It is the folder the convenience feature claude.skills-trust pre-trusts; this covers a spawn where that record could not be written (lock held, feature off). |
  *
  * Everything else is left to a person or to the caller's cli_answer_prompt:
@@ -26,14 +26,15 @@
  * and any prompt whose text speaks of signing in, accounts, keys, billing,
  * deleting or permissions, whatever rule it might otherwise match.
  *
- * App.vue's dismissStartupDialog asks decideStartupPrompt too before it
- * presses Enter on a trust dialog, and Grok's folder trust stays with
- * startupTrust.ts.
+ * App.vue's dismissStartupDialog answers a workspace trust dialog through
+ * decideStartupPrompt and answerStartupPrompt too, so the dialog has one
+ * answerer, and Grok's folder trust stays with startupTrust.ts.
  */
 
 import { AGENT_SPECS } from '@navide/plugin-shell'
 
 export const ADD_DIR_OPTIONS = ['No, exit', 'Yes, add it'] as const
+export const CLAUDE_TRUST_YES = 'Yes, I trust this folder'
 
 export interface StartupPrompt {
   /** Which known prompt this is. */
@@ -47,6 +48,9 @@ export interface StartupPrompt {
   options: string[]
   /** The option the cursor is on, or '' when none is marked. */
   cursorOn: string
+  /** A trust dialog whose menu order is not fixed (Claude Code): it is
+   *  answered only by reading the cursor and moving it, never by Enter alone. */
+  readCursor?: boolean
 }
 
 export type StartupPromptDecision =
@@ -78,6 +82,15 @@ const CLAUDE_ADD_DIR = new RegExp(
 // A CLI asking at launch whether to trust the folder it runs in. The menu and
 // wording differ by vendor and version; the question does not.
 const WORKSPACE_TRUST = [/Do you trust the contents/i, /Trust the contents of this/i, /Trust this folder/i]
+
+// Claude Code's trust menu, in either order: 2.1.329 draws "No, exit" first
+// with the cursor on it and no numbers (cancelFirst, focus "cancel"); older
+// builds drew "1. Yes, I trust this folder" first with the cursor on it.
+const CLAUDE_TRUST_OPTION = `(${CLAUDE_TRUST_YES}|No, exit)`
+const CLAUDE_TRUST_MENU = new RegExp(
+  `(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?(❯ ?)?(?:\\d\\. )?${CLAUDE_TRUST_OPTION} ?`
+    + 'Enter to confirm · Esc to cancel(.{0,200})$',
+)
 
 const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/
 
@@ -114,7 +127,12 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
   if (!m) {
     if (!WORKSPACE_TRUST.some((re) => re.test(text))) return null
     if (AGENT_SPECS.find((spec) => spec.agentKey === agentKey)?.startupTrust) return null
-    return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
+    if (agentKey !== 'claude') return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
+    // Which option the cursor is on, read off the menu; '' when it cannot be.
+    const menu = CLAUDE_TRUST_MENU.exec(text)
+    const options = menu && menu[2] !== menu[4] ? [menu[2], menu[4]] : []
+    const cursorOn = options.length ? (menu![1] ? options[0] : menu![3] ? options[1] : '') : ''
+    return { kind: 'workspace-trust', folder: '', prompt: text, options, cursorOn, readCursor: true }
   }
   // The tail after the footer is the CLI's own status line at most; a long
   // tail is a later screen, so this dialog is scrollback.
@@ -142,11 +160,16 @@ export function decideStartupPrompt(
           : 'the pane has no workspace to compare the trust dialog with',
       }
     }
+    // Enter alone could land on "No, exit": without a cursor on the screen, or
+    // a menu without the trust option, nothing is pressed.
+    if (prompt.readCursor && (!prompt.cursorOn || !prompt.options.includes(CLAUDE_TRUST_YES))) {
+      return { action: 'block', why: 'the cursor on the trust dialog\'s menu could not be read' }
+    }
     return {
       action: 'auto',
       rule: 'workspace-trust.own-workspace',
       why: `the trust dialog names ${workspace}, the workspace the user opened this pane in`,
-      choose: '',
+      choose: prompt.readCursor ? CLAUDE_TRUST_YES : '',
     }
   }
   const folder = noSpace(prompt.folder)
@@ -196,12 +219,14 @@ export async function answerStartupPrompt(
     now !== null && now.kind === prompt.kind && noSpace(now.folder) === noSpace(prompt.folder)
   await deps.sleep(deps.settleMs)
   let now = readStartupPrompt(agentKey, deps.readScreen())
+  // Gone before any key: it was answered already, by whoever got there first.
+  if (now === null) return true
   if (!same(now)) return false
-  // A trust dialog is answered on its default option, trust, as Navide always
-  // has: Enter alone.
-  if (prompt.kind === 'workspace-trust') now = { ...now, cursorOn: choose }
+  // A trust dialog with a fixed default (trust) is answered with Enter alone;
+  // one whose cursor has to be read (Claude Code) is moved like any menu.
+  if (prompt.kind === 'workspace-trust' && !choose) now = { ...now, cursorOn: choose }
   for (let moves = 0; now.cursorOn !== choose; moves++) {
-    if (moves >= now.options.length) return false
+    if (moves >= now.options.length || !now.cursorOn) return false
     if (!(await deps.send(DOWN))) return false
     await deps.sleep(deps.settleMs)
     now = readStartupPrompt(agentKey, deps.readScreen())
