@@ -2551,7 +2551,12 @@ watch(
   letter-spacing: 0.04em;
   text-align: left;
   text-transform: uppercase;
-  white-space: nowrap;
+  /* Headers wrap (and long single words hyphenate in the page language) so
+     the table fits beside the sidebar in every language, never scrolling. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  vertical-align: bottom;
 }
 .mkt-versions td {
   padding: 8px 8px 8px 0;
