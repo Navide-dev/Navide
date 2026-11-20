@@ -244,3 +244,37 @@ def test_no_changelog(client: TestClient) -> None:
     body = client.get("/api/extensions/acme/files/changelog").json()
     assert body == {"version": "1.0.0", "markdown": None}
     assert client.get("/api/extensions/acme/nope/changelog").status_code == 404
+
+
+# -- detail page fields the Navide app mirrors from the website ----------
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def test_detail_lists_screenshots_but_not_the_icon(client: TestClient) -> None:
+    _publish(client, build_v2_package(_v2(), extra_files={"media/shot-2.png": _PNG, "media/shot-1.png": _PNG}))
+    detail = client.get("/api/extensions/acme/files").json()
+    assert detail["screenshots"] == ["media/shot-1.png", "media/shot-2.png"]
+    assert "assets/files.png" not in detail["screenshots"]
+
+
+def test_detail_names_only_a_verified_publisher_domain(client: TestClient) -> None:
+    from datetime import datetime, timezone
+
+    from sqlmodel import Session, select
+
+    from registry.models import Publisher
+
+    _publish(client, build_v2_package(_v2()))
+    detail = client.get("/api/extensions/acme/files").json()
+    assert detail["verified_domain"] is None
+    with Session(client.app.state.registry.engine) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == detail["publisher"])).one()
+        publisher.verified_domain = "acme.dev"
+        session.add(publisher)
+        session.commit()
+        # Claimed but not proven yet: still not shown.
+        assert client.get("/api/extensions/acme/files").json()["verified_domain"] is None
+        publisher.domain_verified_at = datetime.now(timezone.utc)
+        session.add(publisher)
+        session.commit()
+    assert client.get("/api/extensions/acme/files").json()["verified_domain"] == "acme.dev"
