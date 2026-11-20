@@ -3,6 +3,9 @@
 # to <user>'s authorized_keys inside the guest disk without booting it and without any password or sudo:
 # attach the raw image unmounted, find the APFS container whose physical store is on that image, mount only its
 # unencrypted "Data" volume (nobrowse), write the key (700/600), sync, unmount, detach. Prints key-ok on success.
+# The files are created by the host user with ownership disabled on the volume, so they land as the host uid; this
+# works because the host user and the guest user are both uid 501. With different uids, verify an ssh login after
+# writing and fix the owner from inside the guest (chown needs sudo here, which this script does not use).
 set -u
 img="$1"; pub="$2"; user="$3"
 [ -f "$img" ] || { echo "no image $img"; exit 1; }
