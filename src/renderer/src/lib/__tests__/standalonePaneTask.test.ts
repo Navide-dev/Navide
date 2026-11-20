@@ -5,6 +5,7 @@ import {
   injectStandaloneTask, standaloneKickoffVerdict, STANDALONE_PROMPT_READY_TIMEOUT_MS,
   type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps,
 } from '../standalonePaneTask'
+import { createKickoffReporter } from '../spawnKickoff'
 
 function deps(overrides: Partial<StandaloneTaskInjectionDeps> = {}): StandaloneTaskInjectionDeps {
   return {
@@ -281,5 +282,60 @@ describe('lib/standalonePaneTask launch prompts', () => {
     expect(body).toMatch(/const reportStandalone = createKickoffReporter\(/)
     expect(body).toMatch(/report: reportStandalone/)
     expect(body).toMatch(/reportStandalone\(verdict\.kickoff/)
+  })
+})
+
+// cli_open_agent blocks on one agent_spawn.kickoff per request and otherwise
+// waits out its 45s deadline. handleMcpSpawnRequest's standalone branch runs
+// this sequence (App.spawnKickoff.test.ts pins that it does); here it runs for
+// real on every way the injection can end.
+describe('the standalone kickoff reaches cli_open_agent exactly once', () => {
+  async function standaloneSpawn(d: StandaloneTaskInjectionDeps, task = 'do the thing') {
+    const sent: Record<string, unknown>[] = []
+    const reportStandalone = createKickoffReporter({ requestId: 'req-1', paneId: 'pane-1', send: (p) => { sent.push(p) } })
+    const standaloneEvidence: StandaloneKickoffEvidence = {}
+    try {
+      await injectStandaloneTask('pane-1', task, 'mcp-task', d, { evidence: standaloneEvidence, report: reportStandalone })
+    } catch { /* judged below on whatever evidence was recorded */ }
+    const verdict = standaloneKickoffVerdict(standaloneEvidence, { task })
+    reportStandalone(verdict.kickoff, verdict.reason)
+    return sent
+  }
+
+  it('sends the verdict judged on the evidence: sent', async () => {
+    const sent = await standaloneSpawn(deps({
+      injectPane: vi.fn(async (_id, _text, _label, _keep, evidence) => {
+        if (evidence) { evidence.echo = 'tail'; evidence.submit = 'tail-left' }
+        return true
+      }),
+    }))
+    expect(sent).toEqual([{ request_id: 'req-1', pane_id: 'pane-1', kickoff: 'sent' }])
+  })
+
+  it('sends unverified with its reason on growth-only evidence', async () => {
+    const sent = await standaloneSpawn(deps())
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatchObject({ request_id: 'req-1', kickoff: 'unverified' })
+    expect(sent[0].reason).toMatch(/read its prompt before resending/)
+  })
+
+  it('a held launch prompt is the one answer: blocked-by-prompt, the later failed verdict dropped', async () => {
+    const sent = await standaloneSpawn(deps({
+      holdForStartupPrompt: vi.fn(async (_id, r) => {
+        r('blocked-by-prompt', 'left for a person', { prompt: 'Trust this folder?' })
+        return false
+      }),
+    }))
+    expect(sent).toEqual([{
+      request_id: 'req-1', pane_id: 'pane-1', kickoff: 'blocked-by-prompt', reason: 'left for a person', prompt: 'Trust this folder?',
+    }])
+  })
+
+  it('still answers when the injection throws or the pane dies first', async () => {
+    const thrown = await standaloneSpawn(deps({ injectPane: vi.fn(async () => { throw new Error('pty gone') }) }))
+    expect(thrown).toHaveLength(1)
+    const gone = await standaloneSpawn(deps({ holdForStartupPrompt: vi.fn(async () => false), paneAlive: vi.fn(() => false) }))
+    expect(gone).toHaveLength(1)
+    expect(gone[0]).toMatchObject({ kickoff: 'failed', reason: 'the pane exited before its task could be typed' })
   })
 })
