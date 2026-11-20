@@ -22,7 +22,7 @@ declare module 'vitest' {
 
 const repositoryRoot = resolve(import.meta.dirname, '../..')
 const builtPackages = ['packages/plugin-contracts', 'packages/plugin-sdk', 'packages/plugin-ui']
-const packedPackages = [...builtPackages, 'plugins/navide-git']
+const packedPackages = builtPackages
 
 // Under Bun the build scripts run through Bun itself, so a Bun-only machine
 // needs no pnpm. On Windows process.execPath can be Bun's generated `node`

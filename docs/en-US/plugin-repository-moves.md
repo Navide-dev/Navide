@@ -1,9 +1,13 @@
 # Moving the first-party plugins to their own repositories
 
-Status: preparation (0.2.45, plugin split P3 and P4). Nothing has moved yet.
-Each repository is created by the user under `Navide-dev`; until then this
-page is the inventory, per plugin, of what moves, what stays and what has to
-change on each side. The order is Git, then Mini-IDE, Browser and Plans. The
+Status: navide.git moved in 0.2.46 to
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git) (history kept
+from `plugins/navide-git`); the App installer takes its pinned version from
+the official Registry (`scripts/stage-official-plugin-artifacts.mjs`) and the
+Host keeps the Host half of its tests (`tests/infrastructure/gitPluginHostChecks.test.ts`).
+Its section below is the record of that move. Mini-IDE, Browser and Plans
+have not moved yet; for them this page is the inventory of what moves, what
+stays and what has to change on each side. The order is Git, then Mini-IDE, Browser and Plans. The
 overall plan is in `.agent-team/plans/plan_8508e9.html` (P3, P4).
 
 ## Building outside the monorepo

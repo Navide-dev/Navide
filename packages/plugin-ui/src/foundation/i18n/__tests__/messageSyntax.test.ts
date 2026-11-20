@@ -10,7 +10,6 @@ import { describe, expect, it } from 'vitest'
 const localeDirs = [
   'packages/plugin-ui/src/foundation/i18n/locales',
   'src/renderer/src/i18n/locales',
-  'plugins/navide-git/src/locales',
   'plugins/navide-mini-ide/src/locales',
   'plugins/navide-plans/src/locales',
   'plugins/navide-browser/src/locales'

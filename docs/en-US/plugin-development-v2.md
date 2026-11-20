@@ -2859,10 +2859,12 @@ navide.git reaches its Git operations over a first-party bridge, not a
 public capability: the Host maps the `git.*` requests in
 `src/shared/gitBridgeContract.json` (78 requests and 3 events, version 1.0.0)
 for that package alone, and there is no public `git` namespace. The plugin
-keeps a copy of the contract it is built against
-(`plugins/navide-git/src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`);
-both sides test their copy against a frozen digest, the Host additionally
-against its capability map and backend handlers. Adding a message is a minor
+keeps a copy of the contract it is built against (in
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git),
+`src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`); both sides
+test their copy against a frozen digest, the Host additionally against its
+capability map and backend handlers, and the Host serves a plugin built
+against the same major and a lower or equal minor.patch. Adding a message is a minor
 contract version and removing or renaming one a major, released in the Host
 before a Git version that needs it (raising Git's `engines.navide`). See
 `RELEASING.md` ("Releasing navide.git on its own").

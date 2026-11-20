@@ -12,7 +12,7 @@ import {
   probe,
   readRecord,
 } from '../../scripts/official-plugin-fingerprints.mjs'
-import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginVersions'
+import { OFFICIAL_PLUGIN_VERSIONS, REGISTRY_SOURCED_OFFICIAL_PLUGINS } from '../../src/main/plugins/officialPluginVersions'
 
 const roots: string[] = []
 afterEach(() => {
@@ -62,7 +62,11 @@ describe('official plugin release baseline', () => {
   it('holds for every bundled first-party plugin in this repository', () => {
     const record = readRecord(process.cwd())
     expect(record.baseline).toMatch(/^v\d+\.\d+\.\d+$/)
-    expect(Object.keys(record.plugins).sort()).toEqual(Object.keys(OFFICIAL_PLUGIN_VERSIONS).sort())
+    // A plugin the installer takes from the Registry is not fingerprinted here.
+    expect(Object.keys(record.plugins).sort()).toEqual(
+      Object.keys(OFFICIAL_PLUGIN_VERSIONS).filter((id) => !REGISTRY_SOURCED_OFFICIAL_PLUGINS.includes(id)).sort(),
+    )
+    expect(Object.keys(OFFICIAL_PLUGIN_SOURCES).sort()).toEqual(Object.keys(record.plugins).sort())
     expect(checkRecord(process.cwd())).toEqual([])
   }, 30_000)
 
@@ -72,13 +76,13 @@ describe('official plugin release baseline', () => {
   }, 30_000)
 
   it.each([
-    ['its own source', 'plugins/navide-git/src/index.ts'],
+    ['its own source', 'plugins/navide-mini-ide/src/index.ts'],
     ['a workspace package it bundles', 'packages/plugin-ui/src/index.ts'],
   ])('refuses changed content in %s at the released version', (_label, path) => {
     const { root, file, record } = releasedFixture()
     file(path, 'export const changed = true')
     expect(checkRecord(root, record)).toEqual(expect.arrayContaining([
-      expect.stringContaining('navide.git: content changed since v1.0.0 but the version is still 1.0.0'),
+      expect.stringContaining('navide.mini-ide: content changed since v1.0.0 but the version is still 1.0.0'),
     ]))
   }, 30_000)
 
@@ -100,7 +104,7 @@ describe('official plugin release baseline', () => {
 
   it('ignores tests, fixtures and Markdown', () => {
     const { root, file, record } = releasedFixture()
-    file('plugins/navide-git/tests/boundary.test.ts', 'it()')
+    file('plugins/navide-mini-ide/tests/boundary.test.ts', 'it()')
     file('plugins/navide-plans/src/view.test.ts', 'it()')
     file('packages/plugin-sdk/test-fixtures/a.json', '{}')
     file('plugins/navide-mini-ide/README.md', '# notes')
@@ -109,10 +113,10 @@ describe('official plugin release baseline', () => {
 
   it('needs one bump per release cycle, not one per change', () => {
     const { root, file, setVersion, record } = releasedFixture()
-    file('plugins/navide-git/src/index.ts', 'export const first = true')
-    setVersion('navide.git', '1.0.1')
+    file('plugins/navide-mini-ide/src/index.ts', 'export const first = true')
+    setVersion('navide.mini-ide', '1.0.1')
     expect(checkRecord(root, record)).toEqual([])
-    file('plugins/navide-git/src/index.ts', 'export const second = true')
+    file('plugins/navide-mini-ide/src/index.ts', 'export const second = true')
     file('packages/plugin-ui/src/index.ts', 'export const shared = true')
     setVersion('navide.browser', '1.0.1')
     setVersion('navide.mini-ide', '1.1.0')
@@ -130,15 +134,15 @@ describe('official plugin release baseline', () => {
 
   it('records a release only when the rule holds, as release.sh does', () => {
     const { root, file, setVersion, record } = releasedFixture()
-    file('plugins/navide-git/src/index.ts', 'export const changed = true')
+    file('plugins/navide-mini-ide/src/index.ts', 'export const changed = true')
     expect(nextRecord(root, 'v1.1.0', record).problems).toEqual([
-      expect.stringContaining('navide.git: content changed since v1.0.0'),
+      expect.stringContaining('navide.mini-ide: content changed since v1.0.0'),
     ])
-    setVersion('navide.git', '1.0.1')
+    setVersion('navide.mini-ide', '1.0.1')
     const next = nextRecord(root, 'v1.1.0', record)
     expect(next.problems).toEqual([])
     expect(next.record.baseline).toBe('v1.1.0')
-    expect(next.record.plugins['navide.git']).toEqual({ version: '1.0.1', fingerprint: fingerprint(root, 'navide.git') })
+    expect(next.record.plugins['navide.mini-ide']).toEqual({ version: '1.0.1', fingerprint: fingerprint(root, 'navide.mini-ide') })
     expect(checkRecord(root, next.record)).toEqual([])
   }, 30_000)
 
@@ -159,7 +163,7 @@ describe('official plugin fingerprint inputs', () => {
     expect(probe(process.cwd(), 'src/renderer/src/App.vue')).toEqual([])
     expect(probe(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'))
       .toEqual(Object.keys(OFFICIAL_PLUGIN_SOURCES))
-    expect(probe(process.cwd(), 'plugins/navide-git/src/locales/en-US.json')).toEqual(['navide.git'])
+    expect(probe(process.cwd(), 'plugins/navide-mini-ide/src/locales/en-US.json')).toEqual(['navide.mini-ide'])
   }, 60_000)
 
   it('keep the Plans backend off the core backend', () => {

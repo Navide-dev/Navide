@@ -5,13 +5,13 @@
 //   node scripts/run-plugin-tests.mjs                  # every plugin's unit project
 //   node scripts/run-plugin-tests.mjs --artifacts      # their artifact projects
 //   node scripts/run-plugin-tests.mjs --all            # every project (pnpm test:run)
-//   node scripts/run-plugin-tests.mjs --skip navide-git --reporter=junit --outputFile.junit=out/{plugin}.xml
+//   node scripts/run-plugin-tests.mjs --skip navide-browser --reporter=junit --outputFile.junit=out/{plugin}.xml
 //
 // Every other argument goes to Vitest, with {plugin} replaced by the plugin's
 // directory name so each run can write its own report.
 import { run, testEnvironment } from './test-process.mjs'
 
-export const PLUGIN_DIRS = ['navide-browser', 'navide-git', 'navide-mini-ide', 'navide-plans']
+export const PLUGIN_DIRS = ['navide-browser', 'navide-mini-ide', 'navide-plans']
 
 const args = process.argv.slice(2).filter((arg) => arg !== '--')
 const skipAt = args.indexOf('--skip')
