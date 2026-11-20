@@ -185,11 +185,31 @@ const MOUSE_REPORT = /^\x1b\[(?:<[\d;]*[Mm]|M)/
  *  pointer/focus moved, which is not the user typing. */
 const FOCUS_REPORT = /^\x1b\[[IO]/
 
+/** A reply xterm sends by itself to a query in the program's output, through
+ *  the same data event as a keystroke. ConPTY asks for the cursor position as
+ *  a pane starts, and shells and CLIs probe attributes, modes and colors, so
+ *  without this a fresh pane reads as typed at before anyone touches it. Each
+ *  reply arrives as its own event, so the match is anchored at both ends: a
+ *  paste that merely starts with these bytes is still the user. The forms are
+ *  the ones @xterm/xterm 6 emits (common/InputHandler.ts,
+ *  browser/CoreBrowserTerminal.ts):
+ *  - CPR `ESC[r;cR`, DECXCPR `ESC[?r;cR`, DSR `ESC[0n`
+ *  - DA1 `ESC[?…c`, DA2 `ESC[>…c`, DA3 `ESC[=…c` (not answered by xterm 6,
+ *    covered in case a later version does)
+ *  - DECRPM `ESC[?m;v$y` / `ESC[m;v$y`
+ *  - window reports `ESC[4;h;wt`, `ESC[6;h;wt`, `ESC[8;r;ct`
+ *  - DECRQSS `ESC P 0|1 $ r … ST`, OSC 4/10/11/12 colors `ESC]…;rgb:… ST`
+ *  The one key that shares a shape is Shift/Ctrl/Alt+F3 (`ESC[1;nR`, same as
+ *  CPR at row 1); it types no text, so not counting it costs nothing. */
+const AUTO_REPLY =
+  /^(?:\x1b\[\??\d+;\d+R|\x1b\[0n|\x1b\[[?>=][\d;]*c|\x1b\[\??\d+;\d+\$y|\x1b\[[468];\d+;\d+t|\x1bP[01]\$r[^\x1b]*\x1b\\|\x1b\](?:4;\d+|1[012]);rgb:[0-9a-f/]+(?:\x1b\\|\x07))$/
+
 /** What the terminal reports on its own rather than what the user typed. Both
  *  the keystroke clock and the draft buffer read this: neither may be advanced
- *  by moving the mouse over a pane or clicking into and out of it. */
+ *  by moving the mouse over a pane, clicking into and out of it, or xterm
+ *  answering a query. */
 function isTerminalReport(data: string): boolean {
-  return MOUSE_REPORT.test(data) || FOCUS_REPORT.test(data)
+  return MOUSE_REPORT.test(data) || FOCUS_REPORT.test(data) || AUTO_REPLY.test(data)
 }
 
 /** The custom key handler sends its bytes through pasteText, the same helper
