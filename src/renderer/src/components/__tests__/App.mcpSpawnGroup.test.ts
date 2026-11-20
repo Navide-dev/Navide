@@ -4,6 +4,7 @@ import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveReadySpawnGroupId } from '../../lib/runGroups'
 import { standaloneKickoffVerdict } from '../../lib/standalonePaneTask'
+import { createKickoffReporter } from '../../lib/spawnKickoff'
 import { notePaneRecordWrite } from '../../lib/restoreDiagnostics'
 
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
@@ -44,7 +45,7 @@ function harness() {
     activeTab: { value: 'rg-active' }, runGroupsReady: { value: true },
     normWs: (path: string) => path.replace(/\/+$/, ''), resolveReadySpawnGroupId,
     mcpSpawnCommandOverride: (req: { sessionId?: string }) => req.sessionId ? `codex resume ${req.sessionId}` : '',
-    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict,
+    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict, createKickoffReporter,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
     recordDiagnostic: vi.fn(), notePaneRecordWrite, notifyRestore: { toast: vi.fn() },
