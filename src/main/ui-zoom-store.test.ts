@@ -8,12 +8,22 @@ import {
   UI_SCALE_SETTING_KEY
 } from '../shared/uiScale'
 
-function contentsStub(overrides: Partial<{ destroyed: boolean; throws: boolean }> = {}) {
+function contentsStub(overrides: Partial<{ destroyed: boolean; throws: boolean; transient: boolean }> = {}) {
+  let destroyed = overrides.destroyed ?? false
+  let failures = overrides.transient ? 1 : 0
   return {
     setZoomFactor: vi.fn(() => {
-      if (overrides.throws) throw new Error('Object has been destroyed')
+      if (overrides.throws) {
+        // Torn down between the isDestroyed() check and the call.
+        destroyed = true
+        throw new Error('Object has been destroyed')
+      }
+      if (failures > 0) {
+        failures--
+        throw new Error('Render frame was disposed before WebFrameMain could be accessed')
+      }
     }),
-    isDestroyed: vi.fn(() => overrides.destroyed ?? false),
+    isDestroyed: vi.fn(() => destroyed),
   }
 }
 
@@ -79,6 +89,19 @@ describe('createUiZoomStore', () => {
     expect(() => store.set(1.5)).not.toThrow()
     expect(healthy.setZoomFactor).toHaveBeenCalledWith(1.5)
     expect(store.size()).toBe(1)
+  })
+
+  it('keeps a still-loading window tracked after a transient failure, so it gets the next change', () => {
+    const store = createUiZoomStore(1)
+    const loading = contentsStub({ transient: true })
+    store.track(loading)
+
+    expect(() => store.set(1.25)).not.toThrow()
+    expect(store.size()).toBe(1)
+
+    store.set(1.5)
+    expect(loading.setZoomFactor).toHaveBeenLastCalledWith(1.5)
+    expect(loading.setZoomFactor).toHaveBeenCalledTimes(2)
   })
 
   it('stops scaling an untracked window', () => {
