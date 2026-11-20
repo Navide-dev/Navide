@@ -48,7 +48,7 @@ from .base import (
     MediaTooLarge,
     backoff_delay,
 )
-from . import redact
+from . import proxy, redact
 from .inbound import chat_hash
 from .adapter_runtime import READY_STABLE_S, cancel_and_wait, download_to, media_client
 from .report import Caption
@@ -347,10 +347,11 @@ class TelegramAdapter:
         if self._task and not self._task.done():
             return
         self._emit = emit
-        # trust_env (httpx's default) picks up the system proxy: HTTP(S)_PROXY, or macOS and
-        # Windows proxy settings through urllib.request.getproxies().
+        # trust_env (httpx's default) picks up a fixed system proxy: HTTP(S)_PROXY, or macOS and
+        # Windows proxy settings through urllib.request.getproxies(); a PAC file is resolved
+        # by the Host (channels/proxy.py).
         self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=self._poll_timeout_s + 15.0),
-                                         transport=self._transport)
+                                         **proxy.client_options(self._transport))
         self.unreachable = True
         self.conflict = False
         self.polled = False
@@ -810,7 +811,7 @@ class TelegramAdapter:
         client = self._client
         own = client is None
         if own:
-            client = httpx.AsyncClient(timeout=20.0, transport=self._transport)
+            client = httpx.AsyncClient(timeout=20.0, **proxy.client_options(self._transport))
         try:
             try:
                 resp = await client.post(f"{self._base}/{method}", json=params or {},

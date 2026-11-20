@@ -664,6 +664,22 @@ holding delivery a minute after the last keystroke either way. Without that a
 single `1` would park the pane for good — every later message stuck on
 `typing`, and the pane reported busy to everything that asks.
 
+**A prompt an interrupt put back is cleared first (claude panes).** An
+interrupt makes Claude Code put the prompt it was working on back in its input
+box, and an injection typed after it would submit both as one prompt. Before
+typing, Navide reads the box off the screen (`lib/claudeComposer.ts`) and
+empties it with Ctrl-U unless it holds your unsent line. When the cleared text
+was your own prompt, a toast offers Restore, which pastes it back without
+pressing Enter, and Copy.
+
+Restore rebuilds the text from the box's rows, and that is a best guess: a
+line break you typed exactly where the row reaches the box's right edge reads
+as the TUI's own wrap, so Restore joins the two lines with a space. The
+original is not on screen to read. Claude Code wraps the box itself and draws
+each row separately, so xterm records no soft wrap (`isWrapped` is false on
+every row) and the PTY stream carries the same rows. Check a restored
+multi-line prompt before sending it; Copy has the same text.
+
 **One at a time, in order.** Each target has its own FIFO queue and at most one
 injection in flight. Injection itself is a bracketed paste plus a verified
 submit — if the pane never echoes the text back, the message is failed rather
@@ -1112,6 +1128,24 @@ credentials, not API keys or other secrets in prompts or results.
 Messages are not fetched on a timer: Telegram and Matrix hold a 30-second long poll that returns as soon as something arrives, the WebSocket platforms keep their connection open, and iMessage reads `chat.db` every second, so a message reaches its pane almost at once while connected. A dropped connection reconnects on its own after about 5 seconds, doubling each time up to 10 minutes (±20% jitter); a connection that stayed up for a minute starts again from 5 seconds, and a Telegram 409 conflict starts at about 40 seconds. Messages sent while Navide is closed are picked up after a restart on Telegram and Matrix, which resume from a saved position; other platforms are not guaranteed to deliver them.
 
 Platforms that need a public webhook (LINE, Teams, WhatsApp Cloud, SMS) are out of scope.
+
+**Proxies.** A fixed proxy comes first, as Python's
+`urllib.request.getproxies()` reports it, for HTTP requests and for the
+WebSocket platforms alike: the `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` and
+`NO_PROXY` variables the backend starts with, plus, on macOS, the Web Proxy and
+Secure Web Proxy in System Settings → Network → Proxies and, on Windows, the
+manual proxy server under Settings → Network & internet → Proxy. Linux reads
+the variables only. For a URL none of those cover, the backend asks Navide's
+main process, which runs the system's own resolver (Chromium's
+`session.resolveProxy`): a proxy auto-configuration (PAC) file, the macOS
+"Automatic proxy configuration" and "Auto proxy discovery" switches, and the
+Windows "Use setup script" and "Automatically detect settings" switches. The
+first `PROXY` or `HTTPS` entry of its answer is used, `DIRECT` connects
+directly, and `SOCKS` entries are skipped. An answer is reused for a minute per
+host, so after a network change the next connection within a minute or so asks
+again. Without an answer (no main process, or none within 3 seconds) the
+channel connects as it did before. Only the proxy's scheme, host and port are
+logged.
 
 ### Setting up
 

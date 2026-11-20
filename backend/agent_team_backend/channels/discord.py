@@ -44,6 +44,7 @@ import httpx
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, ReconnectNow, download_to, error_text, media_client, send_request
 from .base import (
     STALL_WATCHDOG_S,
@@ -141,6 +142,7 @@ class DiscordAdapter:
                 base_url=self._base,
                 headers={"Authorization": f"Bot {self._token}", "User-Agent": "DiscordBot (navide, 1)"},
                 timeout=httpx.Timeout(20.0, connect=10.0),
+                **proxy.client_options(),
             )
         return self._client
 
@@ -170,7 +172,7 @@ class DiscordAdapter:
 
     async def _connect_once(self) -> None:
         url = await self._gateway_url()
-        async with ws_connect(url, max_size=None, ping_interval=None) as ws:
+        async with ws_connect(url, max_size=None, ping_interval=None, proxy=await proxy.ws_proxy(url)) as ws:
             hello = json.loads(await ws.recv())
             if hello.get("op") != 10:
                 raise ConnectionError(f"expected Hello, got op {hello.get('op')}")

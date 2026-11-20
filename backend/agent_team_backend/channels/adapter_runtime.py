@@ -19,6 +19,7 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 
+from . import proxy
 from .base import (
     RETRY_AFTER_CAP_S,
     STALL_WATCHDOG_S,
@@ -371,4 +372,4 @@ async def _download(
 
 def media_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
     """A bare client for file transfers: no platform auth header, long read timeout."""
-    return httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(120.0, connect=10.0))
+    return httpx.AsyncClient(**proxy.client_options(transport), timeout=httpx.Timeout(120.0, connect=10.0))

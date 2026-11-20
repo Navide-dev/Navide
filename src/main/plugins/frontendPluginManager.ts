@@ -20,6 +20,7 @@ import type {
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
+import { PROXY_RESOLVE_REQUEST, handleProxyResolveRequest } from '../channel-proxy'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
 import { webPolicyDeniedMessage } from '../browserAgentStrings'
 import { composePluginFrameQuery } from './pluginContributionQuery'
@@ -10276,6 +10277,10 @@ export class FrontendPluginManager {
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
+      })
+      client.on(PROXY_RESOLVE_REQUEST, (payload) => {
+        // Same rule: only the live client answers.
+        if (this.wsClient === client) void handleProxyResolveRequest(client, payload)
       })
       client.connect(this.backendWsUrl)
     }

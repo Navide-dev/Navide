@@ -37,6 +37,7 @@ import httpx
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import InvalidStatus
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, error_text, send_request, ws_keepalive
 from .base import (
     STALL_WATCHDOG_S,
@@ -100,6 +101,7 @@ class MattermostAdapter:
                 base_url=f"{self._server}/api/v4",
                 headers={"Authorization": f"Bearer {self._token}"},
                 timeout=httpx.Timeout(20.0, connect=10.0),
+                **proxy.client_options(),
             )
         return self._client
 
@@ -133,8 +135,9 @@ class MattermostAdapter:
         self._user_id = str(me.get("id") or "")
         identity = f"@{me.get('username')}" if me.get("username") else ""
         try:
+            ws_url = self._ws_url()
             conn = ws_connect(
-                self._ws_url(), max_size=None, ping_interval=None,
+                ws_url, max_size=None, ping_interval=None, proxy=await proxy.ws_proxy(ws_url),
                 additional_headers={"Authorization": f"Bearer {self._token}"},
             )
             ws = await conn
