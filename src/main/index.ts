@@ -30,6 +30,7 @@ import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
+import { editorOpenParamsForAbsolutePath } from './plugins/editorNativeCapability'
 import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
 import { dockSurfaceProvided } from './dockSurfaceProvider'
 import {
@@ -4935,7 +4936,7 @@ function isHtmlPlanDocPath(relPath: string): boolean {
 
 ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
-  const params = args ?? {}
+  const params = editorOpenParamsForAbsolutePath(args ?? {})
   const workspacePath = params.workspace_path ?? ''
   const filepath = params.filepath ?? ''
   // With `file_ws` the path is relative to that root, not to the workspace —
