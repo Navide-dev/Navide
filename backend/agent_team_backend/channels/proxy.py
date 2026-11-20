@@ -14,7 +14,9 @@ this side can use decides: ``DIRECT`` connects directly, ``PROXY``/``HTTPS`` go 
 that proxy. SOCKS entries are skipped (no SOCKS client is bundled). Answers are kept per
 scheme, host and port for ``CACHE_TTL_S``, so a network change is picked up within a
 minute and a reconnect after it asks again. No Host, no answer in time, or a fixed proxy
-already configured: the libraries' own system-proxy handling, exactly as before.
+already configured: the libraries' own system-proxy handling, exactly as before. A
+fallback for want of an answer is kept only ``FALLBACK_CACHE_TTL_S``, so the Host's
+answer is used as soon as it can give one.
 
 A PAC answer carries no credentials; only scheme, host and port are ever logged.
 """
@@ -45,6 +47,10 @@ RESULT_TYPE = "channels.proxy_resolve.result"
 CACHE_TTL_S = 60.0
 #: How long a request waits for the Host before falling back to the default.
 ANSWER_TIMEOUT_S = 3.0
+#: How long a fallback taken without the Host's answer (no Host, no answer in time, the
+#: Host failed) is reused: long enough not to stall every request on a silent Host,
+#: short enough that a Host that connects is asked again almost at once.
+FALLBACK_CACHE_TTL_S = 5.0
 
 
 class _Default:
@@ -123,19 +129,29 @@ async def _unicast_host(event: dict[str, Any]) -> bool:
     return await app.unicast_host(event)
 
 
-async def _ask_host(url: str) -> Any:
+async def _ask_host(url: str) -> tuple[Any, bool]:
+    """The Host's decision for ``url`` and whether the Host gave it. ``url`` is the
+    ``scheme://host:port/`` form ``resolve`` builds, so it carries no userinfo."""
     request_id = f"proxy:{secrets.token_hex(16)}"
     future = _pending.register(request_id)
     try:
         if not await _unicast_host(make_event(REQUEST_TYPE, {"request_id": request_id, "url": url})):
-            return DEFAULT
+            log.info("channels: no Host session to resolve the proxy for %s; using the system default", url)
+            return DEFAULT, False
         answer = await _pending.wait(request_id, future, timeout=ANSWER_TIMEOUT_S)
     finally:
         _pending.discard(request_id)
-    if answer is TIMEOUT or not isinstance(answer, dict) or not answer.get("ok"):
-        return DEFAULT
+    if answer is TIMEOUT:
+        log.warning(
+            "channels: the Host did not answer the proxy lookup for %s within %gs; using the system default",
+            url, ANSWER_TIMEOUT_S,
+        )
+        return DEFAULT, False
+    if not isinstance(answer, dict) or not answer.get("ok"):
+        log.warning("channels: the Host could not resolve the proxy for %s; using the system default", url)
+        return DEFAULT, False
     rules = answer.get("rules")
-    return parse_pac_result(rules) if isinstance(rules, str) else DEFAULT
+    return (parse_pac_result(rules) if isinstance(rules, str) else DEFAULT), True
 
 
 async def resolve(url: str) -> Any:
@@ -157,11 +173,12 @@ async def resolve(url: str) -> Any:
     _inflight[key] = future
     try:
         # Asked with the http(s) form: that is what the PAC file is written for.
-        decision = await _ask_host(f"{scheme}://{host}:{port}/")
+        decision, answered = await _ask_host(f"{scheme}://{host}:{port}/")
         previous = cached[1] if cached is not None else DEFAULT
         if decision is not DEFAULT and (cached is None or previous != decision):
             log.info("channels: proxy for %s://%s:%d is %s (system PAC)", scheme, host, port, _describe(decision))
-        _cache[key] = (time.monotonic() + CACHE_TTL_S, decision)
+        ttl = CACHE_TTL_S if answered else FALLBACK_CACHE_TTL_S
+        _cache[key] = (time.monotonic() + ttl, decision)
         future.set_result(decision)
         return decision
     except BaseException:
