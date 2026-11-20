@@ -16,12 +16,12 @@ const OWNERS: Array<{ name: string; sources: RegExp; catalogs: string[] }> = [
   { name: 'Host', sources: /^src\//, catalogs: [UI, 'src/renderer/src/i18n/locales'] },
   { name: '@navide/plugin-ui', sources: /^packages\/plugin-(ui|contracts|sdk)\//, catalogs: [UI] },
   { name: 'navide-plans', sources: /^plugins\/navide-plans\//, catalogs: [UI, 'plugins/navide-plans/src/locales'] },
-  { name: 'navide-browser', sources: /^plugins\/navide-browser\//, catalogs: [UI, 'plugins/navide-browser/src/locales'] },
 ]
 const ALL_CATALOGS = [...new Set(OWNERS.flatMap(({ catalogs }) => catalogs))]
 // First-party plugins built in their own repositories still show these
 // plugin-ui strings (navide.git: Navide-dev/navide-git, navide.mini-ide:
-// Navide-dev/navide-mini-ide). Update the list when
+// Navide-dev/navide-mini-ide, navide.browser: Navide-dev/navide-browser).
+// Update the list when
 // the pinned version starts or stops using one.
 const EXTERNAL_OWNERS = JSON.parse(
   readFileSync(resolve('tests/infrastructure/externalPluginUiKeys.json'), 'utf8'),

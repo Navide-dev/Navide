@@ -13,16 +13,17 @@ const archivesRoot = join(outputRoot, 'archives')
 const hostTarget = `${process.platform}-${process.arch}`
 
 // First-party plugins that live in their own repositories (Navide-dev/navide-git,
-// Navide-dev/navide-mini-ide): the installer carries the version
-// officialPluginVersions.ts pins, as the official Registry signed it, never a
-// local build.
+// Navide-dev/navide-mini-ide, Navide-dev/navide-browser): the installer carries
+// the version officialPluginVersions.ts pins, as the official Registry signed
+// it, never a local build. Browser has a native backend: each platform's build
+// takes the package published for its own target.
 const registrySources = [
   { id: 'navide.git', target: 'universal' },
   { id: 'navide.mini-ide', target: 'universal' },
+  { id: 'navide.browser', target: hostTarget },
 ]
 const sources = [
   { id: 'navide.plans', directory: 'dist-plugins/navide-plans', source: 'plugins/navide-plans', target: hostTarget },
-  { id: 'navide.browser', directory: 'dist-plugins/navide-browser', source: 'plugins/navide-browser', target: hostTarget },
 ]
 
 function runCli(args) {
@@ -90,7 +91,12 @@ async function verifiedRegistryArtifact(host, { id, target }) {
     detail = await (await fetchOk(base, `${id} listing`)).json()
     // Fails with the versions the Registry does have before anything downloads.
     host.selectOfficialVersion(detail, id, version, target, registryUrl)
-    bytes = new Uint8Array(await (await fetchOk(`${base}/${version}/download`, `${id} ${version} download`)).arrayBuffer())
+    // A platform build is one of several artifacts of its version: the Registry
+    // serves it by target, as the App's installer asks (pluginInstaller.ts).
+    const download = target === 'universal'
+      ? `${base}/${version}/download`
+      : `${base}/${version}/download?target=${encodeURIComponent(target)}`
+    bytes = new Uint8Array(await (await fetchOk(download, `${id} ${version} download`)).arrayBuffer())
   } catch (error) {
     if (error instanceof host.OfficialArtifactMissingError) throw error
     if (!allowOfflineCache) {
@@ -142,7 +148,8 @@ for (const artifact of registryArtifacts) {
   for (const file of artifact.files) {
     const to = join(packageDirectory, file.path)
     mkdirSync(dirname(to), { recursive: true })
-    writeFileSync(to, file.data)
+    // A packaged backend keeps its execute bit (Browser's native backend).
+    writeFileSync(to, file.data, { mode: file.executable ? 0o755 : 0o644 })
   }
   // validate reads the file list the build writes; the package carries none.
   const fileList = join(packageDirectory, 'artifact-files.json')

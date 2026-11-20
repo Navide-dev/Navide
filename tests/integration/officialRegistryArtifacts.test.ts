@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { loadPluginDir } from '../../src/main/plugins/installedPlugins'
@@ -8,16 +8,18 @@ import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginV
 // (scripts/stage-official-plugin-artifacts.mjs) load through the same
 // Manifest v2 directory loader as any installed package. The artifacts
 // project runs after the build, so the staged copies must be there.
-const staged = (id: string): string => join(
-  'dist-plugins/official-artifacts/factory-resources', id, OFFICIAL_PLUGIN_VERSIONS[id], 'universal/package',
+const hostTarget = `${process.platform}-${process.arch}`
+const staged = (id: string, target: string): string => join(
+  'dist-plugins/official-artifacts/factory-resources', id, OFFICIAL_PLUGIN_VERSIONS[id], target, 'package',
 )
 
 describe.each([
-  ['navide.git', ['navide.git.left', 'navide.git.branch-detail', 'navide.git.window']],
-  ['navide.mini-ide', ['navide.mini-ide.window']],
-])('staged %s', (id, contributionKeys) => {
+  ['navide.git', 'universal', ['navide.git.left', 'navide.git.branch-detail', 'navide.git.window']],
+  ['navide.mini-ide', 'universal', ['navide.mini-ide.window']],
+  ['navide.browser', hostTarget, ['navide.browser.left', 'navide.browser.window']],
+])('staged %s', (id, target, contributionKeys) => {
   it('loads the pinned Registry copy through the Manifest v2 loader', () => {
-    const dir = staged(id)
+    const dir = staged(id, target)
     expect(existsSync(dir), `${dir} is missing: run the build (or the stage script) first`).toBe(true)
     const scanned = loadPluginDir(dir)
     expect(scanned.error).toBeUndefined()
@@ -25,4 +27,11 @@ describe.each([
     expect(scanned.descriptor?.packageVersion).toBe(OFFICIAL_PLUGIN_VERSIONS[id])
     expect(scanned.descriptor?.views?.map((view) => view.contributionKey)).toEqual(contributionKeys)
   })
+})
+
+it('stages navide.browser with its packaged backend for this host', () => {
+  const backend = join(staged('navide.browser', hostTarget), 'backend', process.platform === 'win32' ? 'navide-browser.exe' : 'navide-browser')
+  expect(existsSync(backend), backend).toBe(true)
+  expect(statSync(backend).size).toBeGreaterThan(0)
+  if (process.platform !== 'win32') expect(statSync(backend).mode & 0o111).not.toBe(0)
 })

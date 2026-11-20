@@ -168,7 +168,7 @@ jobs:
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans-go"
           # …and the exact selected v2 factory package carries its arm64 backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"
           # The voice sidecar is a loose Mach-O in Resources/bin; it must carry
@@ -375,7 +375,7 @@ jobs:
           file "${backend}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-x64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -585,7 +585,7 @@ jobs:
           file "${backend}" | grep -q 'ELF 64-bit.*aarch64'
           # …and the selected v2 Plans package carries its Linux backend.
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-arm64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-arm64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -821,7 +821,7 @@ jobs:
           test "$(( longest + 64 ))" -lt 230
           test -f dist-release/win-unpacked/resources/bin/navide-hello.exe
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.browser/${browser_version}/win32-x64/package/backend/navide-browser.exe"
 
@@ -997,7 +997,7 @@ jobs:
           echo "longest installed path: ${longest} + 64"
           test "$(( longest + 64 ))" -lt 230
           artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
           test -f "${plans_backend}"
           browser_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.browser/${browser_version}/win32-arm64/package/backend/navide-browser.exe"

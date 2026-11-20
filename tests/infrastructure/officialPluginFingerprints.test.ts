@@ -76,13 +76,13 @@ describe('official plugin release baseline', () => {
   }, 30_000)
 
   it.each([
-    ['its own source', 'plugins/navide-browser/src/index.ts'],
+    ['its own source', 'plugins/navide-plans/src/index.ts'],
     ['a workspace package it bundles', 'packages/plugin-ui/src/index.ts'],
   ])('refuses changed content in %s at the released version', (_label, path) => {
     const { root, file, record } = releasedFixture()
     file(path, 'export const changed = true')
     expect(checkRecord(root, record)).toEqual(expect.arrayContaining([
-      expect.stringContaining('navide.browser: content changed since v1.0.0 but the version is still 1.0.0'),
+      expect.stringContaining('navide.plans: content changed since v1.0.0 but the version is still 1.0.0'),
     ]))
   }, 30_000)
 
@@ -104,22 +104,21 @@ describe('official plugin release baseline', () => {
 
   it('ignores tests, fixtures and Markdown', () => {
     const { root, file, record } = releasedFixture()
-    file('plugins/navide-browser/tests/boundary.test.ts', 'it()')
+    file('plugins/navide-plans/tests/boundary.test.ts', 'it()')
     file('plugins/navide-plans/src/view.test.ts', 'it()')
     file('packages/plugin-sdk/test-fixtures/a.json', '{}')
-    file('plugins/navide-browser/README.md', '# notes')
+    file('plugins/navide-plans/README.md', '# notes')
     expect(checkRecord(root, record)).toEqual([])
   }, 30_000)
 
   it('needs one bump per release cycle, not one per change', () => {
     const { root, file, setVersion, record } = releasedFixture()
-    file('plugins/navide-browser/src/index.ts', 'export const first = true')
-    setVersion('navide.browser', '1.0.1')
-    expect(checkRecord(root, record)).toEqual([])
-    file('plugins/navide-browser/src/index.ts', 'export const second = true')
-    file('packages/plugin-ui/src/index.ts', 'export const shared = true')
-    setVersion('navide.browser', '1.1.0')
+    file('plugins/navide-plans/src/index.ts', 'export const first = true')
     setVersion('navide.plans', '1.0.1')
+    expect(checkRecord(root, record)).toEqual([])
+    file('plugins/navide-plans/src/index.ts', 'export const second = true')
+    file('packages/plugin-ui/src/index.ts', 'export const shared = true')
+    setVersion('navide.plans', '1.1.0')
     expect(checkRecord(root, record)).toEqual([])
   }, 30_000)
 
@@ -133,15 +132,15 @@ describe('official plugin release baseline', () => {
 
   it('records a release only when the rule holds, as release.sh does', () => {
     const { root, file, setVersion, record } = releasedFixture()
-    file('plugins/navide-browser/src/index.ts', 'export const changed = true')
+    file('plugins/navide-plans/src/index.ts', 'export const changed = true')
     expect(nextRecord(root, 'v1.1.0', record).problems).toEqual([
-      expect.stringContaining('navide.browser: content changed since v1.0.0'),
+      expect.stringContaining('navide.plans: content changed since v1.0.0'),
     ])
-    setVersion('navide.browser', '1.0.1')
+    setVersion('navide.plans', '1.0.1')
     const next = nextRecord(root, 'v1.1.0', record)
     expect(next.problems).toEqual([])
     expect(next.record.baseline).toBe('v1.1.0')
-    expect(next.record.plugins['navide.browser']).toEqual({ version: '1.0.1', fingerprint: fingerprint(root, 'navide.browser') })
+    expect(next.record.plugins['navide.plans']).toEqual({ version: '1.0.1', fingerprint: fingerprint(root, 'navide.plans') })
     expect(checkRecord(root, next.record)).toEqual([])
   }, 30_000)
 
@@ -162,7 +161,7 @@ describe('official plugin fingerprint inputs', () => {
     expect(probe(process.cwd(), 'src/renderer/src/App.vue')).toEqual([])
     expect(probe(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'))
       .toEqual(Object.keys(OFFICIAL_PLUGIN_SOURCES))
-    expect(probe(process.cwd(), 'plugins/navide-browser/src/locales/en-US.json')).toEqual(['navide.browser'])
+    expect(probe(process.cwd(), 'plugins/navide-plans/src/locales/en-US.json')).toEqual(['navide.plans'])
   }, 60_000)
 
   it('keep the Plans backend off the core backend', () => {

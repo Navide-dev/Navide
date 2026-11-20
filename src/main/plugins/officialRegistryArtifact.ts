@@ -50,8 +50,9 @@ export function selectOfficialVersion(
 }
 
 export interface VerifiedOfficialArtifact {
-  /** The package files, by canonical archive path. */
-  files: Array<{ path: string; data: Uint8Array }>
+  /** The package files, by canonical archive path; `executable` keeps a
+   *  packaged backend's execute bit. */
+  files: Array<{ path: string; data: Uint8Array; executable: boolean }>
   digest: string
 }
 
@@ -109,7 +110,7 @@ export function verifyOfficialArtifact(input: {
   const files = entries.filter((entry) => entry.type === 'regular').map((entry) => {
     const path = canonicalArchivePath(entry.path, 'regular')
     if (path === null) throw new Error(`${input.id} ${input.version}: unsafe archive entry path ${entry.path}`)
-    return { path, data: new Uint8Array(entry.data) }
+    return { path, data: new Uint8Array(entry.data), executable: entry.executable }
   })
   return { files, digest }
 }

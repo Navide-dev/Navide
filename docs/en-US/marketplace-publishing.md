@@ -702,10 +702,11 @@ scripts/publish-first-party-plugins.sh [--only git|mini-ide|plans|browser]
 - `navide.git` and `navide.mini-ide` are frontend-only and are listed once, as
   `universal`.
 - `navide.plans` and `navide.browser` carry a native backend and are listed
-  per target. The script lists the machine's own target; the other targets
-  the App ships come from `plugin-packages.yml` (Plans) and
-  `browser-plugin-package.yml` (Browser), listed with
-  `--from-run <run id> --id <plugin id> --version <version> --target "<targets>" --yes`.
+  per target. For Plans the script lists the machine's own target; the other
+  targets the App ships come from `plugin-packages.yml`. Browser is built in
+  [Navide-dev/navide-browser](https://github.com/Navide-dev/navide-browser),
+  whose packaging workflow builds every target; both are listed with
+  `--from-run <run id> [--repo Navide-dev/navide-browser] --id <plugin id> --version <version> --target "<targets>" --yes`.
 - Only list a plugin whose version changed in this release. A version that is
   already listed answers `409`; skip it with `--only`.
 - `navide.browser` is listed for the first time with 0.2.39.

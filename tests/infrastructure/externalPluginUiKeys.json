@@ -289,5 +289,6 @@
     "windowControls.maximize",
     "windowControls.minimize",
     "windowControls.restore"
-  ]
+  ],
+  "navide-browser": []
 }

@@ -2,7 +2,7 @@ import { createVitest } from 'vitest/node'
 import { describe, expect, it } from 'vitest'
 import { assertTestOwnership, repositoryTestFiles } from '../support/testInventory'
 
-const PLUGIN_DIRS = ['navide-browser', 'navide-plans']
+const PLUGIN_DIRS = ['navide-plans']
 
 /** Every spec a config collects, as { file, project } with the config's projects. */
 async function collected(config: string): Promise<{ projects: string[]; owned: Array<{ file: string; project: string }> }> {

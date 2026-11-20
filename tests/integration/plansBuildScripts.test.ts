@@ -245,9 +245,11 @@ describe('release workflow verifies the Plans artifact it signs', () => {
     )
   })
 
-  it('asserts each release artifact carries the bundled Navide Browser backend at its own version', () => {
-    expect(verifyStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
-    expect(linuxValidationStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
+  it('asserts each release artifact carries the bundled Navide Browser backend at its pinned version', () => {
+    // navide.browser lives in Navide-dev/navide-browser: its version is the pin.
+    const pinned = 'browser_version="$(node -p "/\'navide\\\\.browser\': \'([^\']+)\'/.exec(require(\'fs\').readFileSync(\'src/main/plugins/officialPluginVersions.ts\', \'utf8\'))[1]")"'
+    expect(verifyStep).toContain(pinned)
+    expect(linuxValidationStep).toContain(pinned)
     expect(verifyStep).toContain(
       'test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"',
     )
@@ -266,23 +268,26 @@ describe('the standalone packaged-Plans gate builds every package it stages', ()
   const standalone = runner.slice(runner.indexOf('if (!prepared)'), runner.indexOf('stage-official-plugin-artifacts.mjs'))
   const staged = [...stage.matchAll(/directory: 'dist-plugins\/navide-([a-z-]+)'/g)].map((match) => match[1])
 
-  it('stages the two official packages built here', () => {
-    expect(staged).toEqual(['plans', 'browser'])
+  it('stages the one official package built here', () => {
+    expect(staged).toEqual(['plans'])
   })
 
-  it('takes navide.git and navide.mini-ide from the Registry instead of building them', () => {
+  it('takes navide.git, navide.mini-ide and navide.browser from the Registry instead of building them', () => {
     expect(stage).toContain("{ id: 'navide.git', target: 'universal' }")
     expect(stage).toContain("{ id: 'navide.mini-ide', target: 'universal' }")
-    expect(standalone).not.toContain("'build:git:v2'")
-    expect(standalone).not.toContain("'build:mini-ide:v2'")
+    expect(stage).toContain("{ id: 'navide.browser', target: hostTarget }")
+    // A platform package is downloaded by target, as the App's installer asks.
+    expect(stage).toContain('/download?target=${encodeURIComponent(target)}')
+    for (const build of ['build:git:v2', 'build:mini-ide:v2', 'build:browser:v2', 'build:browser:backend']) {
+      expect(standalone).not.toContain(`'${build}'`)
+    }
   })
 
   it.each(staged)('builds navide-%s before staging it', (name) => {
     expect(standalone).toContain(`'build:${name}:v2'`)
   })
 
-  it('builds the native backends the staged Plans and Browser packages list', () => {
+  it('builds the native backend the staged Plans package lists', () => {
     expect(standalone).toContain("'build:plans:backend'")
-    expect(standalone).toContain("'build:browser:backend'")
   })
 })
