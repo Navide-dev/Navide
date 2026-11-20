@@ -5110,7 +5110,7 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
       marketplaceFetchTimeoutMs: 20,
     })
     const handler = handlers.get('plugins:marketplaceDetail')!
-    await expect(handler(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/timeout|abort/i)
+    await expect(handler(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/time(d)? ?out|abort/i)
     const detail = (await handler(null, { namespace: 'acme', name: 'demo' })) as { name: unknown }
     expect(detail.name).toBe('demo')
   })
