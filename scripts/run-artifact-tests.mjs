@@ -35,11 +35,3 @@ run(process.execPath, [
   ] : []),
   ...forwarded,
 ], env)
-// The App-bundled plugins' artifact tests run under their own configs;
-// NAVIDE_PLUGIN_TESTS_SKIP (comma-separated directories) leaves some out.
-if (!packagedOnly) {
-  run(process.execPath, [
-    'scripts/run-plugin-tests.mjs', '--artifacts',
-    ...(process.env.NAVIDE_PLUGIN_TESTS_SKIP ? ['--skip', process.env.NAVIDE_PLUGIN_TESTS_SKIP] : []),
-  ], env)
-}

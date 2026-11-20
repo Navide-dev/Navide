@@ -9,13 +9,22 @@ navide.mini-ide followed in the same version to
 [Navide-dev/navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide), and
 navide.browser to [Navide-dev/navide-browser](https://github.com/Navide-dev/navide-browser),
 which packages its backend from its own Python environment (`backend/pyproject.toml`,
-`uv.lock`, `.python-version`) and publishes one package per target. Their
-sections below are the record of those moves. Plans has not moved yet; for it
-this page is the inventory of what moves, what stays and what has to change
-on each side. The order is Git, then Mini-IDE, Browser and Plans. The
-overall plan is in `.agent-team/plans/plan_8508e9.html` (P3, P4).
+`uv.lock`, `.python-version`) and publishes one package per target, and
+navide.plans to [Navide-dev/navide-plans](https://github.com/Navide-dev/navide-plans),
+packaged the same way, its Python SDK locked to the wheel attached to the
+`plugin-packages-1.0.0` GitHub Release. With Plans gone no plugin is built in
+this repository: `plugins/`, the plugin test runner (`vitest.plugin.ts`,
+`scripts/run-plugin-tests.mjs`, `pnpm test:plugins`), the standalone check
+(`scripts/verify-plugin-standalone.mjs`) and the release fingerprints
+(`scripts/official-plugin-fingerprints.mjs`) were retired with it; a released
+version's content is fixed by the Registry, which never publishes a version
+twice. The sections below are the record of those moves, in their order: Git,
+Mini-IDE, Browser, Plans. The overall plan is in
+`.agent-team/plans/plan_8508e9.html` (P3, P4).
 
 ## Building outside the monorepo
+
+(Before the moves; the commands below were retired with the last one.)
 
 Each plugin depends on the public packages through `^1.x` ranges
 (`@navide/plugin-contracts`, `@navide/plugin-sdk`, `@navide/plugin-ui`) and

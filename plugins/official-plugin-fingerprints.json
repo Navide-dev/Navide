@@ -1,9 +1,0 @@
-{
-  "baseline": "v0.2.45",
-  "plugins": {
-    "navide.plans": {
-      "version": "1.1.8",
-      "fingerprint": "1ba8de5fd549316920b0f17e4066434e258c2bea736ba4ec58684276ad0d34d1"
-    }
-  }
-}
