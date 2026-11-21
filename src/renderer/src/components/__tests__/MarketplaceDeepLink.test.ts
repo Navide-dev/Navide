@@ -85,6 +85,19 @@ describe('Marketplace deep link', () => {
     expect(wrapper.find('.ext-trust-dialog').exists()).toBe(false)
   })
 
+  it('applies the detail answer to a page a link opened, leaving the skeleton (VM 0.2.46 rc2)', async () => {
+    // The link hands a plain object, which `selected` holds behind a reactive
+    // proxy: the answer must still be taken as the one this page asked for.
+    mockPlugins()
+    wrapper = mount(MarketplacePane, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    requestMarketplaceDetail({ namespace: 'navide', name: 'git' })
+    await flushPromises()
+    expect(wrapper.find('.mkt-detail-skeleton').exists()).toBe(false)
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('git display')
+  })
+
   it('switches an open pane to the newest link, and re-opens the same one on request', async () => {
     const api = mockPlugins()
     wrapper = mount(MarketplacePane, { global: { plugins: [i18n] } })
