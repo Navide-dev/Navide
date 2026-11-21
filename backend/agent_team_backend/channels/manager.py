@@ -4369,15 +4369,19 @@ class ChannelManager:
 
     async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
                                      from_label: str, to_id: str, to_label: str,
-                                     needs_login: bool = False) -> int:
+                                     needs_login: bool = False, from_builtin: bool = False,
+                                     to_builtin: bool = False) -> int:
         """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
         chat whose pane runs that CLI or was moved by the switch. Where the chat has
         buttons, a claude switch carries "switch back": a one-row /account menu, so the
         press goes the /account way (owner and chat checked, the active account
         re-checked by the window, written to account_switch_log). Returns the chats told."""
         lang = prompt_skills.language(await self._ui_settings())
-        shown_from = account_menu.mask_email(from_label or from_id)
-        shown_to = account_menu.mask_email(to_label or to_id)
+        from_row = account_menu.AccountRow(id=from_id, label=account_menu.mask_email(from_label or from_id),
+                                           builtin=from_builtin)
+        to_row = account_menu.AccountRow(id=to_id, label=account_menu.mask_email(to_label or to_id),
+                                         builtin=to_builtin, active=True)
+        shown_from, shown_to = from_row.name(lang), to_row.name(lang)
         body = account_menu.text(lang, "failover_needs_login" if needs_login else "failover_done",
                                  to=shown_to, **{"from": shown_from})
         moved = set(pane_ids)
@@ -4401,8 +4405,7 @@ class ChannelManager:
                 menu = self.accounts.create(
                     location_key=loc.key(), sender_id=loc.chat_id, lang=lang, agent_key=agent_key,
                     active_id=to_id,
-                    rows=[account_menu.AccountRow(id=from_id, label=shown_from),
-                          account_menu.AccountRow(id=to_id, label=shown_to, active=True)],
+                    rows=[from_row, to_row],
                 )
                 rows = self.accounts.render_single(menu, from_id, account_menu.text(lang, "switch_back", to=shown_from))
                 buttons = [row[0] for row in rows]

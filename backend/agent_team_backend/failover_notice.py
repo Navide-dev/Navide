@@ -35,6 +35,26 @@ def account_name(app: Any, agent_key: str, profile_id: str) -> str:
     return str(profile.get("name") or profile_id)
 
 
+def chat_name(app: Any, agent_key: str, profile_id: str) -> tuple[str, bool]:
+    """The name a chat shows for the account, as the desktop pane header chip names it
+    (accountChipLabel): the user's alias, else the signed-in email's local part, else the
+    given name. ``(label, builtin)``: builtin when the built-in Default has none of them,
+    so the chat words it in its own language. Never the whole email."""
+    if profile_id == _DEFAULT_SLOT_ID:
+        alias = str((app.cli_profiles_store.list().get("defaultNames") or {}).get(agent_key) or "")
+        name = ""
+    else:
+        profile = app.cli_profiles_store.get(profile_id) or {}
+        name = str(profile.get("name") or profile_id)
+        alias = name if profile.get("nameIsCustom") else ""
+    if alias:
+        return alias, False
+    email = (app.credential_vault.identity(agent_key, profile_id) or {}).get("email")
+    if isinstance(email, str) and "@" in email and email.index("@") > 0:
+        return email[: email.index("@")], False
+    return (name, False) if name else ("Default", True)
+
+
 async def on_commit(event: dict[str, Any]) -> None:
     if not event.get("automatic"):
         return
@@ -46,6 +66,9 @@ async def on_commit(event: dict[str, Any]) -> None:
     needs_login = bool(event.get("needsLogin"))
     from_name = await asyncio.to_thread(account_name, app, agent_key, from_id)
     to_name = await asyncio.to_thread(account_name, app, agent_key, to_id)
+    # The audit row keeps the given names; only the chat gets the email-derived one.
+    from_chat, from_builtin = await asyncio.to_thread(chat_name, app, agent_key, from_id)
+    to_chat, to_builtin = await asyncio.to_thread(chat_name, app, agent_key, to_id)
     row_id = await asyncio.to_thread(
         app.account_switch_log.record_request,
         source="failover", requester=REQUESTER, agent_key=agent_key, to_profile_id=to_id,
@@ -67,7 +90,8 @@ async def on_commit(event: dict[str, Any]) -> None:
     pane_ids = event.get("paneIds")
     await manager.notify_failover_switch(
         agent_key=agent_key, pane_ids=[str(p) for p in pane_ids] if isinstance(pane_ids, list) else [],
-        from_id=from_id, from_label=from_name, to_id=to_id, to_label=to_name, needs_login=needs_login,
+        from_id=from_id, from_label=from_chat, from_builtin=from_builtin,
+        to_id=to_id, to_label=to_chat, to_builtin=to_builtin, needs_login=needs_login,
     )
 
 

@@ -53,6 +53,17 @@ async def test_a_direct_chat_is_told_once_with_a_switch_back_button(env: Env) ->
     assert labels == [am.text("zh-TW", "switch_back", to="Work"), am.text("zh-TW", "cancel")]
 
 
+async def test_the_built_in_default_is_worded_as_the_desktop_switcher_words_it(env: Env) -> None:
+    _direct(env)
+    env.fake.agents["pane-2"] = "claude"
+    assert await _notify(env, from_id="__default__", from_label="Default", from_builtin=True,
+                         to_label="second.user") == 1
+    body = am.text("zh-TW", "failover_done", **{"from": "Default（內建）", "to": "second.user"})
+    assert _said(env, body)
+    labels = [label for label, _ in env.tg.buttons[body]]
+    assert labels[0] == am.text("zh-TW", "switch_back", to="Default（內建）")
+
+
 async def test_switch_back_goes_through_the_account_switch(env: Env) -> None:
     _direct(env)
     env.fake.agents["pane-2"] = "claude"
