@@ -601,10 +601,53 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
       }
     })
 
+    it('a folder whose name holds "Quick safety check" is read whole, not cut at the phrase', () => {
+      const prompt = readStartupPrompt('claude', claudeTrustLive(`${WN} Quick safety check x`))
+      expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN })).toMatchObject({ action: 'block' })
+    })
+
     it('Codex: a folder inside the workspace, wrapped after its separator, is not the workspace', () => {
       // " You are in C:\Users\navide\wh\wn\" is 34 columns.
       const prompt = readStartupPrompt('codex', wrapAt(codexTrust(`${WN}\\sub`), 34))
       expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN })).toMatchObject({ action: 'block' })
+    })
+
+    describe('Codex, whose dialog has no fixed text after the folder', () => {
+      // Codex's dialog with its path row padded so that WN ends `endsAt`
+      // columns before the end of the second row, `after` drawn right behind it.
+      const codexRow = (cols: number, after: string, endsAt = 0): string => {
+        const pad = ' '.repeat(2 * cols - endsAt - ('You are in '.length + WN.length))
+        return wrapAt([`${pad}You are in ${WN}${after}`, ...codexTrust(WN).split('\n').slice(1)].join('\n'), cols)
+      }
+      const decideCodex = (screen: string) =>
+        decideStartupPrompt(readStartupPrompt('codex', screen)!, { navideDirs: [], workspace: WN })
+
+      for (let cols = 22; cols <= 30; cols++) {
+        it(`wn2 wrapped right after "wn" at ${cols} columns: blocked`, () => {
+          const screen = codexRow(cols, '2')
+          expect(screen).toContain(`wn\n2`)
+          expect(decideCodex(screen)).toMatchObject({ action: 'block' })
+        })
+
+        it(`wn ending its row with more text on the next row at ${cols} columns: blocked`, () => {
+          expect(decideCodex(codexRow(cols, ' — trust it?'.replace(' ', '\n')))).toMatchObject({ action: 'block' })
+        })
+
+        it(`wn with a space or punctuation after it on the same row at ${cols} columns: answered`, () => {
+          expect(decideCodex(codexRow(cols, '?', 1))).toMatchObject({ action: 'auto' })
+          expect(decideCodex(codexRow(cols, ' ', 1))).toMatchObject({ action: 'auto' })
+          // Characters a folder name may hold are not an end: "wn.old", "wn,old".
+          expect(decideCodex(codexRow(cols, '.', 1))).toMatchObject({ action: 'block' })
+          expect(decideCodex(codexRow(cols, ',old', 4))).toMatchObject({ action: 'block' })
+        })
+
+        it(`as Codex draws it at ${cols} columns: wn answered, wn2, wn\\sub, the parent and another folder blocked`, () => {
+          expect(decideCodex(wrapAt(codexTrust(WN), cols))).toMatchObject({ action: 'auto' })
+          for (const folder of [`${WN}2`, `${WN},old`, `${WN}.old`, `${WN}\\sub`, 'C:\\Users\\navide\\wh', 'C:\\Users\\navide\\wh\\other-ws-0246']) {
+            expect(decideCodex(wrapAt(codexTrust(folder), cols)), folder).toMatchObject({ action: 'block' })
+          }
+        })
+      }
     })
   })
 

@@ -54,6 +54,10 @@ export interface StartupPrompt {
   /** A trust dialog whose menu order is not fixed (Claude Code): it is
    *  answered only by reading the cursor and moving it, never by Enter alone. */
   readCursor?: boolean
+  /** The rendered screen the prompt was read off, row breaks kept: a trust
+   *  dialog with no fixed text after its folder (Codex) is judged on it, so a
+   *  path that may go on in the next row is never taken whole. */
+  screen?: string
 }
 
 export type StartupPromptDecision =
@@ -113,34 +117,47 @@ const trustOption = (read: string): string => CLAUDE_TRUST_OPTIONS.find((o) => s
 
 const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/
 
-/** Whether `screen` names `folder` as a whole path: not a parent of it, not a
- *  folder inside it, not a longer name that starts with it. A path the CLI
- *  wrapped (a line break inside it) still counts, and so does a home folder
- *  drawn as `~`. */
+/** Whether `screen` (the rendered rows, line breaks kept) names `folder` as a
+ *  whole path: not a parent of it, not a folder inside it, not a longer name
+ *  that starts with it. A path the CLI wrapped (a line break inside it) still
+ *  counts, and so does a home folder drawn as `~`. A path that ends where its
+ *  row ends, with more text on the next row, may go on there ("…\wn" / "2"),
+ *  so it names nothing. */
 export function namesFolder(screen: string, folder: string): boolean {
   const target = folder.trim().replace(/(.)[\\/]+$/, '$1')
   if (!/^(?:\/|[A-Za-z]:[\\/])/.test(target)) return false
-  const text = screen.replace(BOX, ' ').replace(/\s+/g, ' ')
+  // Spaces collapse to one; a row break stays '\n', spaces before it ' \n'
+  // (the row went on after the path), a blank row between two '\n\n'.
+  const text = screen.replace(BOX, ' ').replace(/\r/g, '').replace(/\s+/g, (ws) => {
+    const breaks = ws.split('\n').length - 1
+    if (breaks >= 2) return '\n\n'
+    if (breaks === 1) return /^[^\S\n]/.test(ws) ? ' \n' : '\n'
+    return ' '
+  })
   const pattern = (path: string): string => [...path]
     .map((ch) => (ch === '/' || ch === '\\' ? '[\\\\/]' : escapeRe(ch)))
-    .join(' ?')
+    .join('\\n?')
   const spellings = [pattern(target)]
   const home = HOME.exec(target)
-  if (home) spellings.push('~' + (target.length > home[0].length ? ' ?' + pattern(target.slice(home[0].length)) : ''))
-  // Before: the start, a space, or punctuation that opens a path. After: the
-  // end, a space or punctuation, but never a separator (a folder inside it,
-  // wrapped or not) or another path character. A trailing separator counts
-  // only before the end or punctuation: before a space it may be a line break
-  // inside a longer path ("…\wn\" / "sub").
+  if (home) spellings.push('~' + (target.length > home[0].length ? '\\n?' + pattern(target.slice(home[0].length)) : ''))
+  // Before: the start, a space or row break, or punctuation that opens a
+  // path. After: a space on the same row, or the row ends and nothing but a
+  // blank row or the end of the screen follows; or punctuation followed by
+  // one of those (a folder name may hold punctuation: "wn,old"). Never a
+  // separator (a folder inside it). A trailing separator counts only before
+  // the end or such punctuation.
+  const tail = '(?:$| |\\n\\n|\\n$)'
+  const punct = `['")\\],;:?!]${tail}`
   const whole = new RegExp(
-    `(?:^|[\\s:'"(\\[])(?:${spellings.join('|')})(?:[\\\\/](?=$|['")\\],;:?!])|(?=$|[\\s'")\\],;:?!]))(?! ?[\\\\/])`,
+    `(?:^|[\\s:'"(\\[])(?:${spellings.join('|')})(?:[\\\\/](?=$|${punct})|(?=${tail}|${punct}))(?! ?[\\\\/])`,
   )
   return whole.test(text)
 }
 
 // Claude Code's trust dialog draws its folder alone, between the title and
-// the first sentence of its body.
-const CLAUDE_TRUST_FOLDER = new RegExp(`^${loose('Accessing workspace:')} (.+?) ${loose('Quick safety check')}`)
+// the first sentence of its body. Read up to the LAST "Quick safety check": a
+// folder whose name holds the phrase is then read whole, and never matches.
+const CLAUDE_TRUST_FOLDER = new RegExp(`^${loose('Accessing workspace:')} (.+) ${loose('Quick safety check')}`)
 
 /** Whether Claude Code's trust dialog (`prompt`, from its title on) names
  *  exactly `folder`: the whole path it draws is read, and every character of
@@ -175,7 +192,9 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
   if (!m) {
     if (!WORKSPACE_TRUST.some((re) => re.test(text))) return null
     if (AGENT_SPECS.find((spec) => spec.agentKey === agentKey)?.startupTrust) return null
-    if (agentKey !== 'claude') return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
+    if (agentKey !== 'claude') {
+      return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '', screen }
+    }
     // Which option the cursor is on, read off the menu; '' when it cannot be.
     const menu = CLAUDE_TRUST_MENU.exec(text)
     const read = menu ? [trustOption(menu[2]), trustOption(menu[4])] : []
@@ -232,8 +251,10 @@ export function decideStartupPrompt(
     // Its own boilerplate speaks of permissions, so the SENSITIVE words are
     // not a reason here; the folder is.
     const workspace = ctx.workspace ?? ''
-    const names = prompt.readCursor ? claudeTrustNamesFolder : namesFolder
-    if (!workspace || !names(prompt.prompt, workspace)) {
+    const names = prompt.readCursor
+      ? claudeTrustNamesFolder(prompt.prompt, workspace)
+      : namesFolder(prompt.screen ?? prompt.prompt, workspace)
+    if (!workspace || !names) {
       return {
         action: 'block',
         why: workspace
