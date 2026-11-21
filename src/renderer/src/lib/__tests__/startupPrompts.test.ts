@@ -552,6 +552,62 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
       .toMatchObject({ action: 'block' })
   })
 
+  describe('a Windows workspace (VM 0.2.46 rc2, 125%: wn\\sub was trusted at 23 columns)', () => {
+    const WN = 'C:\\Users\\navide\\wh\\wn'
+    const settleIn = (pane: ReturnType<typeof narrowPane>, workspace: string) => {
+      let t = 0
+      return settleStartupPrompts({
+        agentKey: 'claude',
+        readScreen: pane.readScreen,
+        navideDirs: () => [],
+        workspace: () => workspace,
+        awaiting: () => pane.state.open,
+        ready: () => !pane.state.open,
+        alive: () => pane.state.alive,
+        send: pane.send,
+        sleep: async () => { t += 250 },
+        now: () => t,
+        settleMs: 0,
+        timeoutMs: 15_000,
+        record: () => {},
+      })
+    }
+
+    it('wraps " C:\\Users\\navide\\wh\\wn\\sub" right after "wn\\" at 23 columns, as the VM pane did', () => {
+      expect(wrapAt(claudeTrustLive(`${WN}\\sub`), 23)).toContain(' C:\\Users\\navide\\wh\\wn\\\nsub')
+    })
+
+    for (let cols = 22; cols <= 30; cols++) {
+      it(`own workspace at ${cols} columns: moves onto Yes, then Enter`, async () => {
+        const pane = narrowPane(WN, cols)
+        expect(await settleIn(pane, WN)).toEqual({ outcome: 'clear' })
+        expect(pane.state.sent).toEqual(['\x1b[B', '\r'])
+      })
+
+      it(`wn\\sub, the parent and another folder at ${cols} columns: not one key`, async () => {
+        for (const folder of [`${WN}\\sub`, 'C:\\Users\\navide\\wh', 'C:\\Users\\navide\\wh\\other-ws-0246', `${WN}2`]) {
+          const pane = narrowPane(folder, cols)
+          expect((await settleIn(pane, WN)).outcome, folder).toBe('blocked')
+          expect(pane.state.sent, folder).toEqual([])
+        }
+      })
+    }
+
+    it('a sibling whose name the wrap splits right after the workspace\'s is not the workspace', () => {
+      // " C:\Users\navide\wh\wn" is 22 columns: "wn-old" wraps to "wn" / "-old".
+      for (const sibling of [`${WN}-old`, `${WN}2`]) {
+        const prompt = readStartupPrompt('claude', wrapAt(claudeTrustLive(sibling), 22))
+        expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN }), sibling).toMatchObject({ action: 'block' })
+      }
+    })
+
+    it('Codex: a folder inside the workspace, wrapped after its separator, is not the workspace', () => {
+      // " You are in C:\Users\navide\wh\wn\" is 34 columns.
+      const prompt = readStartupPrompt('codex', wrapAt(codexTrust(`${WN}\\sub`), 34))
+      expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN })).toMatchObject({ action: 'block' })
+    })
+  })
+
   it('reads the add-dir dialog wrapped mid-word too', () => {
     const prompt = readStartupPrompt('claude', wrapAt(screenFor(VIEW), 22))
     expect(prompt).toMatchObject({ kind: 'claude.add-dir', cursorOn: 'No, exit' })

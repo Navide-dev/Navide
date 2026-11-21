@@ -44,7 +44,7 @@ export interface StartupPrompt {
   kind: 'claude.add-dir' | 'workspace-trust'
   /** The folder it asks about, as drawn (a wrapped path rejoined). '' for a
    *  workspace trust dialog: which folder it names is decided against the
-   *  workspace (namesFolder), not read off the screen. */
+   *  workspace (namesFolder, claudeTrustNamesFolder), not read off the screen. */
   folder: string
   /** The prompt's text, whitespace-collapsed, folder included. */
   prompt: string
@@ -129,9 +129,40 @@ export function namesFolder(screen: string, folder: string): boolean {
   if (home) spellings.push('~' + (target.length > home[0].length ? ' ?' + pattern(target.slice(home[0].length)) : ''))
   // Before: the start, a space, or punctuation that opens a path. After: the
   // end, a space or punctuation, but never a separator (a folder inside it,
-  // wrapped or not) or another path character.
-  const whole = new RegExp(`(?:^|[\\s:'"(\\[])(?:${spellings.join('|')})[\\\\/]?(?=$|[\\s'")\\],;:?!])(?! ?[\\\\/])`)
+  // wrapped or not) or another path character. A trailing separator counts
+  // only before the end or punctuation: before a space it may be a line break
+  // inside a longer path ("…\wn\" / "sub").
+  const whole = new RegExp(
+    `(?:^|[\\s:'"(\\[])(?:${spellings.join('|')})(?:[\\\\/](?=$|['")\\],;:?!])|(?=$|[\\s'")\\],;:?!]))(?! ?[\\\\/])`,
+  )
   return whole.test(text)
+}
+
+// Claude Code's trust dialog draws its folder alone, between the title and
+// the first sentence of its body.
+const CLAUDE_TRUST_FOLDER = new RegExp(`^${loose('Accessing workspace:')} (.+?) ${loose('Quick safety check')}`)
+
+/** Whether Claude Code's trust dialog (`prompt`, from its title on) names
+ *  exactly `folder`: the whole path it draws is read, and every character of
+ *  it has to be the folder's. A wrapped path is rejoined (a line break reads
+ *  as a space, so a space is allowed between any two characters, but never in
+ *  place of one); a path the dialog does not draw whole, or text it does not
+ *  end where expected, names nothing. */
+export function claudeTrustNamesFolder(prompt: string, folder: string): boolean {
+  const target = folder.trim().replace(/(.)[\\/]+$/, '$1')
+  if (!/^(?:\/|[A-Za-z]:[\\/])/.test(target)) return false
+  const drawn = CLAUDE_TRUST_FOLDER.exec(prompt)?.[1]
+  if (!drawn) return false
+  const tokens = (path: string): string[] => [...path].map((ch) => (
+    ch === '/' || ch === '\\' ? '[\\\\/]' : /\s/.test(ch) ? ' ' : escapeRe(ch)))
+  // A space of the folder's own is required; between any two other
+  // characters a line break may have put one.
+  const pattern = (path: string): string => tokens(path)
+    .reduce((re, tok, i, all) => re + (i && tok !== ' ' && all[i - 1] !== ' ' ? ' ?' : '') + tok, '')
+  const spellings = [pattern(target)]
+  const home = HOME.exec(target)
+  if (home) spellings.push('~' + (target.length > home[0].length ? ' ?' + pattern(target.slice(home[0].length)) : ''))
+  return new RegExp(`^(?:${spellings.join('|')})(?: ?[\\\\/])?$`).test(drawn)
 }
 
 // Whatever an allowlist rule says, these are a person's call.
@@ -201,7 +232,8 @@ export function decideStartupPrompt(
     // Its own boilerplate speaks of permissions, so the SENSITIVE words are
     // not a reason here; the folder is.
     const workspace = ctx.workspace ?? ''
-    if (!workspace || !namesFolder(prompt.prompt, workspace)) {
+    const names = prompt.readCursor ? claudeTrustNamesFolder : namesFolder
+    if (!workspace || !names(prompt.prompt, workspace)) {
       return {
         action: 'block',
         why: workspace
