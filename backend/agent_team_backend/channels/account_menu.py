@@ -53,7 +53,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude 帳號（目前：{current}）\n按一下切換；每個分格下一次請求就會用新帳號",
         "title_group": "🔁 Claude 帳號（目前：{current}）\n群組聊天室不能切換，請私訊 bot 傳 /account",
         "fixed": "有 {count} 個分格固定在帳號自己的資料夾，切換後不會跟著換",
-        "signed_out": "未登入",
+        "signed_out": "尚未登入",
+        "default": "Default（內建）",
         "no_reading": "—",
         "cancel": "✖ 取消",
         "cancelled": "已取消切換帳號。",
@@ -83,7 +84,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude accounts (now: {current})\nTap one to switch; every pane uses it from its next request",
         "title_group": "🔁 Claude accounts (now: {current})\nA group chat cannot switch; message the bot directly and send /account",
         "fixed": "{count} pane(s) are fixed to an account's own folder and stay put when you switch",
-        "signed_out": "signed out",
+        "signed_out": "Not signed in",
+        "default": "Default (built-in)",
         "no_reading": "—",
         "cancel": "✖ Cancel",
         "cancelled": "Account switch cancelled.",
@@ -114,6 +116,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "title_group": "🔁 Claude アカウント（現在：{current}）\nグループでは切り替えできません。bot に直接 /account を送ってください",
         "fixed": "{count} 個のペインはアカウント専用フォルダに固定されており、切り替えても移りません",
         "signed_out": "未ログイン",
+        "default": "既定（組み込み）",
         "no_reading": "—",
         "cancel": "✖ キャンセル",
         "cancelled": "アカウントの切り替えをキャンセルしました。",
@@ -143,7 +146,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude 账号（当前：{current}）\n点一下切换；每个分格下一次请求就会用新账号",
         "title_group": "🔁 Claude 账号（当前：{current}）\n群组聊天不能切换，请私聊 bot 发送 /account",
         "fixed": "有 {count} 个分格固定在账号自己的文件夹，切换后不会跟着换",
-        "signed_out": "未登录",
+        "signed_out": "尚未登录",
+        "default": "Default（内置）",
         "no_reading": "—",
         "cancel": "✖ 取消",
         "cancelled": "已取消切换账号。",
@@ -174,6 +178,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "title_group": "🔁 Claude 계정 (현재: {current})\n그룹 채팅에서는 전환할 수 없어요. bot에게 직접 /account를 보내 주세요",
         "fixed": "{count}개 창은 계정 전용 폴더에 고정되어 있어 전환해도 그대로예요",
         "signed_out": "로그인 안 됨",
+        "default": "기본값(기본 제공)",
         "no_reading": "—",
         "cancel": "✖ 취소",
         "cancelled": "계정 전환을 취소했어요.",
@@ -203,7 +208,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Cuentas de Claude (ahora: {current})\nToca una para cambiar; cada panel la usa desde su siguiente petición",
         "title_group": "🔁 Cuentas de Claude (ahora: {current})\nUn grupo no puede cambiar; escribe al bot en privado y envía /account",
         "fixed": "{count} panel(es) están fijados a la carpeta propia de una cuenta y no cambian",
-        "signed_out": "sin sesión",
+        "signed_out": "Sin sesión iniciada",
+        "default": "Predeterminada (integrada)",
         "no_reading": "—",
         "cancel": "✖ Cancelar",
         "cancelled": "Cambio de cuenta cancelado.",
@@ -233,7 +239,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Comptes Claude (actuel : {current})\nTouchez-en un pour changer ; chaque panneau l’utilise dès sa prochaine requête",
         "title_group": "🔁 Comptes Claude (actuel : {current})\nUn groupe ne peut pas changer ; écrivez au bot en privé et envoyez /account",
         "fixed": "{count} panneau(x) fixé(s) au dossier propre d’un compte ne suivent pas le changement",
-        "signed_out": "déconnecté",
+        "signed_out": "Non connecté",
+        "default": "Par défaut (intégré)",
         "no_reading": "—",
         "cancel": "✖ Annuler",
         "cancelled": "Changement de compte annulé.",
@@ -263,7 +270,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude-Konten (aktuell: {current})\nTippe eines an, um zu wechseln; jeder Bereich nutzt es ab seiner nächsten Anfrage",
         "title_group": "🔁 Claude-Konten (aktuell: {current})\nIn einer Gruppe kann nicht gewechselt werden; schreib dem Bot direkt und sende /account",
         "fixed": "{count} Bereich(e) sind an den eigenen Ordner eines Kontos gebunden und wechseln nicht mit",
-        "signed_out": "abgemeldet",
+        "signed_out": "Nicht angemeldet",
+        "default": "Standard (integriert)",
         "no_reading": "—",
         "cancel": "✖ Abbrechen",
         "cancelled": "Kontowechsel abgebrochen.",
@@ -293,7 +301,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Contas do Claude (agora: {current})\nToque em uma para trocar; cada painel a usa a partir da próxima requisição",
         "title_group": "🔁 Contas do Claude (agora: {current})\nUm grupo não pode trocar; fale com o bot no privado e envie /account",
         "fixed": "{count} painel(is) estão fixos na pasta própria de uma conta e não trocam",
-        "signed_out": "sem login",
+        "signed_out": "Sem login",
+        "default": "Padrão (integrada)",
         "no_reading": "—",
         "cancel": "✖ Cancelar",
         "cancelled": "Troca de conta cancelada.",
@@ -323,7 +332,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Аккаунты Claude (сейчас: {current})\nНажмите, чтобы переключить; каждая панель использует его со следующего запроса",
         "title_group": "🔁 Аккаунты Claude (сейчас: {current})\nВ группе переключать нельзя; напишите боту лично и отправьте /account",
         "fixed": "Панелей, закреплённых за папкой аккаунта: {count}; при переключении они не меняются",
-        "signed_out": "не выполнен вход",
+        "signed_out": "Вход не выполнен",
+        "default": "По умолчанию (встроенный)",
         "no_reading": "—",
         "cancel": "✖ Отмена",
         "cancelled": "Смена аккаунта отменена.",
@@ -353,7 +363,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Tài khoản Claude (hiện tại: {current})\nBấm để đổi; mọi pane dùng nó từ yêu cầu kế tiếp",
         "title_group": "🔁 Tài khoản Claude (hiện tại: {current})\nNhóm không đổi được; hãy nhắn riêng cho bot và gửi /account",
         "fixed": "{count} pane được gắn vào thư mục riêng của một tài khoản và không đổi theo",
-        "signed_out": "chưa đăng nhập",
+        "signed_out": "Chưa đăng nhập",
+        "default": "Mặc định (tích hợp sẵn)",
         "no_reading": "—",
         "cancel": "✖ Hủy",
         "cancelled": "Đã hủy đổi tài khoản.",
@@ -403,6 +414,8 @@ class AccountRow:
     stale: bool = False
     signed_out: bool = False
     active: bool = False
+    # The built-in Default with no alias or email: worded as the desktop switcher words it.
+    builtin: bool = False
 
     @classmethod
     def from_window(cls, raw: dict[str, Any]) -> AccountRow:
@@ -412,8 +425,11 @@ class AccountRow:
             label=mask_email(str(raw.get("label") or raw.get("id") or "")),
             remaining=float(rem) if isinstance(rem, (int, float)) and not isinstance(rem, bool) else None,
             stale=raw.get("stale") is True, signed_out=raw.get("signedOut") is True,
-            active=raw.get("active") is True,
+            active=raw.get("active") is True, builtin=raw.get("builtin") is True,
         )
+
+    def name(self, lang: str) -> str:
+        return text(lang, "default") if self.builtin else self.label
 
     def shown(self, lang: str) -> str:
         if self.signed_out:
@@ -422,7 +438,7 @@ class AccountRow:
             figure = text(lang, "no_reading")
         else:
             figure = ("~" if self.stale else "") + f"{round(self.remaining)}%"
-        return f"{'✓ ' if self.active else ''}{_label(self.label)} · {figure}"
+        return f"{'✓ ' if self.active else ''}{_label(self.name(lang))} · {figure}"
 
 
 def parse_callback(data: str) -> str | None:
@@ -466,7 +482,11 @@ class Menu:
     tokens: list[str] = field(default_factory=list)
 
     def current_label(self) -> str:
-        return next((r.label for r in self.rows if r.id == self.active_id), self.active_id)
+        return self.label_of(self.active_id)
+
+    def label_of(self, account_id: str) -> str:
+        """The name the menu shows for an account, or its id when the menu has no such row."""
+        return next((r.name(self.lang) for r in self.rows if r.id == account_id), account_id)
 
 
 @dataclass

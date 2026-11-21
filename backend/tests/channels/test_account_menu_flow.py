@@ -85,6 +85,34 @@ async def test_direct_chat_switches_in_one_press_and_says_so(env: Env) -> None:
     assert _said(env, "過期")
 
 
+async def test_buttons_and_title_name_accounts_as_the_desktop_switcher_does(env: Env) -> None:
+    # 2026-11-21: the buttons read "Account 5 · ~97%" and the title "now: Account 13",
+    # which tells no account apart. The window now sends the header chip's name (alias,
+    # else the email's local part); the built-in Default and a signed-out account are
+    # worded as the desktop switcher words them.
+    acc = _setup(env)
+    acc.menu["activeId"] = "p-13"
+    acc.menu["rows"] = [
+        {"id": "__default__", "label": "Default", "builtin": True, "remaining": 40, "stale": False,
+         "signedOut": False, "active": False},
+        {"id": "p-13", "label": "lead.dev", "builtin": False, "remaining": 12, "stale": False,
+         "signedOut": False, "active": True},
+        {"id": "p-5", "label": "second.user", "builtin": False, "remaining": 97, "stale": True,
+         "signedOut": False, "active": False},
+        {"id": "p-14", "label": "Account 14", "builtin": False, "remaining": 10, "stale": False,
+         "signedOut": True, "active": False},
+    ]
+    acc.results = [{"status": "switched", "from": "Account 13", "to": "Account 5"}]
+    await env.inbound("/account", direct=True)
+    _, body, _rows_ = env.tg.menus[-1]
+    assert "目前：lead.dev" in body
+    labels = [label for label, _ in _buttons(env)]
+    assert labels[:3] == ["Default（內建） · 40%", "second.user · ~97%", "Account 14 · 尚未登入"]
+    await _press(env, _data(_buttons(env), "second.user"))
+    final = env.tg.menu_edits[-1][1]
+    assert "從 lead.dev 切到 second.user" in final and "Account 5" not in final
+
+
 async def test_only_the_opener_can_press(env: Env) -> None:
     acc = _setup(env)
     env.store.add_allow("telegram", "8", "bob", 1)

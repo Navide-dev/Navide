@@ -3907,7 +3907,7 @@ class ChannelManager:
         """Switch to ``target`` once: the menu is closed first, so a second press is expired.
         The window re-checks that the active account is still the one the menu showed."""
         lang = menu.lang
-        to_label = next((r.label for r in menu.rows if r.id == target), target)
+        to_label = menu.label_of(target)
         self.accounts.close(menu)
         await self._account_settle(msg, menu, account_menu.text(lang, "switching", to=to_label))
 
@@ -3925,9 +3925,11 @@ class ChannelManager:
         """What the chat is told about a switch's answer, or about a queued one's end."""
         lang = menu.lang
         status = str(result.get("status") or "")
-        to_shown = account_menu.mask_email(str(result.get("to") or to_label))
+        # The menu's names, as its buttons showed them: the window's from/to are the
+        # agent-facing names ("Account 5"), which tell the person nothing.
+        to_shown = account_menu.mask_email(to_label or str(result.get("to") or ""))
         if status in ("switched", "switched-signed-out"):
-            from_label = account_menu.mask_email(str(result.get("from") or menu.current_label()))
+            from_label = account_menu.mask_email(menu.current_label() or str(result.get("from") or ""))
             lines = [account_menu.text(lang, "ok", to=to_shown, **{"from": from_label}) if status == "switched"
                      else account_menu.text(lang, "ok_signed_out", to=to_shown)]
             if menu.fixed_count:
