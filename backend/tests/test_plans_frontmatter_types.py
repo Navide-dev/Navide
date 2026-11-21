@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 
-from tests.staged_plugin_backend import staged_backend_command
+from tests.staged_plugin_backend import staged_backend_command, wait_until_healthy
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PROTOCOL_REVISION = "2026-07-28"
@@ -78,6 +78,7 @@ def child() -> Any:
     threading.Thread(target=pump, daemon=True).start()
     process.frames = frames  # type: ignore[attr-defined]
     try:
+        wait_until_healthy(process, frames, CLIENT_META)
         yield process
     finally:
         process.kill()
