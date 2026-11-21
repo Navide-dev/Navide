@@ -3944,6 +3944,8 @@ function startupPromptDeps(agentKey: string, paneId: string) {
     sleep,
     now: Date.now,
     settleMs: STARTUP_PROMPT_KEY_SETTLE_MS,
+    // A trust dialog's wrapped folder is read only against the pane's width.
+    cols: () => Number(paneRefs[paneId]?.terminalSize?.()?.cols ?? 0),
   }
 }
 
@@ -7694,7 +7696,7 @@ function heldWorkspaceTrust(paneId: string): string {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return ''
   const deps = startupPromptDeps(pane.agentKey, paneId)
-  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen(), deps.cols())
   if (prompt?.kind !== 'workspace-trust') return ''
   const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
   return decision.action === 'block' ? decision.why : ''
@@ -7711,7 +7713,7 @@ async function answerWorkspaceTrust(paneId: string): Promise<{ outcome: 'none' |
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return { outcome: 'none' }
   const deps = startupPromptDeps(pane.agentKey, paneId)
-  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen())
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen(), deps.cols())
   if (prompt?.kind !== 'workspace-trust') return { outcome: 'none' }
   const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
   if (decision.action === 'block') return { outcome: 'held', why: decision.why }
