@@ -306,9 +306,20 @@ describe('the workspace trust dialog at launch', () => {
     expect(decide(claudeTrust('C:\\Users\\dev\\proj'), 'C:\\Users\\dev\\proj')).toMatchObject({ action: 'auto' })
   })
 
-  it('is answered when the CLI wrapped the workspace path', () => {
-    const wrapped = claudeTrust('/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-p\n ane/proj')
-    expect(decide(wrapped, '/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-pane/proj')).toMatchObject({ action: 'auto' })
+  it('is answered when a terminal wrap split the workspace path where its row was full', () => {
+    const long = '/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-pane/proj'
+    const cols = ' /Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-p'.length
+    const wrapped = claudeTrust('/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-p\nane/proj')
+    const prompt = readStartupPrompt('claude', wrapped, cols)
+    expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: long })).toMatchObject({ action: 'auto' })
+    // Without the pane's width the break cannot be told from a new line.
+    expect(decide(wrapped, long)).toMatchObject({ action: 'block' })
+    // A row that was not full, or a continuation row that starts with padding
+    // (Ink), may hide a space: left to a person.
+    for (const [screen, width] of [[wrapped, cols + 1], [claudeTrust(long.replace('narrow-pane', 'narrow-p\n ane')), cols]] as Array<[string, number]>) {
+      expect(decideStartupPrompt(readStartupPrompt('claude', screen, width)!, { navideDirs: [], workspace: long }))
+        .toMatchObject({ action: 'block' })
+    }
   })
 
   it('is left to a person for any other folder, or when it names none', () => {
@@ -474,6 +485,7 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
     const options = ['No, exit', 'Yes, I trust this folder']
     return {
       state,
+      cols,
       readScreen: () => (state.open ? tail(wrapAt(claudeTrustLive(folder, state.cursor as 0 | 1), cols), lines) : ' > '),
       send: async (keys: string) => {
         state.sent.push(keys)
@@ -502,6 +514,7 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
       now: () => t,
       settleMs: 0,
       timeoutMs: 15_000,
+      cols: () => pane.cols,
       record: () => {},
     })
   }
@@ -550,6 +563,166 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
     const screen = `$ cd ${WORKSPACE}\n${wrapAt(claudeTrustLive('/Users/alex/other'), 22)}`
     expect(decideStartupPrompt(readStartupPrompt('claude', screen)!, { navideDirs: [], workspace: WORKSPACE }))
       .toMatchObject({ action: 'block' })
+  })
+
+  describe('a Windows workspace (VM 0.2.46 rc2, 125%: wn\\sub was trusted at 23 columns)', () => {
+    const WN = 'C:\\Users\\navide\\wh\\wn'
+    const settleIn = (pane: ReturnType<typeof narrowPane>, workspace: string) => {
+      let t = 0
+      return settleStartupPrompts({
+        agentKey: 'claude',
+        readScreen: pane.readScreen,
+        navideDirs: () => [],
+        workspace: () => workspace,
+        awaiting: () => pane.state.open,
+        ready: () => !pane.state.open,
+        alive: () => pane.state.alive,
+        send: pane.send,
+        sleep: async () => { t += 250 },
+        now: () => t,
+        settleMs: 0,
+        timeoutMs: 15_000,
+        cols: () => pane.cols,
+        record: () => {},
+      })
+    }
+
+    it('wraps " C:\\Users\\navide\\wh\\wn\\sub" right after "wn\\" at 23 columns, as the VM pane did', () => {
+      expect(wrapAt(claudeTrustLive(`${WN}\\sub`), 23)).toContain(' C:\\Users\\navide\\wh\\wn\\\nsub')
+    })
+
+    for (let cols = 22; cols <= 30; cols++) {
+      it(`own workspace at ${cols} columns: moves onto Yes, then Enter`, async () => {
+        const pane = narrowPane(WN, cols)
+        expect(await settleIn(pane, WN)).toEqual({ outcome: 'clear' })
+        expect(pane.state.sent).toEqual(['\x1b[B', '\r'])
+      })
+
+      it(`wn\\sub, the parent and another folder at ${cols} columns: not one key`, async () => {
+        for (const folder of [`${WN}\\sub`, 'C:\\Users\\navide\\wh', 'C:\\Users\\navide\\wh\\other-ws-0246', `${WN}2`]) {
+          const pane = narrowPane(folder, cols)
+          expect((await settleIn(pane, WN)).outcome, folder).toBe('blocked')
+          expect(pane.state.sent, folder).toEqual([])
+        }
+      })
+    }
+
+    it('a sibling whose name the wrap splits right after the workspace\'s is not the workspace', () => {
+      // " C:\Users\navide\wh\wn" is 22 columns: "wn-old" wraps to "wn" / "-old".
+      for (const sibling of [`${WN}-old`, `${WN}2`]) {
+        const prompt = readStartupPrompt('claude', wrapAt(claudeTrustLive(sibling), 22))
+        expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN }), sibling).toMatchObject({ action: 'block' })
+      }
+    })
+
+    it('a folder whose name holds "Quick safety check" is read whole, not cut at the phrase', () => {
+      const prompt = readStartupPrompt('claude', claudeTrustLive(`${WN} Quick safety check x`))
+      expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN })).toMatchObject({ action: 'block' })
+    })
+
+    it('Codex: a folder inside the workspace, wrapped after its separator, is not the workspace', () => {
+      // " You are in C:\Users\navide\wh\wn\" is 34 columns.
+      const prompt = readStartupPrompt('codex', wrapAt(codexTrust(`${WN}\\sub`), 34))
+      expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: WN })).toMatchObject({ action: 'block' })
+    })
+
+    describe('Codex, whose dialog has no fixed text after the folder', () => {
+      // Codex's dialog with its path row padded so that WN ends `endsAt`
+      // columns before the end of the second row, `after` drawn right behind it.
+      const codexRow = (cols: number, after: string, endsAt = 0): string => {
+        const pad = ' '.repeat(2 * cols - endsAt - ('You are in '.length + WN.length))
+        return wrapAt([`${pad}You are in ${WN}${after}`, ...codexTrust(WN).split('\n').slice(1)].join('\n'), cols)
+      }
+      const decideCodex = (screen: string, cols: number) =>
+        decideStartupPrompt(readStartupPrompt('codex', screen, cols)!, { navideDirs: [], workspace: WN })
+
+      for (let cols = 22; cols <= 30; cols++) {
+        it(`wn2 wrapped right after "wn" at ${cols} columns: blocked`, () => {
+          const screen = codexRow(cols, '2')
+          expect(screen).toContain(`wn\n2`)
+          expect(decideCodex(screen, cols)).toMatchObject({ action: 'block' })
+        })
+
+        it(`wn ending its row with more text on the next row at ${cols} columns: blocked`, () => {
+          expect(decideCodex(codexRow(cols, ' — trust it?'.replace(' ', '\n')), cols)).toMatchObject({ action: 'block' })
+        })
+
+        it(`wn with a space or punctuation after it on the same row at ${cols} columns: answered`, () => {
+          expect(decideCodex(codexRow(cols, '?', 1), cols)).toMatchObject({ action: 'auto' })
+          expect(decideCodex(codexRow(cols, ' ', 1), cols)).toMatchObject({ action: 'auto' })
+          // Characters a folder name may hold are not an end: "wn.old", "wn,old".
+          expect(decideCodex(codexRow(cols, '.', 1), cols)).toMatchObject({ action: 'block' })
+          expect(decideCodex(codexRow(cols, ',old', 4), cols)).toMatchObject({ action: 'block' })
+        })
+
+        it(`as Codex draws it at ${cols} columns: wn answered, wn2, wn\\sub, the parent and another folder blocked`, () => {
+          expect(decideCodex(wrapAt(codexTrust(WN), cols), cols)).toMatchObject({ action: 'auto' })
+          for (const folder of [`${WN}2`, `${WN},old`, `${WN}.old`, `${WN}\\sub`, 'C:\\Users\\navide\\wh', 'C:\\Users\\navide\\wh\\other-ws-0246']) {
+            expect(decideCodex(wrapAt(codexTrust(folder), cols), cols), folder).toMatchObject({ action: 'block' })
+          }
+        })
+      }
+    })
+  })
+
+  describe('folders that differ only by a space ("some project" / "someproject")', () => {
+    const SPACED = '/Users/alex/work/some project/app'
+    const JOINED = '/Users/alex/work/someproject/app'
+    // Claude Code's Ink wraps a long row itself, each continuation row drawn
+    // with the dialog's one-column padding.
+    const inkWrap = (screen: string, cols: number): string => screen.split('\n').flatMap((line) => {
+      const rows = [line.slice(0, cols)]
+      for (let rest = line.slice(cols); rest; rest = rest.slice(cols - 1)) rows.push(` ${rest.slice(0, cols - 1)}`)
+      return rows
+    }).join('\n')
+    const decideAt = (screen: string, cols: number, workspace: string, agentKey = 'claude') =>
+      decideStartupPrompt(readStartupPrompt(agentKey, screen, cols)!, { navideDirs: [], workspace })
+    // The terminal wrap put the folder's own space at a row's last column (the
+    // row read back has lost it) or its first (where padding would look the
+    // same): left to a person. `line` is the dialog row that draws `own`.
+    const spaceAtWrap = (line: string, own: string, cols: number): boolean => {
+      const at = own.includes(' ') ? line.indexOf(own) + own.indexOf(' ') : -1
+      return at >= 0 && (at % cols === 0 || (at + 1) % cols === 0)
+    }
+
+    for (let cols = 20; cols <= 40; cols++) {
+      it(`never takes one for the other at ${cols} columns, Claude or Codex, terminal-wrapped or Ink`, () => {
+        for (const [shown, workspace] of [[SPACED, JOINED], [JOINED, SPACED]]) {
+          for (const screen of [wrapAt(claudeTrustLive(shown), cols), inkWrap(claudeTrustLive(shown), cols)]) {
+            expect(decideAt(screen, cols, workspace), `${shown} / ${workspace}`).toMatchObject({ action: 'block' })
+          }
+          expect(decideAt(wrapAt(codexTrust(shown), cols), cols, workspace, 'codex'), `codex ${shown} / ${workspace}`)
+            .toMatchObject({ action: 'block' })
+        }
+      })
+
+      it(`answers each one's own dialog at ${cols} columns where a terminal wrapped it`, () => {
+        for (const own of [SPACED, JOINED]) {
+          expect(decideAt(wrapAt(claudeTrustLive(own), cols), cols, own), own)
+            .toMatchObject({ action: spaceAtWrap(` ${own}`, own, cols) ? 'block' : 'auto' })
+          expect(decideAt(wrapAt(codexTrust(own), cols), cols, own, 'codex'), `codex ${own}`)
+            .toMatchObject({ action: spaceAtWrap(` You are in ${own}`, own, cols) ? 'block' : 'auto' })
+        }
+      })
+
+      it(`holds its own dialog at ${cols} columns where Ink wrapped it (padding may hide a space)`, () => {
+        for (const own of [SPACED, JOINED]) {
+          const wrapped = ` ${own}`.length > cols
+          expect(decideAt(inkWrap(claudeTrustLive(own), cols), cols, own), own)
+            .toMatchObject({ action: wrapped ? 'block' : 'auto' })
+        }
+      })
+    }
+
+    it('reads a real space exactly on one row: no space more, none less', () => {
+      for (const [shown, workspace, action] of [
+        [SPACED, SPACED, 'auto'], [JOINED, JOINED, 'auto'], [SPACED, JOINED, 'block'], [JOINED, SPACED, 'block'],
+        [SPACED.replace(' ', '  '), SPACED, 'block'], [SPACED, SPACED.replace(' ', '  '), 'block'],
+      ]) {
+        expect(decideAt(claudeTrustLive(shown), 0, workspace), `${shown} / ${workspace}`).toMatchObject({ action })
+        expect(decideAt(codexTrust(shown), 0, workspace, 'codex'), `codex ${shown} / ${workspace}`).toMatchObject({ action })
+      }
+    })
   })
 
   it('reads the add-dir dialog wrapped mid-word too', () => {
