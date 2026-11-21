@@ -30,7 +30,7 @@ describe('pluginStagedCandidateNotice', () => {
     const main = readFileSync(join(root, 'src/main/index.ts'), 'utf8')
     const relay = readFileSync(join(root, 'src/main/pluginStagedCandidateRelay.ts'), 'utf8')
     // main hands every failed launch activation to the relay, which sends it to a loaded main window.
-    expect(main).toMatch(/activateStagedFirstInstalls\(\)\.then\(\(failures\) => \{[\s\S]*?pluginStagedCandidateRelay\.notify\(failure\)/)
+    expect(main).toMatch(/activateStagedFirstInstalls\(\)\)\.then\(\(failures\) => \{[\s\S]*?pluginStagedCandidateRelay\.notify\(failure\)/)
     expect(main).toContain("win.webContents.on('did-finish-load', () => pluginStagedCandidateRelay.flush(win))")
     expect(relay).toContain("deliver('plugins:stagedCandidateNotActivated', notice)")
     expect(preload).toContain("ipcRenderer.on('plugins:stagedCandidateNotActivated', listener)")
