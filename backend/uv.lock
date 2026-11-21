@@ -110,7 +110,7 @@ wheels = [
 
 [[package]]
 name = "anthropic"
-version = "2.6.0"
+version = "2.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -122,9 +122,9 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/a8/0e50326e4c408f4b4ee3aae4c3bbd60012570b88bc5887effc8542509068/anthropic-2.6.0.tar.gz", hash = "sha256:a38d8698258a4cb33a9bc9d2f0ced1d96b71010870e5ed703807d21021a0da24", size = 1958763, upload-time = "2026-11-05T18:59:09.557Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/49/e4/42615a688c415bb4a05510c3964c58e04b5b88d574ecf07455371ce758b7/anthropic-2.10.0.tar.gz", hash = "sha256:6f3ffbdc6eb0a09a197be2eabdc62b8395a13d692710b8cdfa0393a80b355585", size = 2011659, upload-time = "2026-11-17T18:28:48.258Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/0b/705a05ab68558914e725cf1143d7e409fa3bb596c35bca1eceab42402abe/anthropic-2.6.0-py3-none-any.whl", hash = "sha256:4325cdf9346fa29183674b6ee6289ebad5b2b0a935758f7350fa504032da1d9b", size = 2445307, upload-time = "2026-11-05T18:59:11.474Z" },
+    { url = "https://files.pythonhosted.org/packages/b5/02/4496b5a84f2b77ff31b25fa573f9fa2ce6a2be4e165db10a63aaa958a6dd/anthropic-2.10.0-py3-none-any.whl", hash = "sha256:1b91b2b4aa2bab44db8712e8a9053454bcff6daa3e6f5f11d85dc38b37d0a2a3", size = 2519451, upload-time = "2026-11-17T18:28:50.04Z" },
 ]
 
 [[package]]
