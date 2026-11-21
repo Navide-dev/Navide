@@ -44,7 +44,7 @@ export interface StartupPrompt {
   kind: 'claude.add-dir' | 'workspace-trust'
   /** The folder it asks about, as drawn (a wrapped path rejoined). '' for a
    *  workspace trust dialog: which folder it names is decided against the
-   *  workspace (namesFolder), not read off the screen. */
+   *  workspace (namesFolder, claudeTrustNamesFolder), not read off the screen. */
   folder: string
   /** The prompt's text, whitespace-collapsed, folder included. */
   prompt: string
@@ -54,6 +54,11 @@ export interface StartupPrompt {
   /** A trust dialog whose menu order is not fixed (Claude Code): it is
    *  answered only by reading the cursor and moving it, never by Enter alone. */
   readCursor?: boolean
+  /** The rendered screen a workspace trust dialog was read off, row breaks
+   *  kept, and the pane's width then (0 when not known): the folder it names
+   *  is read off the rows exactly (namesFolder, claudeTrustNamesFolder). */
+  screen?: string
+  cols?: number
 }
 
 export type StartupPromptDecision =
@@ -113,38 +118,130 @@ const trustOption = (read: string): string => CLAUDE_TRUST_OPTIONS.find((o) => s
 
 const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^\\/]+)(?=$|[\\/])/
 
-/** Whether `screen` names `folder` as a whole path: not a parent of it, not a
- *  folder inside it, not a longer name that starts with it. A path the CLI
- *  wrapped (a line break inside it) still counts, and so does a home folder
- *  drawn as `~`. */
-export function namesFolder(screen: string, folder: string): boolean {
-  const target = folder.trim().replace(/(.)[\\/]+$/, '$1')
-  if (!/^(?:\/|[A-Za-z]:[\\/])/.test(target)) return false
-  const text = screen.replace(BOX, ' ').replace(/\s+/g, ' ')
+// A path is read off the rendered rows exactly: every character, every space.
+// A row break may fall inside it only where a terminal wrap put it, which is
+// where its row is full to the pane's width (`cols`); a wrap adds or drops no
+// character there. A break anywhere else, a continuation row that starts with
+// padding (Claude Code's Ink draws one, and a dropped space there cannot be
+// told from none), or a width that is not known, leaves the path unread.
+
+/** The rendered rows, frame drawn as spaces, trailing blanks cut (as
+ *  readScreenTail reads them), joined with '\n'. */
+const screenRows = (screen: string): string =>
+  screen.replace(/\r/g, '').split('\n').map((row) => row.replace(BOX, ' ').replace(/\s+$/, '')).join('\n')
+
+/** The length of the row in `text` that ends at index `end`. */
+const rowLength = (text: string, end: number): number => end - (text.lastIndexOf('\n', end - 1) + 1)
+
+/** Whether every row break in text[start, end) ends a row full to `cols`, and
+ *  the row after it goes on at its first column: a space there may be padding
+ *  (Ink's) as well as the folder's own. */
+function wrapsOnly(text: string, start: number, end: number, cols: number): boolean {
+  for (let i = text.indexOf('\n', start); i !== -1 && i < end; i = text.indexOf('\n', i + 1)) {
+    if (!cols || rowLength(text, i) !== cols || /\s/.test(text[i + 1] ?? '')) return false
+  }
+  return true
+}
+
+/** `folder` as a regex source, home drawn as `~` too: a row break may fall
+ *  between any two characters (wrapsOnly then checks it). On Windows either
+ *  slash is a separator; on POSIX only '/', a backslash being a name's own. */
+function pathSpellings(target: string): string {
+  const sep = /^[A-Za-z]:/.test(target) ? '[\\\\/]' : '/'
   const pattern = (path: string): string => [...path]
-    .map((ch) => (ch === '/' || ch === '\\' ? '[\\\\/]' : escapeRe(ch)))
-    .join(' ?')
+    .map((ch) => (ch === '/' || ch === '\\' ? sep : escapeRe(ch)))
+    .join('\\n?')
   const spellings = [pattern(target)]
   const home = HOME.exec(target)
-  if (home) spellings.push('~' + (target.length > home[0].length ? ' ?' + pattern(target.slice(home[0].length)) : ''))
-  // Before: the start, a space, or punctuation that opens a path. After: the
-  // end, a space or punctuation, but never a separator (a folder inside it,
-  // wrapped or not) or another path character.
-  const whole = new RegExp(`(?:^|[\\s:'"(\\[])(?:${spellings.join('|')})[\\\\/]?(?=$|[\\s'")\\],;:?!])(?! ?[\\\\/])`)
-  return whole.test(text)
+  if (home) spellings.push('~' + (target.length > home[0].length ? '\\n?' + pattern(target.slice(home[0].length)) : ''))
+  return spellings.join('|')
+}
+
+const absolute = (folder: string): string => {
+  const target = folder.trim().replace(/(.)[\\/]+$/, '$1')
+  return /^(?:\/|[A-Za-z]:[\\/])/.test(target) ? target : ''
+}
+
+const PATH_PUNCT = `'")],;:?!`
+
+/** Whether a path read up to `at` ends there for sure: the end of the screen,
+ *  a space on the same row (not one before a separator), or a row break where
+ *  its row is not full (no wrap), or a full row followed by a blank row or the
+ *  end. A full row with more text below may go on there. */
+function endsAt(text: string, at: number, cols: number): boolean {
+  if (at >= text.length) return true
+  if (text[at] === ' ' || text[at] === '\t') return !/^[ \t][\\/]/.test(text.slice(at, at + 2))
+  if (text[at] === '\n') return (cols > 0 && rowLength(text, at) < cols) || /^\n(?:\n|$)/.test(text.slice(at, at + 2))
+  return false
+}
+
+/** Whether the path read up to `end` is the whole path: punctuation ends it
+ *  only before a sure end (a folder name may hold it: "wn,old"), a trailing
+ *  separator only before the end of the screen or such punctuation. */
+function pathEnds(text: string, end: number, cols: number): boolean {
+  const ch = text[end] ?? ''
+  if (ch === '/' || ch === '\\') {
+    const next = text[end + 1] ?? ''
+    return next === '' || (PATH_PUNCT.includes(next) && endsAt(text, end + 2, cols))
+  }
+  if (ch && PATH_PUNCT.includes(ch)) return endsAt(text, end + 1, cols)
+  return endsAt(text, end, cols)
+}
+
+/** Whether `screen` (the rendered rows) names `folder` as a whole path: not a
+ *  parent of it, not a folder inside it, not a longer name that starts with
+ *  it, every space its own. `cols` is the pane's width: without it a path is
+ *  read on one row only. */
+export function namesFolder(screen: string, folder: string, cols = 0): boolean {
+  const target = absolute(folder)
+  if (!target) return false
+  const text = screenRows(screen)
+  for (const m of text.matchAll(new RegExp(`(?<=^|[\\s:'"(\\[])(?:${pathSpellings(target)})`, 'g'))) {
+    const end = m.index + m[0].length
+    if (wrapsOnly(text, m.index, end, cols) && pathEnds(text, end, cols)) return true
+  }
+  return false
+}
+
+/** Whether Claude Code's trust dialog on `screen` names exactly `folder`. The
+ *  dialog draws its folder as a block of rows of its own, a blank row above
+ *  (under the "Accessing workspace:" title) and below (over the body's "Quick
+ *  safety check"); the whole block has to be the folder, read as namesFolder
+ *  reads a path. The body found is the last one, so a folder whose name holds
+ *  the phrase is read whole. */
+export function claudeTrustNamesFolder(screen: string, folder: string, cols = 0): boolean {
+  const target = absolute(folder)
+  if (!target) return false
+  const rows = screenRows(screen).split('\n')
+  const blank = (i: number): boolean => i < 0 || i >= rows.length || !rows[i]
+  let body = rows.length - 1
+  while (body >= 0 && !(/^\s*Quick/.test(rows[body]) && squash(rows[body] + (rows[body + 1] ?? '')).startsWith('Quicksafetycheck'))) body--
+  const last = body - 2
+  if (body < 0 || !blank(body - 1) || blank(last)) return false
+  let first = last
+  while (!blank(first - 1)) first--
+  let title = first - 2
+  if (!blank(first - 1) || blank(title)) return false
+  while (!blank(title - 1)) title--
+  if (squash(rows.slice(title, first - 1).join('')) !== 'Accessingworkspace:') return false
+  const block = rows.slice(first, last + 1).join('\n')
+  const sep = /^[A-Za-z]:/.test(target) ? '[\\\\/]' : '/'
+  return new RegExp(`^ *(?:${pathSpellings(target)})(?:${sep})?$`).test(block) && wrapsOnly(block, 0, block.length, cols)
 }
 
 // Whatever an allowlist rule says, these are a person's call.
 const SENSITIVE = /\b(?:sign(?:ed)?[ -]?in|log[ -]?in|logout|api[ -]?key|token|account|billing|payment|purchase|subscri\w*|upgrade|credits?|delete|remove|uninstall|overwrite|bypass|dangerously|permissions?)\b/i
 
 /** The known startup prompt live on this pane's screen, or null. */
-export function readStartupPrompt(agentKey: string, screen: string): StartupPrompt | null {
+export function readStartupPrompt(agentKey: string, screen: string, cols = 0): StartupPrompt | null {
   const text = collapse(screen)
   const m = agentKey === 'claude' ? CLAUDE_ADD_DIR.exec(text) : null
   if (!m) {
     if (!WORKSPACE_TRUST.some((re) => re.test(text))) return null
     if (AGENT_SPECS.find((spec) => spec.agentKey === agentKey)?.startupTrust) return null
-    if (agentKey !== 'claude') return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '' }
+    if (agentKey !== 'claude') {
+      return { kind: 'workspace-trust', folder: '', prompt: text, options: [], cursorOn: '', screen, cols }
+    }
     // Which option the cursor is on, read off the menu; '' when it cannot be.
     const menu = CLAUDE_TRUST_MENU.exec(text)
     const read = menu ? [trustOption(menu[2]), trustOption(menu[4])] : []
@@ -154,7 +251,7 @@ export function readStartupPrompt(agentKey: string, screen: string): StartupProm
     // no folder, and is left to a person.
     const title = [...text.matchAll(CLAUDE_TRUST_TITLE)].pop()
     const prompt = title ? text.slice(title.index) : ''
-    return { kind: 'workspace-trust', folder: '', prompt, options, cursorOn, readCursor: true }
+    return { kind: 'workspace-trust', folder: '', prompt, options, cursorOn, readCursor: true, screen, cols }
   }
   // The tail after the footer is the CLI's own status line at most; a long
   // tail is a later screen, so this dialog is scrollback.
@@ -201,7 +298,10 @@ export function decideStartupPrompt(
     // Its own boilerplate speaks of permissions, so the SENSITIVE words are
     // not a reason here; the folder is.
     const workspace = ctx.workspace ?? ''
-    if (!workspace || !namesFolder(prompt.prompt, workspace)) {
+    const names = prompt.readCursor
+      ? claudeTrustNamesFolder(prompt.screen ?? '', workspace, prompt.cols)
+      : namesFolder(prompt.screen ?? prompt.prompt, workspace, prompt.cols)
+    if (!workspace || !names) {
       return {
         action: 'block',
         why: workspace
@@ -314,6 +414,8 @@ export interface StartupPromptWatchDeps {
   now: () => number
   settleMs: number
   timeoutMs: number
+  /** The pane's width in columns: a wrapped folder is read only with it. */
+  cols?: () => number
   record: (entry: StartupPromptRecord) => void
 }
 
@@ -333,7 +435,7 @@ export async function settleStartupPrompts(deps: StartupPromptWatchDeps): Promis
   const deadline = deps.now() + deps.timeoutMs
   let answered = 0
   while (deps.now() < deadline && deps.alive()) {
-    const prompt = readStartupPrompt(deps.agentKey, deps.readScreen())
+    const prompt = readStartupPrompt(deps.agentKey, deps.readScreen(), deps.cols?.() ?? 0)
     if (prompt) {
       const decision = decideStartupPrompt(prompt, { navideDirs: deps.navideDirs(), workspace: deps.workspace?.() ?? '' })
       if (decision.action === 'block') {
