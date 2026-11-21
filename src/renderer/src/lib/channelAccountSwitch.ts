@@ -22,6 +22,9 @@ export interface ChannelAccountRow {
   id: string
   /** The user's alias, the email's local part, or the account's name (an auto-added account's name may be an email; the backend masks it). */
   label: string
+  /** What a group chat shows, read by others too: the alias or the account's name, never
+   *  email-derived beyond what the backend masks ('' = the generic Default). */
+  groupLabel: string
   /** The built-in Default with no alias or email: label is the generic "Default", which the chat words in its own language. */
   builtin: boolean
   /** Remaining % of the headline window, or null when there is no reading. */
@@ -58,10 +61,12 @@ export function channelAccountMenu(args: Record<string, unknown>, deps: ChannelA
     const usage = deps.usage(agentKey, id)
     const alias = deps.accounts.aliasFor(agentKey, id)
     const email = deps.accounts.email(agentKey, id)
-    const named = alias || (email ? emailLocalPart(email) : '') || (id === null ? '' : deps.accounts.findProfile(id)?.name ?? id)
+    const given = id === null ? '' : deps.accounts.findProfile(id)?.name ?? id
+    const named = alias || (email ? emailLocalPart(email) : '') || given
     return {
       id: id ?? DEFAULT_SLOT_ID,
       label: named || 'Default',
+      groupLabel: alias || given,
       builtin: !named,
       remaining: usage.remaining,
       stale: usage.stale,

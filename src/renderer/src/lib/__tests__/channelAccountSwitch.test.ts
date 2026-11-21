@@ -36,9 +36,9 @@ describe('channelAccountMenu', () => {
       activeId: 'p-work',
       fixedCount: 6,
       rows: [
-        { id: '__default__', label: 'Default', builtin: true, remaining: 80, stale: true, signedOut: false, active: false },
-        { id: 'p-work', label: 'Work', builtin: false, remaining: 2, stale: false, signedOut: false, active: true },
-        { id: 'p-two', label: 'Account 2', builtin: false, remaining: null, stale: false, signedOut: true, active: false },
+        { id: '__default__', label: 'Default', groupLabel: '', builtin: true, remaining: 80, stale: true, signedOut: false, active: false },
+        { id: 'p-work', label: 'Work', groupLabel: 'Work', builtin: false, remaining: 2, stale: false, signedOut: false, active: true },
+        { id: 'p-two', label: 'Account 2', groupLabel: 'Account 2', builtin: false, remaining: null, stale: false, signedOut: true, active: false },
       ],
     })
   })
@@ -46,11 +46,14 @@ describe('channelAccountMenu', () => {
   it('names an account without an alias by its email\'s local part, as the desktop header chip does', () => {
     const d = deps()
     d.accounts.email = (_agentKey, id) => (id === 'p-two' ? 'second.user@example.com' : id === null ? 'home.user@example.com' : null)
-    const menu = channelAccountMenu({ agentKey: 'claude' }, d) as { rows: { id: string; label: string; builtin: boolean }[] }
-    expect(menu.rows.map((r) => [r.id, r.label, r.builtin])).toEqual([
-      ['__default__', 'home.user', false],
-      ['p-work', 'Work', false],
-      ['p-two', 'second.user', false],
+    const menu = channelAccountMenu({ agentKey: 'claude' }, d) as {
+      rows: { id: string; label: string; groupLabel: string; builtin: boolean }[]
+    }
+    // A group chat keeps the names it had: the alias, else the given name ('' = the generic Default).
+    expect(menu.rows.map((r) => [r.id, r.label, r.groupLabel, r.builtin])).toEqual([
+      ['__default__', 'home.user', '', false],
+      ['p-work', 'Work', 'Work', false],
+      ['p-two', 'second.user', 'Account 2', false],
     ])
     expect(JSON.stringify(menu)).not.toContain('@')
   })

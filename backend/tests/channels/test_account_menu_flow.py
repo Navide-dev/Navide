@@ -113,6 +113,28 @@ async def test_buttons_and_title_name_accounts_as_the_desktop_switcher_does(env:
     assert "從 lead.dev 切到 second.user" in final and "Account 5" not in final
 
 
+async def test_a_group_chat_never_shows_an_email_s_local_part(env: Env) -> None:
+    # Others read a group chat: it keeps the names it showed before (alias, else the
+    # given name, an email-named one masked); only a direct chat gets the local part.
+    acc = _setup(env)
+    acc.menu["activeId"] = "p-13"
+    acc.menu["rows"] = [
+        {"id": "__default__", "label": "home.user", "groupLabel": "", "builtin": False, "remaining": 40,
+         "stale": False, "signedOut": False, "active": False},
+        {"id": "p-13", "label": "lead.dev", "groupLabel": "Account 13", "builtin": False, "remaining": 12,
+         "stale": False, "signedOut": False, "active": True},
+        {"id": "p-5", "label": "second.user", "groupLabel": "second.user" + "@example.com", "builtin": False,
+         "remaining": 97, "stale": True, "signedOut": False, "active": False},
+        {"id": "p-w", "label": "Work", "groupLabel": "Work", "builtin": False, "remaining": 5,
+         "stale": False, "signedOut": False, "active": False},
+    ]
+    await env.inbound("/account")
+    body = "\n".join(env.tg.texts())
+    assert "目前：Account 13" in body
+    assert "Default（內建） · 40%" in body and "sec…@example.com · ~97%" in body and "Work · 5%" in body
+    assert "lead.dev" not in body and "home.user" not in body and "second.user" not in body
+
+
 async def test_only_the_opener_can_press(env: Env) -> None:
     acc = _setup(env)
     env.store.add_allow("telegram", "8", "bob", 1)

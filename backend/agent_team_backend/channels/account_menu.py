@@ -416,6 +416,9 @@ class AccountRow:
     active: bool = False
     # The built-in Default with no alias or email: worded as the desktop switcher words it.
     builtin: bool = False
+    # What a group chat shows (others read it): the alias or the given name, never an
+    # email's local part. None = the same as label; "" = the generic Default.
+    group_label: str | None = None
 
     @classmethod
     def from_window(cls, raw: dict[str, Any]) -> AccountRow:
@@ -426,19 +429,22 @@ class AccountRow:
             remaining=float(rem) if isinstance(rem, (int, float)) and not isinstance(rem, bool) else None,
             stale=raw.get("stale") is True, signed_out=raw.get("signedOut") is True,
             active=raw.get("active") is True, builtin=raw.get("builtin") is True,
+            group_label=mask_email(str(raw["groupLabel"])) if isinstance(raw.get("groupLabel"), str) else None,
         )
 
-    def name(self, lang: str) -> str:
+    def name(self, lang: str, *, group: bool = False) -> str:
+        if group and self.group_label is not None:
+            return self.group_label or text(lang, "default")
         return text(lang, "default") if self.builtin else self.label
 
-    def shown(self, lang: str) -> str:
+    def shown(self, lang: str, *, group: bool = False) -> str:
         if self.signed_out:
             figure = text(lang, "signed_out")
         elif self.remaining is None:
             figure = text(lang, "no_reading")
         else:
             figure = ("~" if self.stale else "") + f"{round(self.remaining)}%"
-        return f"{'✓ ' if self.active else ''}{_label(self.name(lang))} · {figure}"
+        return f"{'✓ ' if self.active else ''}{_label(self.name(lang, group=group))} · {figure}"
 
 
 def parse_callback(data: str) -> str | None:
@@ -481,12 +487,12 @@ class Menu:
     message_id: str = ""
     tokens: list[str] = field(default_factory=list)
 
-    def current_label(self) -> str:
-        return self.label_of(self.active_id)
+    def current_label(self, *, group: bool = False) -> str:
+        return self.label_of(self.active_id, group=group)
 
-    def label_of(self, account_id: str) -> str:
+    def label_of(self, account_id: str, *, group: bool = False) -> str:
         """The name the menu shows for an account, or its id when the menu has no such row."""
-        return next((r.name(self.lang) for r in self.rows if r.id == account_id), account_id)
+        return next((r.name(self.lang, group=group) for r in self.rows if r.id == account_id), account_id)
 
 
 @dataclass
@@ -541,11 +547,11 @@ class AccountMenus:
         """The menu's text. A group chat gets the numbered list and no way to switch; a
         chat without buttons gets the numbered list and how to switch by typing."""
         lang = menu.lang
-        lines = [text(lang, "title_group" if group else "title", current=_label(menu.current_label()))]
+        lines = [text(lang, "title_group" if group else "title", current=_label(menu.current_label(group=group)))]
         if menu.fixed_count:
             lines.append(text(lang, "fixed", count=menu.fixed_count))
         if group or numbered:
-            lines.extend(f"{i}. {r.shown(lang)}" for i, r in enumerate(menu.rows, 1))
+            lines.extend(f"{i}. {r.shown(lang, group=group)}" for i, r in enumerate(menu.rows, 1))
         if numbered and not group:
             lines.append(text(lang, "list_hint"))
         return "\n".join(lines)
