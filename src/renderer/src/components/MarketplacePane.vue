@@ -249,9 +249,14 @@ function isIncompatible(ext: { compatible?: boolean | null }): boolean {
   return ext.compatible === false
 }
 
+// Each openDetail call takes a fresh token; an answer applies only while its
+// token is still the latest, so a slow earlier request never overwrites the
+// detail the user opened after it.
+let detailRequest = 0
 async function openDetail(ext: MarketplaceExtension): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  const request = ++detailRequest
   selected.value = ext
   detail.value = null
   detailState.value = 'loading'
@@ -261,9 +266,12 @@ async function openDetail(ext: MarketplaceExtension): Promise<void> {
   changelogState.value = 'idle'
   changelogOpen.value = false
   try {
-    detail.value = await api.marketplaceDetail({ namespace: ext.namespace, name: ext.name })
+    const next = await api.marketplaceDetail({ namespace: ext.namespace, name: ext.name })
+    if (request !== detailRequest || selected.value !== ext) return
+    detail.value = next
     detailState.value = 'ready'
   } catch (err) {
+    if (request !== detailRequest || selected.value !== ext) return
     detailError.value = ipcErrorMessage(err)
     detailState.value = 'error'
   }

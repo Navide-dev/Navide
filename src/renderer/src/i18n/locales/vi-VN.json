@@ -9442,7 +9442,8 @@
       "locked-title": "Tác vụ hệ thống do ứng dụng sở hữu: hãy thay đổi từ bảng tự tiến hóa của workspace đó",
       "managed-by": "Do workspace quản lý",
       "name": "Tự tiến hóa · {workspace}",
-      "locked-title-shipped-log": "Lịch hệ thống do App quản lý: chỉ đổi được trong bảng Nhật ký phát hành của không gian làm việc đó"
+      "locked-title-shipped-log": "Lịch hệ thống do App quản lý: chỉ đổi được trong bảng Nhật ký phát hành của không gian làm việc đó",
+      "name-shipped-log": "Tóm tắt nhật ký phát hành · {workspace}"
     },
     "add": "+ Mới",
     "empty": "Chưa có tác vụ theo lịch nào",
@@ -10225,6 +10226,9 @@
       "empty": "Chưa có pane nào liên kết với kênh.",
       "disconnect": "Ngắt kết nối",
       "disconnect-label": "Ngắt kết nối {pane} khỏi {channel}",
+      "disconnect-confirm-text": "Sau khi ngắt, {channel} sẽ không nhận tin nhắn từ {pane} nữa và không thể đánh thức lại cuộc trò chuyện này. Muốn kết nối lại phải liên kết lại từ đầu.",
+      "disconnect-confirm": "Ngắt kết nối",
+      "disconnect-cancel": "Hủy",
       "go-to": "Đi tới {pane}",
       "auto-child": "Chủ đề con tự động",
       "auto-child-hint": "Được tạo tự động cho một pane con. Ngắt kết nối pane cha cũng sẽ đóng nó.",

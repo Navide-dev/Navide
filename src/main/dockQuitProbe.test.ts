@@ -588,7 +588,7 @@ describe('SIGTERM quits without the confirm prompt', () => {
     vi.restoreAllMocks()
   })
 
-  async function bootSigterm(): Promise<{ beforeQuit: BeforeQuit; sigterm: () => void; markCleanExit: ReturnType<typeof vi.spyOn> }> {
+  async function bootSigterm(participant?: { ok: false; reason: 'refused' | 'busy' | 'timeout' }): Promise<{ beforeQuit: BeforeQuit; sigterm: () => void; markCleanExit: ReturnType<typeof vi.spyOn> }> {
     const sigtermListeners: Array<() => void> = []
     const realOn = process.on.bind(process)
     vi.spyOn(process, 'on').mockImplementation(((event: string, listener: () => void) => {
@@ -601,7 +601,8 @@ describe('SIGTERM quits without the confirm prompt', () => {
     for (const [event, listener] of appListeners) if (event === 'ready') (listener as () => void)()
     const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
     const { WindowRegistry } = await import('./window-registry')
-    vi.spyOn(frontendPluginManager, 'hasWindowCloseParticipants').mockReturnValue(false)
+    vi.spyOn(frontendPluginManager, 'hasWindowCloseParticipants').mockReturnValue(participant !== undefined)
+    if (participant) vi.spyOn(frontendPluginManager, 'prepareWindowClose').mockResolvedValue(participant as never)
     vi.spyOn(frontendPluginManager, 'hasBackendActivity').mockReturnValue(false)
     const setQuitConfirm = ipcListeners.get('app:setQuitConfirm') as (event: unknown, cfg: unknown) => void
     setQuitConfirm({}, { enabled: true })
@@ -642,5 +643,38 @@ describe('SIGTERM quits without the confirm prompt', () => {
     expect(preventDefault).not.toHaveBeenCalled()
     expect(dialogState.prompts).toBe(0)
     expect(markCleanExit).toHaveBeenCalled()
+  })
+
+  // A plugin window holding a draft (Mini-IDE on an error page) used to veto a
+  // SIGTERM like a Cmd+Q: "quit cancelled", a native message box, and an app
+  // that kept running. It still gets its preparation, but its answer is logged.
+  it.each(['refused', 'busy', 'timeout'] as const)('quits when a plugin window answers %s', { timeout: 60_000 }, async (reason) => {
+    const { beforeQuit, sigterm, markCleanExit } = await bootSigterm({ ok: false, reason })
+    const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
+    sigterm()
+    expect(appState.quits).toBe(1)
+    // Re-entry: the plugin window is prepared, then the quit goes on.
+    await beforeQuit({ preventDefault: vi.fn() })
+    expect(frontendPluginManager.prepareWindowClose).toHaveBeenCalledWith(expect.anything(), 'quit')
+    expect(appState.quits).toBe(2)
+    expect(dialogState.notices).toEqual([])
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(dialogState.prompts).toBe(0)
+    expect(markCleanExit).toHaveBeenCalled()
+  })
+
+  it('a Cmd+Q is still vetoed by a plugin window that refuses', { timeout: 60_000 }, async () => {
+    const { beforeQuit, markCleanExit } = await bootSigterm({ ok: false, reason: 'refused' })
+    await beforeQuit({ preventDefault: vi.fn() })
+    expect(dialogState.prompts).toBe(1)
+    expect(appState.quits).toBe(1)
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).toHaveBeenCalled()
+    expect(appState.quits).toBe(1)
+    expect(dialogState.notices).toHaveLength(1)
+    expect(markCleanExit).not.toHaveBeenCalled()
   })
 })

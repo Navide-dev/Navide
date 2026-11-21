@@ -30,6 +30,7 @@ import {
 } from './pluginInstaller'
 import { developerRegistryDownload, developerRegistryFetch, registryError } from './developerAccount'
 import { readBodyCapped } from './readBodyCapped'
+import { fetchWithIdleTimeout } from './idleTimeoutFetch'
 import type { DeveloperCallResult } from '../../shared/marketplaceDeveloper'
 import { OFFICIAL_REGISTRY_API_URL } from '../../shared/marketplaceDeveloper'
 import { registryClockRefusal, type RegistryClockRefusal } from '../../shared/registryClock'
@@ -322,6 +323,7 @@ interface InstalledSummary {
 
 /** S8 LOW-R3-1: a stuck Registry delays no trust refresh longer than this. */
 export const TESTPLACE_WITHDRAWAL_TIMEOUT_MS = 10_000
+export const MARKETPLACE_FETCH_TIMEOUT_MS = 15_000
 
 /** One test the user joined (plugins:testplaceList). */
 export interface TestplaceListing {
@@ -601,6 +603,8 @@ export interface PluginRescanNotice {
 export interface PluginIpcOptions {
   /** How long the bundled-plugin Marketplace check waits for the Registry. */
   bundledRefreshTimeoutMs?: number
+  /** Deadline for every Marketplace Registry read; tests shorten it. */
+  marketplaceFetchTimeoutMs?: number
   /** How long a Testplace withdrawal check may take before it counts as
    *  unreachable (S8 LOW-R3-1); tests shorten it. */
   testplaceWithdrawalTimeoutMs?: number
@@ -880,6 +884,11 @@ export function registerPluginIpc(
   ),
   options: PluginIpcOptions = {}
 ): PluginTrustRefreshController {
+  // Every Marketplace Registry read carries a deadline: a stalled connection
+  // otherwise never settles, and a detail page waiting on it stays a skeleton.
+  const marketplaceFetchTimeoutMs = options.marketplaceFetchTimeoutMs ?? MARKETPLACE_FETCH_TIMEOUT_MS
+  const registryFetch = (url: string | URL, init: RequestInit = {}): Promise<Response> =>
+    fetch(url, { ...init, signal: AbortSignal.timeout(marketplaceFetchTimeoutMs) })
   // Packages verified by prepareInstall, awaiting a commit, keyed by plugin id.
   const prepared = new Map<string, { pkg: PreparedInstall }>()
   // Local packages awaiting consent (card K3). Kept apart from Registry
@@ -1625,7 +1634,7 @@ export function registerPluginIpc(
         url.searchParams.set('navide_version', appVersion)
         url.searchParams.set('compatible_only', 'true')
       }
-      const res = await fetch(url)
+      const res = await registryFetch(url)
       if (!res.ok) throw new MarketplaceHttpError(`marketplace search failed: HTTP ${res.status}`, res.status)
       const body = (await res.json()) as { items?: Array<Record<string, unknown>> }
       // Target and engine compatibility are decided here, with the same rules
@@ -1675,7 +1684,7 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:marketplaceCategories', async (event) => {
     assertAuthorized(event)
     const marketplace = resolveConfiguredMarketplace(trust)
-    const res = await fetch(`${marketplace.registryUrl.replace(/\/+$/, '')}/api/categories`)
+    const res = await registryFetch(`${marketplace.registryUrl.replace(/\/+$/, '')}/api/categories`)
     if (res.status === 404) return []
     if (!res.ok) throw new Error(`marketplace categories failed: HTTP ${res.status}`)
     const body = (await res.json()) as { items?: Array<Record<string, unknown>> }
@@ -1717,7 +1726,8 @@ export function registerPluginIpc(
       const encodedPath = path.split('/').map(encodeURIComponent).join('/')
       let dataUrl: string | null = null
       try {
-        const res = await fetch(
+        // A screenshot can be megabytes: slow but steady must still finish.
+        const res = await fetchWithIdleTimeout(
           `${marketplace.registryUrl.replace(/\/+$/, '')}/extensions/${namespace}/${name}/${encodeURIComponent(version)}/assets/${encodedPath}`,
           { redirect: 'error' }
         )
@@ -1744,7 +1754,7 @@ export function registerPluginIpc(
       const namespace = marketplacePathSegment(args?.namespace)
       const name = marketplacePathSegment(args?.name)
       const marketplace = resolveConfiguredMarketplace(trust)
-      const res = await fetch(
+      const res = await registryFetch(
         `${marketplace.registryUrl.replace(/\/+$/, '')}/api/extensions/${namespace}/${name}/changelog`
       )
       if (!res.ok) throw new Error(`marketplace changelog failed: HTTP ${res.status}`)
@@ -1767,7 +1777,7 @@ export function registerPluginIpc(
       const base = `${marketplace.registryUrl.replace(/\/+$/, '')}/api/extensions/${namespace}/${name}`
       // Compatibility is computed here from each row's `engines_navide`, so
       // the Registry's own verdict (and its `navide_version` input) is unused.
-      const res = await fetch(base)
+      const res = await registryFetch(base)
       if (!res.ok) throw new MarketplaceHttpError(`marketplace detail failed: HTTP ${res.status}`, res.status)
       const detail = (await res.json()) as Record<string, unknown> & {
         versions?: Array<Record<string, unknown>>
@@ -1776,7 +1786,7 @@ export function registerPluginIpc(
       // README) still yields a usable detail view.
       let readme: string | null = null
       try {
-        const readmeRes = await fetch(`${base}/readme`)
+        const readmeRes = await registryFetch(`${base}/readme`)
         if (readmeRes.ok) {
           const body = (await readmeRes.json()) as { markdown?: unknown }
           if (typeof body.markdown === 'string') readme = body.markdown
@@ -2011,7 +2021,7 @@ export function registerPluginIpc(
         const namespace = pkg.id.slice(0, dot)
         const name = pkg.id.slice(dot + 1)
         try {
-          const res = await fetch(
+          const res = await registryFetch(
             `${base}/api/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
           )
           // A Testplace build is not listed publicly until it is promoted.
@@ -2230,7 +2240,7 @@ export function registerPluginIpc(
         const dot = id.indexOf('.')
         let detail: Record<string, unknown> & { versions?: Array<Record<string, unknown>> }
         try {
-          const res = await fetch(
+          const res = await registryFetch(
             `${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`
           )
           if (res.status === 404) return none
@@ -2294,7 +2304,7 @@ export function registerPluginIpc(
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
       const hostTarget = marketplace.trust.expectedTarget ?? currentPluginHostTarget()
-      const detailRes = await fetch(`${base}/api/extensions/${namespace}/${name}`)
+      const detailRes = await registryFetch(`${base}/api/extensions/${namespace}/${name}`)
       if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
       const detail = (await detailRes.json()) as { display_name?: unknown; versions?: Array<Record<string, unknown>> }
       const version = newestInstallableVersion(
@@ -2527,7 +2537,7 @@ export function registerPluginIpc(
     const detail = (args.testplace
       ? await testplaceRegistryCall(`/api/testplace/${args.namespace}/${args.name}`)
       : await (async () => {
-          const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
+          const detailRes = await registryFetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
           if (!detailRes.ok) throw new Error(`extension not found: HTTP ${detailRes.status}`)
           return detailRes.json()
         })()) as {
@@ -2959,11 +2969,11 @@ export function registerPluginIpc(
     try {
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
-      const listing = await fetch(`${base}/api/extensions?limit=1`)
+      const listing = await registryFetch(`${base}/api/extensions?limit=1`)
       if (!listing.ok) return
       const item = ((await listing.json()) as { items?: Array<Record<string, unknown>> }).items?.[0]
       if (typeof item?.namespace !== 'string' || typeof item.name !== 'string') return
-      const res = await fetch(`${base}/api/extensions/${encodeURIComponent(item.namespace)}/${encodeURIComponent(item.name)}`)
+      const res = await registryFetch(`${base}/api/extensions/${encodeURIComponent(item.namespace)}/${encodeURIComponent(item.name)}`)
       if (!res.ok) return
       const detail = (await res.json()) as { trust_metadata: RegistryTrustMetadata; trust_metadata_signature: string }
       verifyRegistryTrustMetadata(
@@ -2998,7 +3008,7 @@ export function registerPluginIpc(
     try {
       const marketplace = resolveConfiguredMarketplace(trust)
       const base = marketplace.registryUrl.replace(/\/+$/, '')
-      const res = await fetch(`${base}${LOCAL_INSTALL_TRUST_PATH}`)
+      const res = await registryFetch(`${base}${LOCAL_INSTALL_TRUST_PATH}`)
       if (!res.ok) return
       const body = (await res.json()) as { local_trust_metadata?: unknown; local_trust_metadata_signature?: unknown }
       writeLocalInstallTrust(
@@ -3995,7 +4005,7 @@ export function registerPluginIpc(
     const marketplace = resolveConfiguredMarketplace(trust)
     const base = marketplace.registryUrl.replace(/\/+$/, '')
     const dot = id.indexOf('.')
-    const res = await fetch(`${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`)
+    const res = await registryFetch(`${base}/api/extensions/${encodeURIComponent(id.slice(0, dot))}/${encodeURIComponent(id.slice(dot + 1))}`)
     if (!res.ok) return false
     const detail = (await res.json()) as {
       trust_metadata: RegistryTrustMetadata
@@ -6025,7 +6035,7 @@ export function registerPluginIpc(
         const [namespace, ...nameParts] = packageId.split('.')
         if (!namespace || nameParts.length === 0) continue
         try {
-          const response = await fetch(
+          const response = await registryFetch(
             `${base}/api/extensions/${namespace}/${nameParts.join('.')}`
           )
           if (!response.ok) {

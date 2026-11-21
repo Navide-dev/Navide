@@ -225,7 +225,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
   runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
-import { answerStartupPrompt, decideStartupPrompt, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
+import { answerStartupPrompt, decideStartupPrompt, readContinueNotice, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
@@ -3920,7 +3920,7 @@ function startupPromptDeps(agentKey: string, paneId: string) {
     agentKey,
     readScreen: () => {
       try {
-        return (paneRefs[paneId]?.readScreenTail?.(AWAITING_SCREEN_LINES) as unknown as string) ?? ''
+        return (paneRefs[paneId]?.readScreenTail?.(STARTUP_PROMPT_SCREEN_LINES) as unknown as string) ?? ''
       } catch {
         return ''
       }
@@ -4792,6 +4792,9 @@ onUnmounted(() => {
 // clear what the hook raised. The box itself is its own wait in both cases
 // (applyScreenWatch), so the pane is no longer AWAITING once the box is gone.
 const AWAITING_SCREEN_LINES = 25
+// A launch dialog in a narrow pane wraps to forty-odd rows; its title, which
+// names the folder, has to be read with its menu (lib/startupPrompts.ts).
+const STARTUP_PROMPT_SCREEN_LINES = 120
 // Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
 const ANSWER_STEP_GAP_MS = 60
 // How long cli_set_model waits for claude's /model picker to show, and then
@@ -7729,6 +7732,18 @@ async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string
   return waitStartupPromptGone(startupPromptDeps(pane.agentKey, pane.id), STARTUP_PROMPT_HOLD_MS)
 }
 
+/** Enter on the informational launch screen live on this pane, when it is one
+ *  of lib/startupPrompts' CONTINUE_NOTICES; false (nothing pressed) otherwise. */
+async function pressContinueNotice(paneId: string): Promise<boolean> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return false
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const rule = readContinueNotice(pane.agentKey, deps.readScreen())
+  if (!rule || !(await deps.send('\r'))) return false
+  pipelineLog(`✓ dismissed informational launch screen ${rule} (pane ${paneId.slice(0, 8)})`)
+  return true
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
   if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
@@ -7754,14 +7769,14 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
         pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
         return true
       }
-      if (ref.sessionId) {
-        await backend.send('terminal.input', {
-          terminal_session_id: ref.sessionId as string,
-          data: '\r'
-        })
-      }
-      pipelineLog(`✓ dismissed startup dialog (pane ${paneId.slice(0, 8)})`)
-      return true
+      // An informational screen Enter only dismisses (lib/startupPrompts
+      // CONTINUE_NOTICES) is dismissed as before.
+      if (await pressContinueNotice(paneId)) return true
+      // Anything else not read as a trust dialog: nothing is pressed. A bare
+      // Enter here landed on "No, exit", or trusted a folder that is not the
+      // pane's own; the kickoff's watch reports whatever is left.
+      pipelineLog(`⏸ left a startup dialog it could not read alone (pane ${paneId.slice(0, 8)})`)
+      return false
     }
     const bytes = paneCleanBytes(paneId)
     if (bytes !== lastSize) {
@@ -8242,13 +8257,7 @@ function scheduleInjection(pane: ActivePane): void {
           syncViews()
           return
         }
-        const r = trust.outcome === 'none' ? paneRefs[pane.id] : undefined
-        if (r?.sessionId) {
-          await backend.send('terminal.input', {
-            terminal_session_id: r.sessionId as string,
-            data: '\r'
-          })
-        }
+        if (trust.outcome === 'none') await pressContinueNotice(pane.id)
         await waitForQuiet(pane.id, 2000, 2500)
         if (!paneAlive(pane.id)) return
       }

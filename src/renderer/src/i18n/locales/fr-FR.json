@@ -9442,7 +9442,8 @@
       "locked-title": "Une tâche système de l’application : modifiez-la depuis le panneau d’auto-évolution de cet espace de travail",
       "managed-by": "Gérée par l’espace de travail",
       "name": "Auto-évolution · {workspace}",
-      "locked-title-shipped-log": "Planification système gérée par l'App : modifiez-la dans le panneau Journal des mises en production de cet espace de travail"
+      "locked-title-shipped-log": "Planification système gérée par l'App : modifiez-la dans le panneau Journal des mises en production de cet espace de travail",
+      "name-shipped-log": "Résumé du journal des mises en production · {workspace}"
     },
     "add": "+ Nouvelle",
     "empty": "Aucune tâche planifiée pour l’instant",
@@ -10225,6 +10226,9 @@
       "empty": "Aucun pane n’est encore lié à un canal.",
       "disconnect": "Déconnecter",
       "disconnect-label": "Déconnecter {pane} de {channel}",
+      "disconnect-confirm-text": "Une fois déconnecté, {channel} ne reçoit plus les messages de {pane} et ne peut plus réveiller cette conversation ; pour le reconnecter, il faudra l’associer de nouveau.",
+      "disconnect-confirm": "Déconnecter",
+      "disconnect-cancel": "Annuler",
       "go-to": "Aller à {pane}",
       "auto-child": "Sous-sujet automatique",
       "auto-child-hint": "Créé automatiquement pour un pane enfant. La déconnexion du pane parent le ferme aussi.",

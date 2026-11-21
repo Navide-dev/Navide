@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import {
   EditorNativeCapability,
+  editorOpenParamsForAbsolutePath,
   type EditorNativeExecution,
   type EditorNativeHost,
 } from './editorNativeCapability'
@@ -331,5 +332,42 @@ describe('EditorNativeCapability legitimate authority', () => {
       staged: undefined, commit: undefined, base: undefined, compare: undefined,
     })
     expect(host.openGitHistoryWindow).toHaveBeenCalledWith(root)
+  })
+})
+
+// window:openEditor (a terminal link, an "Open in editor" menu) can carry an
+// absolute `filepath`. Passed through as is, the editor read it relative to the
+// workspace, asked for <workspace>/Users/..., and stopped on "not a file".
+describe('editor-open params with an absolute file path', () => {
+  it('names a workspace file relative to the workspace', () => {
+    const workspace = temporaryDirectory('navide-editor-abs-inside-')
+    mkdirSync(join(workspace, 'src'))
+    writeFileSync(join(workspace, 'src', 'a.txt'), 'a')
+    expect(editorOpenParamsForAbsolutePath({
+      workspace_path: workspace, filepath: join(workspace, 'src', 'a.txt'), line: '3',
+    })).toEqual({ workspace_path: workspace, filepath: join('src', 'a.txt'), line: '3' })
+  })
+
+  it('names a file outside the workspace under its own folder', () => {
+    const workspace = temporaryDirectory('navide-editor-abs-ws-')
+    const outside = temporaryDirectory('navide-editor-abs-outside-')
+    writeFileSync(join(outside, 'b.txt'), 'b')
+    expect(editorOpenParamsForAbsolutePath({ workspace_path: workspace, filepath: join(outside, 'b.txt') }))
+      .toEqual({ workspace_path: workspace, filepath: 'b.txt', file_ws: outside })
+  })
+
+  it('leaves relative paths and paths that already name their root alone', () => {
+    const relativeOpen = { workspace_path: '/ws', filepath: 'src/a.txt' }
+    expect(editorOpenParamsForAbsolutePath(relativeOpen)).toBe(relativeOpen)
+    const rooted = { workspace_path: '/ws', filepath: 'b.txt', file_ws: '/elsewhere' }
+    expect(editorOpenParamsForAbsolutePath(rooted)).toBe(rooted)
+  })
+
+  it('is applied to window:openEditor before the request is routed', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/main/index.ts'), 'utf8')
+    const start = source.indexOf("ipcMain.handle('window:openEditor'")
+    expect(start).toBeGreaterThan(-1)
+    const body = source.slice(start, source.indexOf('ipcMain.handle(', start + 1))
+    expect(body).toMatch(/const params = editorOpenParamsForAbsolutePath\(args \?\? \{\}\)/)
   })
 })

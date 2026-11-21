@@ -14,11 +14,36 @@ const body = (name: string): string => {
 }
 
 describe('startup trust dialog: Enter only for the pane\'s own workspace', () => {
-  it('dismissStartupDialog asks before it presses Enter', () => {
+  it('dismissStartupDialog presses nothing itself: only the shared answerer does', () => {
     const fn = body('async function dismissStartupDialog')
-    const asked = fn.indexOf('answerWorkspaceTrust(paneId)')
-    expect(asked).toBeGreaterThan(-1)
-    expect(asked).toBeLessThan(fn.indexOf("data: '\\r'"))
+    expect(fn).toContain('answerWorkspaceTrust(paneId)')
+    // A dialog it could not read as a trust dialog got a bare Enter (UI zoom
+    // 125%, a narrow pane): "No, exit", or trusting another folder.
+    expect(fn).not.toContain("'\\r'")
+    expect(fn).not.toContain("'terminal.input'")
+  })
+
+  it('role injection\'s late-dialog path presses nothing itself either', () => {
+    const fn = body('function scheduleInjection')
+    const late = fn.slice(fn.indexOf('late startup dialog detected'), fn.indexOf('const injectRole'))
+    expect(late).toContain('answerWorkspaceTrust(pane.id)')
+    expect(late).not.toContain("'\\r'")
+    expect(late).not.toContain("'terminal.input'")
+  })
+
+  it('a bare Enter goes only to an informational screen startupPrompts names', () => {
+    const fn = body('async function pressContinueNotice')
+    expect(fn.indexOf('readContinueNotice(pane.agentKey')).toBeGreaterThan(-1)
+    expect(fn.indexOf('readContinueNotice(pane.agentKey')).toBeLessThan(fn.indexOf("deps.send('\\r')"))
+    expect(fn).toContain("if (!rule ||")
+    expect(body('async function dismissStartupDialog')).toContain('pressContinueNotice(paneId)')
+    const late = body('function scheduleInjection')
+    expect(late).toContain("if (trust.outcome === 'none') await pressContinueNotice(pane.id)")
+  })
+
+  it('reads enough of the screen for a dialog a narrow pane wraps to forty-odd rows', () => {
+    expect(body('function startupPromptDeps')).toContain('readScreenTail?.(STARTUP_PROMPT_SCREEN_LINES)')
+    expect(Number(/const STARTUP_PROMPT_SCREEN_LINES = (\d+)/.exec(appSource)?.[1])).toBeGreaterThanOrEqual(80)
   })
 
   it('answers a trust dialog through the shared answerer, which moves the cursor and waits for it to leave', () => {

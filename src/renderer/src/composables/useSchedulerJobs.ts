@@ -126,6 +126,18 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     return job.owner?.workspace || job.action.workspace || ''
   }
 
+  /** A system job's name in the UI language. The stored name is a fixed English
+   *  string (older jobs included), so it is rebuilt from the owning feature. */
+  function displayName(job: SchedulerJob): string {
+    const key = !isSystem(job) ? null
+      : job.owner?.feature === 'shipped-log' ? 'scheduler.system.name-shipped-log'
+        : job.owner?.feature === 'evolve' ? 'scheduler.system.name'
+          : null
+    if (!key) return job.name
+    const ws = systemWorkspace(job)
+    return t(key, { workspace: ws.split(/[\\/]/).filter(Boolean).pop() || ws })
+  }
+
   function whoLabel(owner: JobOwner): string {
     return owner.kind === 'pane' ? owner.pane_name || shortId(owner.pane_id) : t('scheduler.owner.external')
   }
@@ -342,6 +354,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
     targetLabel,
     isSystem,
     systemWorkspace,
+    displayName,
     backoffLabel,
     ownerLabel,
     creatorLabel,

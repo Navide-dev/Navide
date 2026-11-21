@@ -215,6 +215,44 @@ describe('useTerminal — draft and keystroke signals', () => {
     scope.stop()
   })
 
+  // Every reply @xterm/xterm 6.0.0 sends on its own, in the exact bytes it
+  // emits (src/common/InputHandler.ts, src/browser/CoreBrowserTerminal.ts).
+  // ConPTY asks for the cursor position (ESC[6n) as a fresh pane starts, and
+  // shells and CLIs probe DA / modes / colors at startup — none of that is the
+  // person at the keyboard, and counting it held cli_send for the full window.
+  it.each([
+    ['CPR', '\x1b[24;1R'],
+    ['DECXCPR', '\x1b[?24;1R'],
+    ['DSR status', '\x1b[0n'],
+    ['DA1', '\x1b[?1;2c'],
+    ['DA2', '\x1b[>0;276;0c'],
+    ['DA3', '\x1b[=0c'],
+    ['DECRPM (DEC)', '\x1b[?2004;2$y'],
+    ['DECRPM (ANSI)', '\x1b[4;2$y'],
+    ['DECRQSS valid', '\x1bP1$r0m\x1b\\'],
+    ['DECRQSS invalid', '\x1bP0$r\x1b\\'],
+    ['OSC 10 color', '\x1b]10;rgb:ffff/ffff/ffff\x1b\\'],
+    ['OSC 11 color', '\x1b]11;rgb:1e1e/1e1e/1e1e\x1b\\'],
+    ['OSC 4 color', '\x1b]4;1;rgb:cdcd/0000/0000\x1b\\'],
+    ['window size px', '\x1b[4;480;640t'],
+    ['cell size px', '\x1b[6;20;10t'],
+    ['window size chars', '\x1b[8;24;80t'],
+  ])('does not count an automatic %s reply as typing', async (_name, reply) => {
+    const { scope, terminal } = await spawnedTerminal()
+    captured.dataHandler!(reply)
+    expect(terminal.lastUserKeyAt.value).toBe(0)
+    expect(terminal.hasDraft.value).toBe(false)
+    scope.stop()
+  })
+
+  it('still counts typing that looks report-shaped only as a prefix', async () => {
+    // A paste that merely starts with reply-like bytes is still the user.
+    const { scope, terminal } = await spawnedTerminal()
+    captured.dataHandler!('\x1b[24;1Rhello')
+    expect(terminal.lastUserKeyAt.value).toBeGreaterThan(0)
+    scope.stop()
+  })
+
   it('records a keystroke time for real typing, including Enter', async () => {
     const { scope, terminal } = await spawnedTerminal()
     type('a')
@@ -417,6 +455,8 @@ describe('useTerminal — human flag on terminal.input', () => {
     ['X10 mouse', '\x1b[M !!'],
     ['focus in', '\x1b[I'],
     ['focus out', '\x1b[O'],
+    ['CPR', '\x1b[24;1R'],
+    ['DA1', '\x1b[?1;2c'],
   ])('sends a %s report without the flag', async (_name, report) => {
     const { mock, scope } = await spawnedTerminal()
     captured.dataHandler!(report)

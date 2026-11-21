@@ -9442,7 +9442,8 @@
       "locked-title": "由 App 管理的系统调度：只能在该工作区的自我优化面板修改",
       "managed-by": "由工作区管理",
       "name": "自我优化 · {workspace}",
-      "locked-title-shipped-log": "由 App 管理的系统计划：只能在该工作区的上线记录面板修改"
+      "locked-title-shipped-log": "由 App 管理的系统计划：只能在该工作区的上线记录面板修改",
+      "name-shipped-log": "上线记录摘要 · {workspace}"
     },
     "add": "＋ 添加",
     "empty": "还没有调度工作",
@@ -10225,6 +10226,9 @@
       "empty": "目前没有任何分格连接到 channel。",
       "disconnect": "关闭连接",
       "disconnect-label": "关闭 {pane} 与 {channel} 的连接",
+      "disconnect-confirm-text": "关闭后，{channel} 不会再收到 {pane} 的消息，也不能再从聊天室唤醒这段对话；要恢复只能重新绑定。",
+      "disconnect-confirm": "确定关闭",
+      "disconnect-cancel": "取消",
       "go-to": "跳到 {pane}",
       "auto-child": "自动子话题",
       "auto-child-hint": "为子分格自动创建的话题；关闭父分格的连接时会一并关闭。",
