@@ -2486,7 +2486,9 @@ void app.whenReady().then(() => pluginTrustRefresh.loadDeveloperFolders())
 // have done it; one that cannot be stays staged and the main window says why.
 // A package staged beside an active one is not applied for the user: the main
 // window says which version waits and which runs, and offers to apply it.
-void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
+// Once the app is ready: promotion preflights views in a BrowserWindow, and by
+// then the bundled copies are registered, so one is never taken for a first install.
+void app.whenReady().then(() => pluginTrustRefresh.activateStagedFirstInstalls()).then((failures) => {
   for (const failure of failures) {
     console.warn(`[main] plugin ${failure.pluginId} ${failure.version} installed without Restart was not activated: ${failure.reason}`)
     pluginStagedCandidateRelay.notify(failure)
