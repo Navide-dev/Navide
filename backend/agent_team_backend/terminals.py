@@ -1983,6 +1983,11 @@ class TerminalService:
             self._decoders[session.id] = decoder
         try:
             session.output_log_fp.write(_clean_for_log(decoder.decode(data)))
+            # cli_read_log reads the file, and line buffering is not enough:
+            # cleaning drops each chunk's trailing line break, and ConPTY moves
+            # between lines with cursor positioning, so a Windows shell's echo,
+            # output and prompt never carried a newline and sat unflushed.
+            session.output_log_fp.flush()
         except Exception as err:  # noqa: BLE001
             log.warning("output log write failed: %s", err)
 
