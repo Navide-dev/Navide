@@ -13,11 +13,15 @@ build-artifacts job and the release gate set it, after the build staged one.
 """
 from __future__ import annotations
 
+import json
 import os
 import platform
+import queue
 import re
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -59,3 +63,33 @@ def staged_backend_command(plugin_id: str, executable: str) -> list[str]:
     if REQUIRED:
         pytest.fail(f"NAVIDE_TEST_STAGED_PLUGINS=1 but there is no staged backend: {reason}")
     pytest.skip(reason)
+
+
+# The Host's startup budget: PluginBackendSupervisor sends navide/health first
+# and waits healthTimeoutMs (30 s by default) for it before failing the start.
+HOST_HEALTH_TIMEOUT_S = 30.0
+
+
+def wait_until_healthy(
+    process: subprocess.Popen[bytes], frames: queue.Queue[bytes], client_meta: dict[str, Any]
+) -> None:
+    """Start the child the way the Host does, before a test's own frames.
+
+    The staged backend is a PyInstaller onefile executable: every spawn unpacks
+    it first, which on a loaded machine can take seconds. The Host absorbs that
+    in its health budget, so a test's tighter per-frame limits start counting
+    only once the child has answered navide/health.
+    """
+    assert process.stdin is not None
+    request = {"jsonrpc": "2.0", "id": "startup-health", "method": "navide/health", "params": {"_meta": client_meta}}
+    process.stdin.write(json.dumps(request, separators=(",", ":")).encode() + b"\n")
+    process.stdin.flush()
+    try:
+        line = frames.get(timeout=HOST_HEALTH_TIMEOUT_S)
+    except queue.Empty:
+        raise AssertionError(
+            f"staged backend answered no navide/health within {HOST_HEALTH_TIMEOUT_S}s (the Host would fail the start)"
+        ) from None
+    assert line, "staged backend exited before answering navide/health"
+    response = json.loads(line)
+    assert response.get("id") == "startup-health" and "result" in response, response

@@ -23,7 +23,7 @@ from typing import Any
 
 import pytest
 
-from tests.staged_plugin_backend import staged_backend_command
+from tests.staged_plugin_backend import staged_backend_command, wait_until_healthy
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -169,6 +169,7 @@ def backend_process() -> subprocess.Popen[bytes]:
         stderr=subprocess.PIPE,
     )
     try:
+        wait_until_healthy(process, _frames_of(process), CLIENT_META)
         yield process
     finally:
         if process.poll() is None:
