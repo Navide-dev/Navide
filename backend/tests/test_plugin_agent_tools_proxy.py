@@ -1739,18 +1739,26 @@ async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_s
 
     proxy._result_worker.stop()  # noqa: SLF001
     proxy._result_worker._start_failed = None  # noqa: SLF001
-    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
+    # A window no round trip outlasts, however slow the machine: the second
+    # call starts well inside it.
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 30.0)
     entry = _devmap_tool(monkeypatch)
     value = {"data": "x" * 200_000}
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
     first = proxy._result_worker._process  # noqa: SLF001
     assert first is not None
+    # Each request schedules its own idle stop when it ends, so the window
+    # shortened here applies from the end of the next request on.
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
     # Within the window the same helper answers: no new start.
     assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
     assert proxy._result_worker._process is first  # noqa: SLF001
     # Idle past the window: stopped, so what the result left in its memory is gone.
-    await asyncio.sleep(1.0)
+    for _ in range(100):
+        if proxy._result_worker._process is None:  # noqa: SLF001
+            break
+        await asyncio.sleep(0.1)
     assert proxy._result_worker._process is None  # noqa: SLF001
     assert proxy._result_worker.state == "idle"  # noqa: SLF001
     assert await asyncio.wait_for(first.wait(), 10) == 0
@@ -2041,12 +2049,13 @@ async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None
     from agent_team_backend import agent_tool_result_worker as worker
 
     _devmap_tool(monkeypatch)
-    monkeypatch.setattr(worker, "IDLE_S", 0.5)
-    # Works for 1.2 s, more than the window, telling it is alive every 0.2 s.
+    # A window that leaves a slow runner 0.8 s between two signs of life.
+    monkeypatch.setattr(worker, "IDLE_S", 1.0)
+    # Works for 2 s, more than the window, telling it is alive every 0.2 s.
     _fake_helper(monkeypatch, """
 ready()
 read(); read()
-for _ in range(6):
+for _ in range(10):
     write(b"")
     time.sleep(0.2)
 write(json.dumps({"ok": True}).encode())
