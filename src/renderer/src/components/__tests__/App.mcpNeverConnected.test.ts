@@ -88,3 +88,42 @@ describe('a message parked on an unopened pane for ten minutes', () => {
     expect(body).toContain('void realizeRestoredPane(paneId, false, { explicit: true })')
   })
 })
+
+describe('reconnecting a pane without the user (ui.pane.reconnectMcp)', () => {
+  // 2026-11-22: a pane's navide MCP dropped; neither the pane nor its
+  // commander could type /mcp reconnect navide (cli_send adds a sender line),
+  // so only the user's Reconnect click brought it back. The backend's
+  // automatic retry and a commander's ui_invoke both come through here.
+  function command(): string {
+    const at = appSource.indexOf("registerCommand('ui.pane.reconnectMcp', async (args) => {")
+    expect(at).toBeGreaterThan(-1)
+    return appSource.slice(at, appSource.indexOf('\n})\n', at))
+  }
+  function inPlace(): string {
+    const at = appSource.indexOf('async function reconnectPaneMcpInPlace(')
+    expect(at).toBeGreaterThan(-1)
+    return appSource.slice(at, appSource.indexOf('\n}\n', at))
+  }
+
+  it('is registered and documented in the action catalog', () => {
+    const catalog = readFileSync(resolve(process.cwd(), 'src/renderer/src/composables/uiActionCatalog.ts'), 'utf8')
+    expect(catalog).toContain("'ui.pane.reconnectMcp': { args: '{paneId}'")
+    expect(command()).toContain('if (!paneId) throw new Error(`ui.pane.reconnectMcp requires ${PANE_ID_HINT}`)')
+    expect(command()).toContain('return reconnectPaneMcpInPlace(paneId)')
+  })
+
+  it('only types the non-interactive command into an idle, unheld claude pane', () => {
+    const fn = inPlace()
+    expect(fn).toContain("if (status !== 'idle') return { sent: false, reason: 'busy', status }")
+    expect(fn).toContain("if (pane.agentKey !== 'claude') return { sent: false, reason: 'unsupported-cli' }")
+    expect(fn).toContain("if (hold !== null) return { sent: false, reason: 'held', hold }")
+    expect(fn).toContain("await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)")
+  })
+
+  it('never rebuilds: that ends background work and stays the user\'s click', () => {
+    const fn = inPlace()
+    expect(fn).not.toContain('rebuildPaneViaResume')
+    expect(fn).not.toContain('rebuildPaneClean')
+    expect(command()).not.toContain('rebuildPane')
+  })
+})

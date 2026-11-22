@@ -9965,6 +9965,23 @@ async function reconnectPaneMcp(paneId: string): Promise<void> {
 /** Claude Code's in-place reconnect of Navide's server (wiring SERVER_NAME). */
 const MCP_RECONNECT_COMMAND = '/mcp reconnect navide'
 
+/** ui.pane.reconnectMcp: only the in-place half of reconnectPaneMcp, for the
+ *  backend's automatic retry and a commander's ui_invoke (2026-11-22: neither
+ *  the pane nor its commander could type /mcp). Never the rebuild — that ends
+ *  the CLI's background work and stays the user's click. The reason goes back
+ *  so the backend counts only a try that went in. */
+async function reconnectPaneMcpInPlace(paneId: string): Promise<{ sent: boolean; reason?: string; status?: string; hold?: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.realized) return { sent: false, reason: 'not-open' }
+  const status = paneRefs[paneId]?.displayStatus as string | undefined
+  if (status !== 'idle') return { sent: false, reason: 'busy', status }
+  if (pane.agentKey !== 'claude') return { sent: false, reason: 'unsupported-cli' }
+  const hold = messagingHoldKey(paneId)
+  if (hold !== null) return { sent: false, reason: 'held', hold }
+  if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return { sent: true }
+  return { sent: false, reason: 'inject-failed' }
+}
+
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
  *  the account-switch restart aggregate silent failures into one toast. */
@@ -12601,6 +12618,15 @@ registerCommand('ui.pane.interrupt', async (args) => {
     awaitingKind,
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
+})
+// A pane whose navide MCP dropped cannot reconnect itself, and cli_send cannot
+// type a slash command for it: this is the backend's automatic retry and a
+// commander's way in. In place only, idle panes only (reconnectPaneMcpInPlace).
+registerCommand('ui.pane.reconnectMcp', async (args) => {
+  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  if (!paneId) throw new Error(`ui.pane.reconnectMcp requires ${PANE_ID_HINT}`)
+  if (!panes.value.some((p) => p.id === paneId)) throw new Error(`ui.pane.reconnectMcp: pane "${paneId}" not found`)
+  return reconnectPaneMcpInPlace(paneId)
 })
 // cli_set_model: switch a running pane's model. claude through its /model
 // picker's `s` (setModelViaPicker), codex by typing `/model <id>`
