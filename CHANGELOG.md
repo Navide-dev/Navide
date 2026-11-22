@@ -4,6 +4,8 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.46] — 2026-11-22
+
 ### Added
 
 - Diagnostics: two ways a pane could go missing after a restart without a trace now leave a warning in `ui_diagnostics` and the error log (`errors.jsonl`). `restore.pane-record-write-failed`: the record of a pane opened by an external `cli_open_agent` was not saved, so the pane will not be restored. `restore.workspace-check-gave-up`: a restored window could not read its workspace's project after every retry and showed it without its panes. Each names only the workspace and the pane; nothing else changes.
