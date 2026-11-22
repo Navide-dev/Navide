@@ -11,7 +11,7 @@ export const OFFICIAL_PLUGIN_VERSIONS: Readonly<Record<string, string>> = Object
   'navide.browser': '1.1.8',
   'navide.git': '1.0.11',
   'navide.mini-ide': '1.0.10',
-  'navide.plans': '1.1.10',
+  'navide.plans': '1.1.11',
 })
 
 /** First-party plugins developed in their own repositories: the installer
