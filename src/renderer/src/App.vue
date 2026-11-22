@@ -13693,6 +13693,7 @@ const channelAccountDeps: ChannelAccountDeps = {
     profilesForAgent: (agentKey) => cliProfilesApi.profilesForAgent(agentKey),
     orderedSlotIds: (agentKey) => cliProfilesApi.orderedSlotIds(agentKey),
     signedOut: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.signedIn === false,
+    email: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.email ?? null,
   },
   usage: (agentKey, profileId) => {
     const snap = accountUsageFor(agentKey, profileId)

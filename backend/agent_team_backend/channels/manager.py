@@ -3907,7 +3907,7 @@ class ChannelManager:
         """Switch to ``target`` once: the menu is closed first, so a second press is expired.
         The window re-checks that the active account is still the one the menu showed."""
         lang = menu.lang
-        to_label = next((r.label for r in menu.rows if r.id == target), target)
+        to_label = menu.label_of(target)
         self.accounts.close(menu)
         await self._account_settle(msg, menu, account_menu.text(lang, "switching", to=to_label))
 
@@ -3925,9 +3925,11 @@ class ChannelManager:
         """What the chat is told about a switch's answer, or about a queued one's end."""
         lang = menu.lang
         status = str(result.get("status") or "")
-        to_shown = account_menu.mask_email(str(result.get("to") or to_label))
+        # The menu's names, as its buttons showed them: the window's from/to are the
+        # agent-facing names ("Account 5"), which tell the person nothing.
+        to_shown = account_menu.mask_email(to_label or str(result.get("to") or ""))
         if status in ("switched", "switched-signed-out"):
-            from_label = account_menu.mask_email(str(result.get("from") or menu.current_label()))
+            from_label = account_menu.mask_email(menu.current_label() or str(result.get("from") or ""))
             lines = [account_menu.text(lang, "ok", to=to_shown, **{"from": from_label}) if status == "switched"
                      else account_menu.text(lang, "ok_signed_out", to=to_shown)]
             if menu.fixed_count:
@@ -4367,15 +4369,19 @@ class ChannelManager:
 
     async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
                                      from_label: str, to_id: str, to_label: str,
-                                     needs_login: bool = False) -> int:
+                                     needs_login: bool = False, from_builtin: bool = False,
+                                     to_builtin: bool = False) -> int:
         """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
         chat whose pane runs that CLI or was moved by the switch. Where the chat has
         buttons, a claude switch carries "switch back": a one-row /account menu, so the
         press goes the /account way (owner and chat checked, the active account
         re-checked by the window, written to account_switch_log). Returns the chats told."""
         lang = prompt_skills.language(await self._ui_settings())
-        shown_from = account_menu.mask_email(from_label or from_id)
-        shown_to = account_menu.mask_email(to_label or to_id)
+        from_row = account_menu.AccountRow(id=from_id, label=account_menu.mask_email(from_label or from_id),
+                                           builtin=from_builtin)
+        to_row = account_menu.AccountRow(id=to_id, label=account_menu.mask_email(to_label or to_id),
+                                         builtin=to_builtin, active=True)
+        shown_from, shown_to = from_row.name(lang), to_row.name(lang)
         body = account_menu.text(lang, "failover_needs_login" if needs_login else "failover_done",
                                  to=shown_to, **{"from": shown_from})
         moved = set(pane_ids)
@@ -4399,8 +4405,7 @@ class ChannelManager:
                 menu = self.accounts.create(
                     location_key=loc.key(), sender_id=loc.chat_id, lang=lang, agent_key=agent_key,
                     active_id=to_id,
-                    rows=[account_menu.AccountRow(id=from_id, label=shown_from),
-                          account_menu.AccountRow(id=to_id, label=shown_to, active=True)],
+                    rows=[from_row, to_row],
                 )
                 rows = self.accounts.render_single(menu, from_id, account_menu.text(lang, "switch_back", to=shown_from))
                 buttons = [row[0] for row in rows]
