@@ -1362,7 +1362,9 @@ async def test_auto_never_restarts_a_vendor_that_cannot_resume(h: Harness, monke
 
 
 @pytest.mark.asyncio
-async def test_env_credential_panes_refuse_auto_and_are_listed_untouched_for_manual(h: Harness) -> None:
+async def test_env_credential_panes_do_not_stop_auto_for_the_vault_panes(h: Harness) -> None:
+    # One pane on an environment credential used to cancel the whole run; the
+    # vault-backed panes now move and the env pane is named as untouched.
     await h.service.set_policy("auto")
     h.vault.slot_secrets[("codex", "__default__")] = "secret"
     b = h.profile("codex", "B")
@@ -1373,14 +1375,157 @@ async def test_env_credential_panes_refuse_auto_and_are_listed_untouched_for_man
     h.exhausted_reading("codex", "__default__")
     h.headroom_reading("codex", b)
     incident, _ = await h.service.report(h.report_payload("codex", "pane-1"))
-    assert incident.state == "notify-stopped" and incident.reason == "credential-override"
-    assert h.vault.switch_calls == []
+    assert incident.reason != "credential-override"
+    tx = h.service.transactions[incident.transaction_ids[0]]
+    assert tx.automatic and tx.state == "preparing"
+    assert tx.overridden_panes == ["pane-env"]
+    assert set(tx.panes) == {"pane-1"}
+
+
+@pytest.mark.asyncio
+async def test_manual_switch_lists_env_credential_panes_untouched(h: Harness) -> None:
+    h.vault.slot_secrets[("codex", "__default__")] = "secret"
+    b = h.profile("codex", "B")
+    s = h.session()
+    h.pane(s, "t1", "codex", "pane-1", pin="__default__", auth_scope="codex")
+    h.pane(s, "t2", "codex", "pane-env", pin="__default__", auth_scope="codex",
+           credential_source="env-override")
     tx = await h.service.begin_switch({
         "agent_key": "codex", "to_slot_id": b, "expected_current_slot_id": "__default__",
         "expected_epoch": 0, "idempotency_key": "m", "automatic": False,
     })
     assert tx.overridden_panes == ["pane-env"]
     assert set(tx.panes) == {"pane-1"}
+
+
+@pytest.mark.asyncio
+async def test_auto_hot_switch_moves_vault_panes_and_names_env_panes(h: Harness) -> None:
+    await h.service.set_policy("auto")
+    b = await _claude_two_accounts(h)
+    s = h.session()
+    h.pane(s, "t1", "claude", "pane-1", pin="__default__", auth_scope="claude", credential_source="vault")
+    h.pane(s, "t2", "claude", "pane-env", pin="__default__", auth_scope="claude",
+           credential_source="env-override")
+    h.exhausted_reading("claude", "__default__")
+    h.headroom_reading("claude", b)
+    incident, _ = await h.service.report(h.report_payload("claude", "pane-1"))
+    assert h.vault.switch_calls == [("claude", "__default__", b, None)]
+    assert incident.state == "settling"
+    tx = h.service.transactions[incident.transaction_ids[0]]
+    assert tx.state == "committed" and tx.overridden_panes == ["pane-env"]
+    commit = h.events_of("quota_failover.commit")[-1]["payload"]
+    assert commit["overriddenPanes"] == ["pane-env"]
+    assert {p["paneId"] for p in commit["panes"]} == {"pane-1"}
+
+
+@pytest.mark.asyncio
+async def test_auto_still_refuses_when_every_pane_is_on_an_env_credential(h: Harness) -> None:
+    await h.service.set_policy("auto")
+    b = await _claude_two_accounts(h)
+    s = h.session()
+    h.pane(s, "t1", "claude", "pane-env", pin="__default__", auth_scope="claude",
+           credential_source="env-override")
+    h.exhausted_reading("claude", "__default__")
+    h.headroom_reading("claude", b)
+    incident, _ = await h.service.report(h.report_payload("claude", "pane-env"))
+    assert incident.state == "notify-stopped" and incident.reason == "credential-override"
+    assert h.vault.switch_calls == []
+
+
+# ── stopped incidents: reminder and expiry ──────────────────────────────────
+
+async def _stopped_claude_incident(h: Harness, *, resets_in: float = 7 * 86400) -> qf.Incident:
+    await h.service.set_policy("auto")
+    b = await _claude_two_accounts(h)
+    s = h.session()
+    h.pane(s, "t1", "claude", "pane-1", pin="__default__")
+    h.exhausted_reading("claude", "__default__")
+    h.exhausted_reading("claude", b)
+    incident, _ = await h.service.report(h.report_payload(
+        "claude", "pane-1", resets_at=iso(h.clock.now() + resets_in), window_kind="weekly"))
+    assert incident.state == "notify-stopped" and incident.reason == "no-candidate"
+    return incident
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_incident_reminds_then_expires(h: Harness) -> None:
+    incident = await _stopped_claude_incident(h)
+    key = f"stuck:{incident.id}"
+    assert incident.stopped_at == NOW and key in h.service._timers
+    state = h.service.state()["incidents"][0]
+    assert state["stoppedAt"] == iso(NOW) and state["expiresAt"] == iso(NOW + qf.STUCK_EXPIRE_S)
+    # Too early: nothing.
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    assert h.events_of("quota_failover.stuck") == []
+    h.clock.advance(qf.STUCK_REMIND_S)
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    stuck = h.events_of("quota_failover.stuck")
+    assert len(stuck) == 1
+    ev = stuck[0]["payload"]
+    assert ev["incidentId"] == incident.id and ev["reason"] == "no-candidate"
+    assert ev["final"] is False and ev["reminders"] == 1 and ev["paneIds"] == ["pane-1"]
+    assert incident.open
+    # The next reminder waits its interval.
+    h.clock.advance(60)
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    assert len(h.events_of("quota_failover.stuck")) == 1
+    h.clock.advance(qf.STUCK_EXPIRE_S)
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    final = h.events_of("quota_failover.stuck")[-1]["payload"]
+    assert final["final"] is True and final["reason"] == "no-candidate"
+    assert not incident.open and incident.reason == "stuck-expired"
+    assert key not in h.service._timers
+    # The next exhaustion opens a fresh run instead of landing in the old one.
+    h.clock.advance(60)
+    again, created = await h.service.report(h.report_payload("claude", "pane-1", idempotency_key="r2"))
+    assert created and again.id != incident.id
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_incident_expires_when_its_window_resets_first(h: Harness) -> None:
+    incident = await _stopped_claude_incident(h, resets_in=3600)
+    assert incident.stuck_expires_at() == NOW + 3600
+    h.clock.advance(3600)
+    await h.service.tick(f"stuck:{incident.id}")
+    await asyncio.sleep(0)
+    assert not incident.open and incident.reason == "stuck-expired"
+
+
+@pytest.mark.asyncio
+async def test_a_stop_the_user_caused_is_not_reminded_but_still_expires(h: Harness) -> None:
+    incident = await _stopped_claude_incident(h)
+    incident.reason = "user-cancelled"
+    key = f"stuck:{incident.id}"
+    h.clock.advance(qf.STUCK_REMIND_S)
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    assert h.events_of("quota_failover.stuck") == []
+    h.clock.advance(qf.STUCK_EXPIRE_S)
+    await h.service.tick(key)
+    await asyncio.sleep(0)
+    assert h.events_of("quota_failover.stuck") == [] and not incident.open
+
+
+@pytest.mark.asyncio
+async def test_stuck_listeners_hear_reminders(h: Harness) -> None:
+    heard: list[dict[str, Any]] = []
+
+    async def listener(event: dict[str, Any]) -> None:
+        heard.append(event)
+
+    remove = qf.add_stuck_listener(listener)
+    try:
+        incident = await _stopped_claude_incident(h)
+        h.clock.advance(qf.STUCK_REMIND_S)
+        await h.service.tick(f"stuck:{incident.id}")
+        await asyncio.sleep(0)
+    finally:
+        remove()
+    assert [e["incidentId"] for e in heard] == [incident.id]
 
 
 @pytest.mark.asyncio

@@ -77,6 +77,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 切換模型",
         "failover_done": "🔄 額度用完，已自動接續：Claude 從 {from} 換到 {to}。",
         "failover_needs_login": "⚠️ 額度用完，Claude 已自動換到 {to}，但這個帳號沒有可用的登入，請到 Navide 視窗登入。",
+        "failover_stuck": "⏸ {agent} 額度用完後的自動接續停住了（{reason}），已經 {minutes} 分鐘沒有處理。請到 Navide 視窗切換帳號；{expires} 後會自動結束這次接續。",
+        "failover_stuck_expired": "⌛ {agent} 停住的自動接續已到期結束（{reason}）。下次額度用完時會重新嘗試自動接續。",
         "switch_back": "↩ 改回 {to}",
     },
     "en-US": {
@@ -108,6 +110,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Switch model",
         "failover_done": "🔄 Quota ran out, so Navide continued on another account: Claude switched from {from} to {to}.",
         "failover_needs_login": "⚠️ Quota ran out and Claude switched to {to}, but that account has no usable sign-in; sign in from the Navide window.",
+        "failover_stuck": "⏸ Automatic continuation for {agent} stopped after the quota ran out ({reason}) and has waited {minutes} min. Switch accounts in the Navide window; this run ends on its own in {expires}.",
+        "failover_stuck_expired": "⌛ The stopped continuation for {agent} expired ({reason}). The next time the quota runs out, Navide tries to continue automatically again.",
         "switch_back": "↩ Switch back to {to}",
     },
     "ja-JP": {
@@ -139,6 +143,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 モデル切替",
         "failover_done": "🔄 クォータが切れたため自動で継続しました：Claude を {from} から {to} に切り替えました。",
         "failover_needs_login": "⚠️ クォータが切れ、Claude は {to} に切り替わりましたが、このアカウントには使えるログインがありません。Navide のウィンドウでログインしてください。",
+        "failover_stuck": "⏸ {agent} のクォータ切れ後の自動継続が止まったまま {minutes} 分経過しました（{reason}）。Navide のウィンドウでアカウントを切り替えてください。{expires} 後にこの継続は自動で終了します。",
+        "failover_stuck_expired": "⌛ 止まっていた {agent} の自動継続は期限切れで終了しました（{reason}）。次にクォータが切れたときは、改めて自動継続を試みます。",
         "switch_back": "↩ {to} に戻す",
     },
     "zh-CN": {
@@ -170,6 +176,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 切换模型",
         "failover_done": "🔄 额度用完，已自动接续：Claude 从 {from} 换到 {to}。",
         "failover_needs_login": "⚠️ 额度用完，Claude 已自动换到 {to}，但这个账号没有可用的登录，请到 Navide 窗口登录。",
+        "failover_stuck": "⏸ {agent} 额度用完后的自动接续停住了（{reason}），已经 {minutes} 分钟没有处理。请到 Navide 窗口切换账号；{expires} 后会自动结束这次接续。",
+        "failover_stuck_expired": "⌛ {agent} 停住的自动接续已到期结束（{reason}）。下次额度用完时会重新尝试自动接续。",
         "switch_back": "↩ 改回 {to}",
     },
     "ko-KR": {
@@ -201,6 +209,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 모델 전환",
         "failover_done": "🔄 할당량이 소진되어 자동으로 이어갑니다: Claude를 {from}에서 {to}(으)로 전환했습니다.",
         "failover_needs_login": "⚠️ 할당량이 소진되어 Claude가 {to}(으)로 전환됐지만 이 계정에 사용할 수 있는 로그인이 없습니다. Navide 창에서 로그인하세요.",
+        "failover_stuck": "⏸ {agent} 할당량 소진 후 자동 이어가기가 멈춘 지 {minutes}분이 지났습니다({reason}). Navide 창에서 계정을 전환하세요. {expires} 후 이번 이어가기는 자동으로 종료됩니다.",
+        "failover_stuck_expired": "⌛ 멈춰 있던 {agent} 자동 이어가기가 만료되어 종료됐습니다({reason}). 다음에 할당량이 소진되면 다시 자동으로 이어가기를 시도합니다.",
         "switch_back": "↩ {to}(으)로 되돌리기",
     },
     "es-ES": {
@@ -232,6 +242,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Cambiar modelo",
         "failover_done": "🔄 Se agotó la cuota y Navide siguió con otra cuenta: Claude cambió de {from} a {to}.",
         "failover_needs_login": "⚠️ Se agotó la cuota y Claude cambió a {to}, pero esa cuenta no tiene un inicio de sesión válido; inicia sesión en la ventana de Navide.",
+        "failover_stuck": "⏸ La continuación automática de {agent} se detuvo al agotarse la cuota ({reason}) y lleva {minutes} min esperando. Cambia de cuenta en la ventana de Navide; este intento termina solo en {expires}.",
+        "failover_stuck_expired": "⌛ La continuación detenida de {agent} caducó ({reason}). La próxima vez que se agote la cuota, Navide volverá a intentar continuar automáticamente.",
         "switch_back": "↩ Volver a {to}",
     },
     "fr-FR": {
@@ -263,6 +275,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Changer de modèle",
         "failover_done": "🔄 Quota épuisé, Navide a continué sur un autre compte : Claude est passé de {from} à {to}.",
         "failover_needs_login": "⚠️ Quota épuisé et Claude est passé à {to}, mais ce compte n'a pas de connexion utilisable ; connectez-vous depuis la fenêtre Navide.",
+        "failover_stuck": "⏸ La reprise automatique de {agent} s'est arrêtée après l'épuisement du quota ({reason}) et attend depuis {minutes} min. Changez de compte dans la fenêtre Navide ; cette tentative se termine seule dans {expires}.",
+        "failover_stuck_expired": "⌛ La reprise arrêtée de {agent} a expiré ({reason}). La prochaine fois que le quota sera épuisé, Navide réessaiera de reprendre automatiquement.",
         "switch_back": "↩ Revenir à {to}",
     },
     "de-DE": {
@@ -294,6 +308,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Modell wechseln",
         "failover_done": "🔄 Kontingent aufgebraucht, Navide macht mit einem anderen Konto weiter: Claude wechselte von {from} zu {to}.",
         "failover_needs_login": "⚠️ Kontingent aufgebraucht und Claude wechselte zu {to}, aber dieses Konto hat keine gültige Anmeldung; melde dich im Navide-Fenster an.",
+        "failover_stuck": "⏸ Die automatische Fortsetzung für {agent} ist nach dem aufgebrauchten Kontingent stehen geblieben ({reason}) und wartet seit {minutes} Min. Wechsle das Konto im Navide-Fenster; dieser Versuch endet von selbst in {expires}.",
+        "failover_stuck_expired": "⌛ Die stehengebliebene Fortsetzung für {agent} ist abgelaufen ({reason}). Wenn das Kontingent das nächste Mal aufgebraucht ist, versucht Navide wieder automatisch fortzusetzen.",
         "switch_back": "↩ Zurück zu {to}",
     },
     "pt-BR": {
@@ -325,6 +341,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Trocar modelo",
         "failover_done": "🔄 A cota acabou e o Navide continuou em outra conta: o Claude trocou de {from} para {to}.",
         "failover_needs_login": "⚠️ A cota acabou e o Claude trocou para {to}, mas essa conta não tem um login válido; entre pela janela do Navide.",
+        "failover_stuck": "⏸ A continuação automática do {agent} parou depois que a cota acabou ({reason}) e está esperando há {minutes} min. Troque de conta na janela do Navide; esta tentativa termina sozinha em {expires}.",
+        "failover_stuck_expired": "⌛ A continuação parada do {agent} expirou ({reason}). Na próxima vez que a cota acabar, o Navide tentará continuar automaticamente de novo.",
         "switch_back": "↩ Voltar para {to}",
     },
     "ru-RU": {
@@ -356,6 +374,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Сменить модель",
         "failover_done": "🔄 Квота закончилась, Navide продолжил на другом аккаунте: Claude переключён с {from} на {to}.",
         "failover_needs_login": "⚠️ Квота закончилась, Claude переключён на {to}, но у этого аккаунта нет рабочего входа; войдите в окне Navide.",
+        "failover_stuck": "⏸ Автоматическое продолжение для {agent} остановилось после исчерпания квоты ({reason}) и ждёт уже {minutes} мин. Переключите аккаунт в окне Navide; эта попытка завершится сама через {expires}.",
+        "failover_stuck_expired": "⌛ Остановленное продолжение для {agent} истекло ({reason}). Когда квота закончится в следующий раз, Navide снова попробует продолжить автоматически.",
         "switch_back": "↩ Вернуть {to}",
     },
     "vi-VN": {
@@ -387,6 +407,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Đổi mô hình",
         "failover_done": "🔄 Hết hạn mức, Navide đã tiếp tục bằng tài khoản khác: Claude đổi từ {from} sang {to}.",
         "failover_needs_login": "⚠️ Hết hạn mức và Claude đã đổi sang {to}, nhưng tài khoản này chưa có đăng nhập dùng được; hãy đăng nhập trong cửa sổ Navide.",
+        "failover_stuck": "⏸ Việc tự động tiếp tục cho {agent} đã dừng sau khi hết hạn mức ({reason}) và đã chờ {minutes} phút. Hãy đổi tài khoản trong cửa sổ Navide; lượt này sẽ tự kết thúc sau {expires}.",
+        "failover_stuck_expired": "⌛ Lượt tiếp tục bị dừng của {agent} đã hết hạn ({reason}). Lần tới khi hết hạn mức, Navide sẽ thử tự động tiếp tục lại.",
         "switch_back": "↩ Đổi lại {to}",
     },
 }

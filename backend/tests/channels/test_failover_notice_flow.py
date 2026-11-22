@@ -120,3 +120,19 @@ async def test_another_cli_gets_the_notice_without_a_button(env: Env) -> None:
     await _notify(env, agent_key="codex")
     body = am.text("zh-TW", "failover_done", **{"from": "Work", "to": "som…@example.test"})
     assert _said(env, body) and body not in env.tg.buttons
+
+
+async def test_a_stopped_continuation_reminder_reaches_the_direct_chat(env: Env) -> None:
+    _direct(env)
+    env.fake.agents["pane-2"] = "claude"
+    assert await env.m.notify_failover_stuck(agent_key="claude", pane_ids=["pane-2"],
+                                             reason="credential-override", minutes=15,
+                                             expires_in="5h45m", final=False) == 1
+    body = am.text("zh-TW", "failover_stuck", agent="Claude", reason="credential-override",
+                   minutes=15, expires="5h45m")
+    assert _said(env, body)
+    assert await env.m.notify_failover_stuck(agent_key="claude", pane_ids=["pane-2"],
+                                             reason="credential-override", minutes=360,
+                                             expires_in="", final=True) == 1
+    assert _said(env, am.text("zh-TW", "failover_stuck_expired", agent="Claude",
+                              reason="credential-override"))

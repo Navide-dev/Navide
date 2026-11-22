@@ -17,6 +17,7 @@ import {
   loopFailoverResumeStep,
   shouldResumeLoopAfterFailover,
 } from '../../lib/loopFailoverResume'
+import { leaveLimitMenuAndResume } from '../../lib/claudeLimitMenu'
 
 // Execute the actual App functions, with IO replaced at their boundaries.
 // Mounting App would start terminal/backend lifecycles; copying the functions
@@ -28,6 +29,7 @@ const names = [
   'clearPaneUsageLimit', 'clearPaneUsageLimits', 'dismissPaneUsageLimit',
   'resumeLoopNow', 'continueRestoredPane', 'paneUsageLimited',
   'resumeLoopAfterFailover', 'loopResumesAfterFailover', 'verifiedHotSwitchedPanes',
+  'leaveLimitMenuAfterSwitch',
 ]
 function appFunctions(names: string[], scope: Record<string, unknown>) {
   const selected = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && names.includes(node.name?.text ?? ''))
@@ -95,13 +97,16 @@ function harness(opts: { loopFailoverResume?: boolean } = {}) {
     continueInFlight: new Set(), messagingHoldKey: () => null,
     LOOP_RESUME_SETTING_KEY: 'loop-resume', DEFAULT_LOOP_RESUME: 'continue',
     loopFailoverResumeArmed: new Map<string, number>(),
+    leaveLimitMenuAndResume, AWAITING_SCREEN_LINES: 40,
+    backend: { send: vi.fn(async () => ({})) },
+    notifyRestore: { toast: vi.fn() }, i18n: { global: { t: (key: string) => key } },
     ...loopFailoverScope(!!opts.loopFailoverResume),
   }
   const fns = appFunctions(names, scope)
   fns.startLoopLimitWatcher('p1')
   watchers.get('p1')!.armedAt = now - 30000
   const commit = quotaCommitHandler({ ...scope, ...fns })
-  return { pane, fns, watchers, acquire, inject, commit, armed: scope.loopFailoverResumeArmed }
+  return { pane, fns, watchers, acquire, inject, commit, armed: scope.loopFailoverResumeArmed, scope }
 }
 
 const hotCommit = { agentKey: 'claude', incidentId: 'inc', switchMode: 'hot', restartStrategy: 'none', state: 'committed', toSlotId: 'b', panes: [{ paneId: 'p1' }] }
@@ -161,6 +166,65 @@ describe('loop resume after an automatic failover switch (opt-in)', () => {
     await vi.advanceTimersByTimeAsync(10000)
     expect(h.inject).not.toHaveBeenCalled()
     expect(h.armed.size).toBe(0)
+  })
+})
+
+const LIMIT_MENU = [
+  "You've hit your limit · resets 12pm (Asia/Taipei)",
+  ' What do you want to do?',
+  ' ❯ 1. Stop and wait for limit to reset',
+  '   2. Wait here, then continue automatically at Oct 16 at 12pm',
+  '   3. Switch to usage credits',
+  ' Enter to confirm · Esc to cancel',
+].join('\n')
+
+/** A pane parked on Claude's limit menu; the menu goes once a key is written. */
+function onLimitMenu(h: ReturnType<typeof harness>, loopActive: boolean) {
+  Object.assign(h.pane, { realized: true, loopActive })
+  let screen = LIMIT_MENU
+  const send = h.scope.backend.send as ReturnType<typeof vi.fn>
+  send.mockImplementation(async () => { screen = '> ' ; return {} })
+  Object.assign(h.scope.paneRefs.p1, { sessionId: 'term-1', readScreenTail: () => screen })
+  return send
+}
+
+describe('leaving the limit menu after a hot switch', () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-21T10:01:00Z')) })
+  afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
+
+  it('answers the menu with "stop" and continues the task', async () => {
+    const h = harness()
+    const send = onLimitMenu(h, false)
+    h.commit(hotCommit)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(send).toHaveBeenCalledWith('terminal.input', { terminal_session_id: 'term-1', data: '\r' })
+    expect(h.inject).toHaveBeenCalledTimes(1)
+    expect(h.inject.mock.calls[0].slice(1, 3)).toEqual(['continue', 'failover-continue'])
+  })
+
+  it('a loop pane only leaves the menu; its own resume carries on', async () => {
+    const h = harness()
+    const send = onLimitMenu(h, true)
+    h.commit(hotCommit)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(send).toHaveBeenCalledTimes(1)
+    expect(h.inject).not.toHaveBeenCalled()
+  })
+
+  it('leaves a pane alone when the account it moved to needs a sign-in', async () => {
+    const h = harness()
+    const send = onLimitMenu(h, false)
+    h.commit({ ...hotCommit, needsLogin: true })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(send).not.toHaveBeenCalled()
+    expect(h.inject).not.toHaveBeenCalled()
+  })
+
+  it('names each pane the swap could not reach', () => {
+    const h = harness()
+    Object.assign(h.pane, { realized: true, customName: 'env pane' })
+    h.commit({ ...hotCommit, panes: [], overriddenPanes: ['p1'] })
+    expect(h.scope.notifyRestore.toast).toHaveBeenCalledWith('announce.quota.pane-not-switched', { type: 'error' })
   })
 })
 
