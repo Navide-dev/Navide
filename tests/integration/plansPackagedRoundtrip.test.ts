@@ -1335,7 +1335,9 @@ describe('Plans packaged backend composition', () => {
         const emitted = readdirSync(assetsDirectory).filter((name) => name.endsWith('.js'))
           .map((name) => readFileSync(join(assetsDirectory, name), 'utf8')).join('\n')
         expect(emitted).toContain(JSON.stringify(provenance!.buildId))
-        await vi.waitFor(() => expect(root.querySelector('.prt-notes-btn')).not.toBeNull())
+        // Opening the document is a real round trip through the packaged
+        // child, so a slow runner gets more than one second.
+        await vi.waitFor(() => expect(root.querySelector('.prt-notes-btn')).not.toBeNull(), { timeout: 5_000 })
         const get = (selector: string) => {
           const element = root.querySelector(selector)
           expect(element, selector).not.toBeNull()
