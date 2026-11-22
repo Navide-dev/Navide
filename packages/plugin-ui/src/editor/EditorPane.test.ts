@@ -134,12 +134,33 @@ describe('EditorPane.prepareClose', () => {
 
   it.each([
     ['binary', async () => ({ ok: false, is_binary: true, size: 4 }) as EditorReadResult],
-    ['failed read', async () => ({ ok: false, error: 'nope' }) as EditorReadResult],
-  ])('returns null for a %s pane', async (_name, read) => {
+    ['image', async () => ({ ok: false, is_image: true, size: 4, ext: '.png' }) as EditorReadResult],
+    ['failed read', async () => ({ ok: false, error: 'not a file' }) as EditorReadResult],
+  ])('grants a no-op lease for a %s pane with no editable model', async (_name, read) => {
     const editorPort = port(read)
     const wrapper = mountEditor(editorPort)
     await flushPromises()
+    const pane = wrapper.vm as unknown as { prepareClose: () => { isCurrent(): boolean; release(): void } | null }
+    const guard = pane.prepareClose()
+    expect(guard).not.toBeNull()
+    expect(guard?.isCurrent()).toBe(true)
+    guard?.release()
+    expect(guard?.isCurrent()).toBe(true)
+    expect(editor.setReadOnly).not.toHaveBeenCalled()
+    // A cancelled close leaves nothing latched: the next close attempt is granted again.
+    expect(pane.prepareClose()).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('still refuses a lease while the first read is in flight', async () => {
+    const read = deferred<EditorReadResult>()
+    const editorPort = port(() => read.promise)
+    const wrapper = mountEditor(editorPort)
+    await vi.waitFor(() => expect(editorPort.readFile).toHaveBeenCalledOnce())
     expect((wrapper.vm as unknown as { prepareClose: () => unknown }).prepareClose()).toBeNull()
+    read.resolve({ ok: false, error: 'not a file' } as EditorReadResult)
+    await flushPromises()
+    expect((wrapper.vm as unknown as { prepareClose: () => unknown }).prepareClose()).not.toBeNull()
     wrapper.unmount()
   })
 
