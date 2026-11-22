@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any, Callable
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ REQUESTER = "quota-failover"
 _DEFAULT_SLOT_ID = "__default__"
 
 _remove: Callable[[], None] | None = None
+_remove_stuck: Callable[[], None] | None = None
 
 
 def account_name(app: Any, agent_key: str, profile_id: str) -> str:
@@ -95,16 +97,54 @@ async def on_commit(event: dict[str, Any]) -> None:
     )
 
 
+def _duration(seconds: float) -> str:
+    minutes = max(0, int(seconds // 60))
+    return f"{minutes // 60}h{minutes % 60:02d}m" if minutes >= 60 else f"{minutes}m"
+
+
+async def on_stuck(event: dict[str, Any]) -> None:
+    """A stopped continuation is still open (or just expired): tell the chats,
+    so an incident nobody saw in the window does not sit for hours."""
+    from datetime import datetime
+
+    from .channels import get_manager
+
+    manager = get_manager()
+    if manager is None:
+        return
+    expires_in = ""
+    raw = event.get("expiresAt")
+    if isinstance(raw, str) and raw:
+        try:
+            left = datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp() - time.time()
+            expires_in = _duration(left)
+        except ValueError:
+            expires_in = ""
+    pane_ids = event.get("paneIds")
+    await manager.notify_failover_stuck(
+        agent_key=str(event.get("agentKey") or ""),
+        pane_ids=[str(p) for p in pane_ids] if isinstance(pane_ids, list) else [],
+        reason=str(event.get("reason") or "unknown"),
+        minutes=max(0, int(event.get("stoppedForSec") or 0) // 60),
+        expires_in=expires_in, final=bool(event.get("final")),
+    )
+
+
 def install() -> None:
-    global _remove
-    from .quota_failover import add_commit_listener
+    global _remove, _remove_stuck
+    from .quota_failover import add_commit_listener, add_stuck_listener
 
     if _remove is None:
         _remove = add_commit_listener(on_commit)
+    if _remove_stuck is None:
+        _remove_stuck = add_stuck_listener(on_stuck)
 
 
 def uninstall() -> None:
-    global _remove
+    global _remove, _remove_stuck
     if _remove is not None:
         _remove()
         _remove = None
+    if _remove_stuck is not None:
+        _remove_stuck()
+        _remove_stuck = None

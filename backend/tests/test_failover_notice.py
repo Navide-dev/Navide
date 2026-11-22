@@ -42,6 +42,10 @@ class Manager:
         self.calls.append(kw)
         return 1
 
+    async def notify_failover_stuck(self, **kw: Any) -> int:
+        self.calls.append(kw)
+        return 1
+
 
 @pytest.fixture
 def wired(tmp_path, monkeypatch):
@@ -124,10 +128,25 @@ async def test_no_channels_still_records(wired, monkeypatch) -> None:
     assert len(log.list_recent()) == 1
 
 
+async def test_a_stopped_continuation_is_told_to_the_chats(wired) -> None:
+    # 2026-11-21: incident 8b0adfc46290 sat in notify-stopped for 20 hours unseen.
+    import time
+
+    _, manager = wired
+    expires = quota_failover._now_iso(time.time() + 3 * 3600 + 30)
+    await failover_notice.on_stuck({
+        "incidentId": "i1", "agentKey": "claude", "reason": "credential-override",
+        "stoppedForSec": 900, "expiresAt": expires, "final": False, "paneIds": ["pane-1"],
+    })
+    assert manager.calls == [{"agent_key": "claude", "pane_ids": ["pane-1"], "reason": "credential-override",
+                              "minutes": 15, "expires_in": "3h00m", "final": False}]
+
+
 def _tx(**kw: Any) -> SimpleNamespace:
     tx = SimpleNamespace(id="tx1", agent_key="claude", from_slot_id="__default__", to_slot_id="p-b",
                          automatic=True, state="committed",
-                         panes={"pane-2": {"paneId": "pane-2"}}, hot_switched_panes=[{"paneId": "pane-1"}])
+                         panes={"pane-2": {"paneId": "pane-2"}}, hot_switched_panes=[{"paneId": "pane-1"}],
+                         overridden_panes=[])
     for k, v in kw.items():
         setattr(tx, k, v)
     return tx
@@ -156,7 +175,7 @@ async def test_commit_listeners_get_the_event_and_cannot_fail_the_switch() -> No
             remove()
     assert got == [{"transactionId": "tx1", "agentKey": "claude", "fromSlotId": "__default__",
                     "toSlotId": "p-b", "automatic": True, "state": "committed", "needsLogin": False,
-                    "paneIds": ["pane-1", "pane-2"]}]
+                    "paneIds": ["pane-1", "pane-2"], "overriddenPaneIds": []}]
     assert quota_failover._commit_listeners == []
 
 

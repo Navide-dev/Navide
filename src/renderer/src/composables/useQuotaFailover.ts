@@ -220,6 +220,8 @@ export interface CommitEvent {
   needsLogin: boolean
   needsLoginReason: string | null
   panes: PrepareEventPane[]
+  /** Pane ids the swap could not reach: their credential comes from the environment. */
+  overriddenPanes?: string[]
 }
 
 /** What a pane answers to `prepare`. `ready` is a positive claim: the pane is

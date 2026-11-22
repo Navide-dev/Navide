@@ -311,7 +311,8 @@ def test_render_single_offers_one_target_once() -> None:
 @pytest.mark.parametrize("lang", sorted(am.STRINGS))
 def test_every_language_formats(lang: str) -> None:
     for key in am.STRINGS["zh-TW"]:
-        am.text(lang, key, current="x", count=1, agent="a", to="t", code="c", error="e", **{"from": "f"})
+        am.text(lang, key, current="x", count=1, agent="a", to="t", code="c", error="e",
+                reason="r", minutes=1, expires="1h00m", **{"from": "f"})
 
 
 def test_switch_answer_reads_the_shared_switch() -> None:

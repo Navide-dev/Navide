@@ -364,6 +364,7 @@ import {
 } from './lib/welcomeTour'
 import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
+import { leaveLimitMenuAndResume } from './lib/claudeLimitMenu'
 import {
   LOOP_RESUME_SETTING_KEY,
   DEFAULT_LOOP_RESUME,
@@ -7270,6 +7271,43 @@ const continueInFlight = new Set<string>()
  *  watcher, no re-arm, no done-marker instruction: this is a manual nudge, not
  *  an unattended loop. injectPane clears the flag, which hides the button; a
  *  failed injection restores it so the click can be retried. */
+/** After a hot account switch: leave Claude's "You've hit your limit" menu if
+ *  the pane is parked on it, then (when wanted) type the continue text so the
+ *  original task carries on under the new account. */
+async function leaveLimitMenuAfterSwitch(paneId: string, resume: boolean): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  const ref = paneRefs[paneId]
+  if (!pane?.realized || pane.agentKey !== 'claude' || pane.isLogin || !ref?.sessionId) return
+  if (continueInFlight.has(paneId)) return
+  continueInFlight.add(paneId)
+  try {
+    const screen = (): string => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+    const outcome = await leaveLimitMenuAndResume({
+      read: screen,
+      write: (data) => { void backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }) },
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      resume: resume
+        ? async () => {
+          // Same gate every other unsolicited injection passes.
+          if (messagingHoldKey(paneId) !== null) return false
+          await acquireInjectionSlot()
+          try {
+            return await injectPane(paneId, settingsGet(LOOP_RESUME_SETTING_KEY, DEFAULT_LOOP_RESUME), 'failover-continue', true)
+          } finally {
+            releaseInjectionSlot()
+          }
+        }
+        : undefined,
+    })
+    if (outcome === 'menu-stuck' || outcome === 'resume-failed') {
+      console.warn(`[failover-continue] pane ${paneId}: ${outcome}`)
+      pane.resumeContinueAvailable = true
+    }
+  } finally {
+    continueInFlight.delete(paneId)
+  }
+}
+
 async function continueRestoredPane(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.resumeContinueAvailable) return
@@ -11774,7 +11812,23 @@ quotaFailover.initQuotaFailover(backend, {
         }
         if (loopFailoverResumeArmed.has(pane.id)) pane.resumeContinueAvailable = false
         else if (pane.loopActive) pane.resumeContinueAvailable = true
+        // The pane's next request already uses the new account: a pane parked on
+        // Claude's limit menu leaves it and carries on with its task. A loop pane
+        // only leaves the menu; its own resume (or Continue button) goes on.
+        if (ev.switchMode === 'hot' && ev.state === 'committed' && !ev.needsLogin) {
+          void leaveLimitMenuAfterSwitch(pane.id, !loopFailoverResumeArmed.has(pane.id) && !pane.loopActive)
+        }
       }
+    }
+    // Panes the swap could not reach (their credential comes from the
+    // environment) are named one by one, so nobody reads them as switched.
+    for (const paneId of ev.overriddenPanes ?? []) {
+      const pane = panes.value.find((p) => p.id === paneId && p.realized)
+      if (!pane) continue
+      notifyRestore.toast(
+        i18n.global.t('announce.quota.pane-not-switched', { pane: pane.customName || pane.autoName || pane.agentKey }),
+        { type: 'error' },
+      )
     }
   },
   onIncidentReady: (incident: FailoverIncident) => releaseQuotaGate(incident.id),
@@ -19552,6 +19606,21 @@ backend.on('claude.account_dir_notice', (raw) => {
       { type: 'error', duration: 12000 }
     )
   }
+})
+
+// A stopped quota continuation nobody acted on: the backend reminds while it
+// stays open and once more when it expires, so it cannot sit unseen for hours.
+backend.on('quota_failover.stuck', (raw) => {
+  const ev = raw as { agentKey?: string; reason?: string | null; stoppedForSec?: number; final?: boolean; paneIds?: string[] }
+  if (!(ev.paneIds ?? []).some((id) => panes.value.some((p) => p.id === id && p.realized))) return
+  const agent = agentSpecs.find((s) => s.agentKey === ev.agentKey)?.label ?? ev.agentKey ?? ''
+  const reason = ev.reason ?? 'unknown'
+  notifyRestore.toast(
+    ev.final
+      ? i18n.global.t('announce.quota.stuck-expired', { agent, reason })
+      : i18n.global.t('announce.quota.stuck', { agent, reason, minutes: Math.floor((ev.stoppedForSec ?? 0) / 60) }),
+    { type: ev.final ? 'info' : 'error' },
+  )
 })
 
 // CLI account login: the backend harvested a profile's isolated login home

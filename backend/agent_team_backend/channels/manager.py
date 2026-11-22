@@ -4413,6 +4413,35 @@ class ChannelManager:
                 told += 1
         return told
 
+    async def notify_failover_stuck(self, *, agent_key: str, pane_ids: list[str], reason: str,
+                                    minutes: int, expires_in: str, final: bool) -> int:
+        """A stopped automatic continuation nobody acted on (a reminder), or its
+        expiry (``final``): once per bound direct chat whose pane reported the
+        exhaustion or runs that CLI. Text only. Returns the chats told."""
+        lang = prompt_skills.language(await self._ui_settings())
+        agent = agent_key.capitalize()
+        body = (account_menu.text(lang, "failover_stuck_expired", agent=agent, reason=reason)
+                if final else
+                account_menu.text(lang, "failover_stuck", agent=agent, reason=reason,
+                                  minutes=minutes, expires=expires_in))
+        named = set(pane_ids)
+        told = 0
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() in seen or self._chat_kind(b) != "direct":
+                continue
+            pane_id = self._seams.resolve_pane(b.pane_id)
+            if not pane_id or (pane_id not in named and self._seams.pane_agent(pane_id) != agent_key):
+                continue
+            seen.add(loc.key())
+            adapter = self._adapters.get((loc.platform, loc.account))
+            if adapter is None:
+                continue
+            if await self._notice(adapter, loc, redact.redact_text(body)):
+                told += 1
+        return told
+
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         chat_id = str(link.get("chatId") or "")
         targets = self._share_targets(str(link.get("paneId") or ""), chat_id)
