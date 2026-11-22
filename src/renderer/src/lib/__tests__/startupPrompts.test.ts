@@ -314,12 +314,52 @@ describe('the workspace trust dialog at launch', () => {
     expect(decideStartupPrompt(prompt!, { navideDirs: [], workspace: long })).toMatchObject({ action: 'auto' })
     // Without the pane's width the break cannot be told from a new line.
     expect(decide(wrapped, long)).toMatchObject({ action: 'block' })
-    // A row that was not full, or a continuation row that starts with padding
-    // (Ink), may hide a space: left to a person.
-    for (const [screen, width] of [[wrapped, cols + 1], [claudeTrust(long.replace('narrow-pane', 'narrow-p\n ane')), cols]] as Array<[string, number]>) {
-      expect(decideStartupPrompt(readStartupPrompt('claude', screen, width)!, { navideDirs: [], workspace: long }))
-        .toMatchObject({ action: 'block' })
+    // A row that was not full may hide a space: left to a person.
+    expect(decideStartupPrompt(readStartupPrompt('claude', wrapped, cols + 1)!, { navideDirs: [], workspace: long }))
+      .toMatchObject({ action: 'block' })
+  })
+
+  // Ink breaks a path too long for its row itself and indents every
+  // continuation row by the dialog's padding. The pane's workspace is the
+  // folder Navide launched the CLI in, which is the folder the dialog names, so
+  // the indent no longer leaves the own workspace to a person.
+  it('is answered when Ink broke the workspace path and indented the next row', () => {
+    const long = '/Users/alex/a-rather-long-folder-name/that-wraps-in-a-narrow-pane/proj'
+    const ink = claudeTrust(long.replace('narrow-pane', 'narrow-p\n ane'))
+    for (const width of [0, 40, 64]) {
+      expect(decideStartupPrompt(readStartupPrompt('claude', ink, width)!, { navideDirs: [], workspace: long }))
+        .toMatchObject({ action: 'auto' })
     }
+    // The home drawn as "~", and a Windows path, read the same way.
+    expect(decide(claudeTrust('~/a-rather-long-folder-name/that-wraps-in-a\n -narrow-pane/proj'), long)).toMatchObject({ action: 'auto' })
+    expect(decide(claudeTrust('C:\\Users\\dev\\a-long\n -name\\proj'), 'C:\\Users\\dev\\a-long-name\\proj')).toMatchObject({ action: 'auto' })
+  })
+
+  it('still leaves any other folder to a person where Ink broke and indented it', () => {
+    const ws = '/Users/alex/a-rather-long-folder-name/proj'
+    for (const shown of [
+      '/Users/alex/a-rather-long-folder-name', // the parent
+      `${ws}/sub`, // a folder inside it
+      `${ws}2`, `${ws}-old`, `${ws},old`, `${ws}.old`, // longer names
+      '/Users/alex/a-rather-long-folder-name/other',
+      '/opt/alex/a-rather-long-folder-name/proj',
+      '/Users/alex/a-rather-long-folder-name/pr', // a shorter name
+      '/Users/alex/a-rather-long-folder-name/p roj', // a space inside a row
+    ]) {
+      for (let at = 8; at < shown.length; at++) {
+        // A break right at the space is the one pinned exception (see the
+        // "some project" cases below); everywhere else the space is in a row.
+        if (shown[at] === ' ' || shown[at - 1] === ' ') continue
+        const ink = claudeTrust(`${shown.slice(0, at)}\n ${shown.slice(at)}`)
+        expect(decide(ink, ws), `${shown} broken at ${at}`).toMatchObject({ action: 'block' })
+      }
+    }
+    // Indented by more than the dialog's padding, or a row at column 0 among
+    // indented ones: not the shape Ink draws.
+    expect(decide(claudeTrust('/Users/alex/a-rather-long\n  -folder-name/proj'), ws)).toMatchObject({ action: 'block' })
+    expect(decide(claudeTrust('/Users/alex/a-rather\n -long-folder\n-name/proj'), ws)).toMatchObject({ action: 'block' })
+    // A path in the scrollback above the dialog is not the folder it names.
+    expect(decide(`$ cd ${ws}\n${claudeTrust('/Users/alex/a-rather-long\n -folder-name/other')}`, ws)).toMatchObject({ action: 'block' })
   })
 
   it('is left to a person for any other folder, or when it names none', () => {
@@ -685,12 +725,29 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
       return at >= 0 && (at % cols === 0 || (at + 1) % cols === 0)
     }
 
+    // Where each wrap starts a row in the dialog's folder row ` ${folder}`.
+    const termStarts = (cols: number): number[] => Array.from({ length: 4 }, (_, k) => (k + 1) * cols)
+    const inkStarts = (cols: number): number[] => Array.from({ length: 4 }, (_, k) => cols + k * (cols - 1))
+    // Index, in that row, of SPACED's space — and of the "p" JOINED has there.
+    const SPACE_AT = 1 + SPACED.indexOf(' ')
+
     for (let cols = 20; cols <= 40; cols++) {
-      it(`never takes one for the other at ${cols} columns, Claude or Codex, terminal-wrapped or Ink`, () => {
+      // Codex, and Claude wherever the space is not at a row break: never.
+      // Claude where the space is exactly at a break: on the screen alone the
+      // two are the same rows (a padding column, or a cut trailing blank). The
+      // pane's workspace is the folder Navide launched the CLI in and the
+      // dialog names the folder the CLI runs in, so the launch folder decides
+      // there — pinned here, so the exception cannot widen.
+      it(`never takes one for the other at ${cols} columns, except whitespace exactly at a Claude row break`, () => {
+        const atBreak: Record<'term' | 'ink', Record<string, boolean>> = {
+          term: { [SPACED]: termStarts(cols).includes(SPACE_AT), [JOINED]: false },
+          ink: { [SPACED]: inkStarts(cols).includes(SPACE_AT + 1), [JOINED]: inkStarts(cols).includes(SPACE_AT) },
+        }
         for (const [shown, workspace] of [[SPACED, JOINED], [JOINED, SPACED]]) {
-          for (const screen of [wrapAt(claudeTrustLive(shown), cols), inkWrap(claudeTrustLive(shown), cols)]) {
-            expect(decideAt(screen, cols, workspace), `${shown} / ${workspace}`).toMatchObject({ action: 'block' })
-          }
+          expect(decideAt(wrapAt(claudeTrustLive(shown), cols), cols, workspace), `term ${shown} / ${workspace}`)
+            .toMatchObject({ action: atBreak.term[shown] ? 'auto' : 'block' })
+          expect(decideAt(inkWrap(claudeTrustLive(shown), cols), cols, workspace), `ink ${shown} / ${workspace}`)
+            .toMatchObject({ action: atBreak.ink[shown] ? 'auto' : 'block' })
           expect(decideAt(wrapAt(codexTrust(shown), cols), cols, workspace, 'codex'), `codex ${shown} / ${workspace}`)
             .toMatchObject({ action: 'block' })
         }
@@ -698,18 +755,23 @@ describe('the trust dialog in a narrow pane (UI zoom 125%, ~20-30 columns)', () 
 
       it(`answers each one's own dialog at ${cols} columns where a terminal wrapped it`, () => {
         for (const own of [SPACED, JOINED]) {
+          // A space cut off a full row's end still leaves the next row at
+          // column 0, which is no Ink shape: left to a person.
+          const cutAtRowEnd = own === SPACED && termStarts(cols).includes(SPACE_AT + 1)
           expect(decideAt(wrapAt(claudeTrustLive(own), cols), cols, own), own)
-            .toMatchObject({ action: spaceAtWrap(` ${own}`, own, cols) ? 'block' : 'auto' })
+            .toMatchObject({ action: cutAtRowEnd ? 'block' : 'auto' })
           expect(decideAt(wrapAt(codexTrust(own), cols), cols, own, 'codex'), `codex ${own}`)
             .toMatchObject({ action: spaceAtWrap(` You are in ${own}`, own, cols) ? 'block' : 'auto' })
         }
       })
 
-      it(`holds its own dialog at ${cols} columns where Ink wrapped it (padding may hide a space)`, () => {
+      it(`answers its own dialog at ${cols} columns where Ink wrapped it`, () => {
         for (const own of [SPACED, JOINED]) {
-          const wrapped = ` ${own}`.length > cols
+          // The folder's own space starting a continuation row indents it one
+          // column past the padding: not the shape Ink draws, left to a person.
+          const deeper = own === SPACED && inkStarts(cols).includes(SPACE_AT)
           expect(decideAt(inkWrap(claudeTrustLive(own), cols), cols, own), own)
-            .toMatchObject({ action: wrapped ? 'block' : 'auto' })
+            .toMatchObject({ action: deeper ? 'block' : 'auto' })
         }
       })
     }
