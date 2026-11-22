@@ -11798,7 +11798,9 @@
       "title": "Build for Navide: tự làm plugin Navide của bạn",
       "step-init": "Tạo plugin Navide từ mẫu (Navide 0.2.39 trở lên):",
       "step-load": "Tải nó bằng Cài đặt → Plugin Navide → Chế độ nhà phát triển → Tải từ thư mục…",
+      "step-check": "Xác thực và đóng gói bằng đúng các bước kiểm tra mà khâu duyệt chạy:",
       "step-apply": "Đăng nhập bên dưới và điền đơn đăng ký nhà phát triển một lần bằng tên thật; một người sẽ xét duyệt.",
+      "step-publish": "Ký và gửi bằng {command}; một người sẽ xét duyệt, sau đó nó xuất hiện trên Navide Marketplace.",
       "next": {
         "apply": "Tiếp theo: điền đơn đăng ký nhà phát triển bên dưới.",
         "pending": "Tiếp theo: chờ xét duyệt. Trong lúc đó, hãy xây dựng plugin Navide và tải nó bằng Chế độ nhà phát triển.",

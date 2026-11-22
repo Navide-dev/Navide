@@ -117,6 +117,15 @@ export function trustedDocUrl(value: unknown): string | null {
   if (url.hostname === 'navide.dev' || url.hostname.endsWith('.navide.dev')) return url.toString()
   return null
 }
+/** The GitHub Release the public plugin packages are installed from; they are
+ * not on npm (docs/en-US/build-for-navide.md, "Five minutes to a running plugin"). */
+export const PLUGIN_PACKAGES_RELEASE_URL = 'https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0'
+/** The entry card's scaffold command: the no-build template, which validates and packages as written. */
+export const PLUGIN_INIT_COMMAND =
+  `npx --yes --package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-contracts-1.0.0.tgz ` +
+  `--package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello`
+/** The entry card's self-check, the same checks the Registry runs before review. */
+export const PLUGIN_CHECK_COMMAND = 'navide-plugin validate acme-hello && navide-plugin package acme-hello'
 /** The developer console's open page: the publishing steps, before signing in. */
 export const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
 /** The Official Registry's API. It stays under `/registry` on the Navide

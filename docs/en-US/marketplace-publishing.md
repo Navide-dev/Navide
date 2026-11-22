@@ -28,16 +28,24 @@ manifest rules the Registry enforces, see
 
 ### Install the CLI
 
+The packages are not on npm yet. Install them from the GitHub Release
+[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0)
+(its notes list each file's SHA-256), the same files Navide's own plugins
+build against:
+
 ```bash
-npm install --save-dev @navide/plugin-sdk @navide/plugin-contracts
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
+npm install --save-dev $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz
 npx navide-plugin
 ```
 
-The packages are published to npm from the Navide repository with
-`scripts/publish-public-packages.sh` as a release step, under one shared 1.x
-version with a [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
-Before the first publication, or to try an unreleased build, pack them from a
-Navide checkout instead:
+Before a project exists, run the CLI straight from the release:
+`npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init …`
+(see [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)).
+Publication to npm is a later release step,
+`scripts/publish-public-packages.sh`, under one shared 1.x version with a
+[twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
+To try an unreleased build, pack them from a Navide checkout instead:
 
 ```bash
 # in the Navide checkout

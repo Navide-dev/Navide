@@ -11798,7 +11798,9 @@
       "title": "Build for Navide：做你自己的 Navide 外掛",
       "step-init": "用範本建立 Navide 外掛（Navide 0.2.39 起）：",
       "step-load": "在「設定 → Navide 外掛 → 開發者模式 → 從資料夾載入…」載入試用",
+      "step-check": "驗證並打包，和審核跑的是同一套檢查：",
       "step-apply": "在下方登入，實名填寫一次開發者申請，由專人審核。",
+      "step-publish": "簽章後用 {command} 送審，專人審核通過後就會上架 Navide 市集。",
       "next": {
         "apply": "下一步：填寫下方的開發者申請。",
         "pending": "下一步：等待審核。這段期間可以先建置 Navide 外掛，用開發者模式 載入試用。",

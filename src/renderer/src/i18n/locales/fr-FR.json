@@ -11798,7 +11798,9 @@
       "title": "Build for Navide : créez votre plugin Navide",
       "step-init": "Créer un plugin Navide à partir du modèle (Navide 0.2.39 ou ultérieur) :",
       "step-load": "Le charger avec Paramètres → Plugins Navide → Mode développeur → Charger depuis un dossier…",
+      "step-check": "Validez-le et empaquetez-le avec les mêmes vérifications que l’examen :",
       "step-apply": "Connectez-vous ci-dessous et remplissez une fois la demande de développeur sous votre vrai nom ; une personne l’examine.",
+      "step-publish": "Signez-le et soumettez-le avec {command} ; une personne l’examine, puis il apparaît sur Navide Marketplace.",
       "next": {
         "apply": "Étape suivante : remplissez la demande de développeur ci-dessous.",
         "pending": "Étape suivante : attendez l’examen. En attendant, construisez votre plugin Navide et chargez-le avec le mode développeur.",

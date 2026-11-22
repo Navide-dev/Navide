@@ -11798,7 +11798,9 @@
       "title": "Build for Navide: crie seu próprio plug-in do Navide",
       "step-init": "Crie um plug-in do Navide a partir do modelo (Navide 0.2.39 ou posterior):",
       "step-load": "Carregue-o em Configurações → Plug-ins do Navide → Modo de desenvolvedor → Carregar de uma pasta…",
+      "step-check": "Valide e empacote com as mesmas verificações da revisão:",
       "step-apply": "Entre abaixo e preencha uma vez a candidatura de desenvolvedor com seu nome real; uma pessoa a revisa.",
+      "step-publish": "Assine e envie com {command}; uma pessoa o revisa e depois ele aparece no Navide Marketplace.",
       "next": {
         "apply": "Próximo passo: preencha a candidatura de desenvolvedor abaixo.",
         "pending": "Próximo passo: aguarde a revisão. Enquanto isso, crie seu plug-in do Navide e carregue-o com o modo de desenvolvedor.",

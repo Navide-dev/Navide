@@ -11798,7 +11798,9 @@
       "title": "Build for Navide: crea tu propio complemento de Navide",
       "step-init": "Crea un complemento de Navide a partir de la plantilla (Navide 0.2.39 o posterior):",
       "step-load": "Cárgalo con «Ajustes → Complementos de Navide → Modo de desarrollador → Cargar desde carpeta…»",
+      "step-check": "Valídalo y empaquétalo con las mismas comprobaciones que la revisión:",
       "step-apply": "Inicia sesión abajo y rellena una vez la solicitud de desarrollador con tu nombre real; una persona la revisa.",
+      "step-publish": "Fírmalo y envíalo con {command}; una persona lo revisa y después aparece en Navide Marketplace.",
       "next": {
         "apply": "Siguiente: rellena la solicitud de desarrollador de abajo.",
         "pending": "Siguiente: espera la revisión. Mientras tanto, crea tu complemento de Navide y cárgalo con el modo de desarrollador.",
