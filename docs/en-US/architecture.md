@@ -321,6 +321,15 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   a target read from it is a claim the backend refuses (`REMOTE_UNTRUSTED`)
   until the user opens that target themselves. Navide never runs `ssh-add`
   and never reads or writes `~/.ssh`.
+- An SSH Remote pane (experimental, same switch; `remote_ssh.py`, request
+  `remote_ssh.connect`) is so far a validated target — host, user, port and a
+  private key *path* — and the argv a pane would run; opening the pane is not
+  built yet, and the request answers `REMOTE_SSH_UNSUPPORTED`. The key is
+  passed to `ssh -i` by path and never opened by Navide; the argv always
+  carries `ForwardAgent=no` and never `-A`; the spawn environment is the same
+  reduced set as above. Recent targets live in `ui_settings`
+  (`sshRemoteRecent`), which no sync scope, settings bundle or workspace
+  backup reads.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

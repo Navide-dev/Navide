@@ -1143,6 +1143,7 @@ const emit = defineEmits<{
   (e: 'spawn-acp', payload: SpawnPayload): void
   /** Settings → General → Remote container panes only: open the setup dialog. */
   (e: 'spawn-remote', payload: { workspacePath: string; runGroupId?: string }): void
+  (e: 'spawn-ssh-remote'): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
   (e: 'kill-all'): void
@@ -2838,6 +2839,12 @@ function openRemoteFromMenu(): void {
   const group = addMenuGroup.value
   addMenuOpen.value = false
   emit('spawn-remote', { workspacePath: workspace, runGroupId: group || undefined })
+}
+
+/** App.vue opens the SSH Remote dialog. */
+function openSshRemoteFromMenu(): void {
+  addMenuOpen.value = false
+  emit('spawn-ssh-remote')
 }
 
 function openAgentFromMenu(identityId: string): void {
@@ -4687,6 +4694,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           class="ws-add-opt ws-add-more ws-add-term"
           @click="openTerminalFromMenu"
         >{{ $t('label.terminal') }}</button>
+        <!-- SSH Remote (experimental, same switch as remote container panes). -->
+        <button
+          v-if="remoteEnabled"
+          class="ws-add-opt ws-add-more ws-add-ssh"
+          data-testid="add-menu-ssh-remote"
+          @click="openSshRemoteFromMenu"
+        >
+          <span class="ws-add-lb" v-truncate>{{ $t('sshRemote.menu-entry') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+        </button>
         <button class="ws-add-opt ws-add-more ws-add-card" @click="openSpawnCardFromMenu">
           {{ $t('label.manual-spawn') }}…
         </button>

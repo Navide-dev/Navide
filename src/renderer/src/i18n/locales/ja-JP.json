@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "上部の<strong>ロールを選択…</strong>ドロップダウンで、用意されたロールを選びます。",
             "cliList": "その下のリストは見出し付きの 2 ブロックに分かれています。<strong>{cli}</strong> はコーディング用 CLI で、未インストールのものはその旨が表示されます。<strong>{agents}</strong> には常駐エージェント（OpenClaw、Hermes Agent）が名前で並び、開いているものを選ぶとそこへ切り替わり、閉じているものを選ぶと前の会話を再開します。名前を先に入力する<em>新規 …</em>もあり、ACP エージェントもここに並びます。リストの下には、Grok Bot や dots などのクラウドエージェントは Navide プラグインとして提供される、という注記があります。",
-            "terminal": "下部には<strong>ターミナル</strong>（エージェントを伴わない通常のターミナル）と<strong>手動起動…</strong>があります。"
+            "terminal": "下部には<strong>ターミナル</strong>（エージェントを伴わない通常のターミナル）と<strong>手動起動…</strong>があります。",
+            "sshRemote": "<strong>設定 → 一般 → 実験的な機能 → リモートコンテナのペイン</strong>をオンにすると、<strong>ターミナル</strong>の下に <strong>SSH Remote…</strong> が表示されます。ホスト、ユーザー、ポート（既定は 22）、秘密鍵のパスを入力し、最近の接続はこのコンピューターにのみ保存されます。保存するのは鍵のパスだけで、鍵を読み取ったりコピーしたりはせず、SSH agent 転送はオフのままです。ペインを開く機能はまだ対応していません。「接続」は設定を確認し、その旨を表示します。"
           },
           "p2": "<em>手動起動…</em>では詳細ダイアログが開き、エージェントとロール、ステージに追加するか、ターミナルも一緒に開くかを選べます。セッション ID を貼り付けて、以前の会話を直接再開することもできます。",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "コンテナ内の CLI は停止しました。再接続すると同じコンテナで新しいセッションを開きます。",
     "reconnect": "再接続",
     "close-pane": "ペインを閉じる"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "ホスト",
+    "host-placeholder": "ホスト名、IP アドレス、または ssh 設定の名前",
+    "user-label": "ユーザー",
+    "user-placeholder": "ssh 設定に従う",
+    "port-label": "ポート",
+    "key-label": "秘密鍵のパス",
+    "key-placeholder": "~/.ssh/id_ed25519（任意）",
+    "key-hint": "保存するのはパスだけです。Navide は鍵を読み取り・コピー・アップロードしません。このコンピューターの ssh が使います。",
+    "recent-label": "最近の接続",
+    "recent-empty": "最近の接続はまだありません。",
+    "connect": "接続",
+    "connecting": "接続中…",
+    "cancel": "キャンセル",
+    "unsupported": "SSH Remote ペインはまだ対応していません。接続設定は確認して保存しました。ペインを開く機能は今後のアップデートで追加されます。",
+    "error": "この接続は使用できません：{detail}",
+    "privacy-note": "最近の接続はこのコンピューターにのみ保存されます（ホスト、ユーザー、ポート、鍵のパス）。SSH agent 転送はオフのままで、鍵やパスワードは保存しません。"
   },
   "shippedLog": {
     "menu": {

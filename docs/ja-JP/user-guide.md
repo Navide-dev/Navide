@@ -52,6 +52,18 @@ Select multiple pane headers with Cmd/Ctrl-click or Shift-click, then right-clic
 
 組み込みで対応する Agent Key は 14 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）です。正確な CLI Behavior と Provider Billing は各 External Tool が引き続き管理します。
 
+### SSH Remote ペイン（実験的な機能）
+
+まだ使えません。このリリースで追加したのは設定ダイアログだけで、リモートマシン上でペインを開く機能は今後のアップデートで追加されます。
+
+**設定 → 一般 → 実験的な機能 → リモートコンテナのペイン** をオンにすると、**+** メニューの **ターミナル** の下に **SSH Remote…** が表示されます。
+
+- **ホスト** はホスト名、IP アドレス、または ssh 設定の名前です。**ユーザー** は省略でき、空なら ssh 設定に従います。**ポート** の既定は 22 です。
+- **秘密鍵のパス** は省略できます。Navide はパスだけを保存して `ssh -i` に渡し、鍵を読み取り・コピー・アップロードすることはありません。
+- **最近の接続** は最大 8 件（ホスト、ユーザー、ポート、鍵のパス）をこのコンピューターにのみ保存します。Navide Cloud の同期にも、書き出した設定バンドルにも含まれません。
+- **SSH agent 転送はオフのまま** です（`ForwardAgent=no`、`-A` は付けません）。`ssh` 自体に必要なもの以外の環境変数は取り除かれるため、`SendEnv` の設定でローカルの API キーが送られることはありません。
+- **接続** は設定を確認したうえで、SSH Remote ペインはまだ対応していないと表示します。接続は行いません。
+
 ### CLI risk observations
 
 An active agent pane can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active panes, while network findings belong to the observed pane's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

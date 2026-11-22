@@ -73,6 +73,18 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 - **斷線**：連線中斷或關閉分格時，容器裡的 CLI 會停止（Navide 把它的程序記在容器 `/tmp` 底下的檔案，所以容器需要 `sh` 和可寫入的 `/tmp`），分格顯示 **重新連線**，會在同一個容器開新的工作階段。需要撐過斷線的長任務，請在容器裡用 `tmux` 之類的工具。
 - 遠端分格只支援 Claude Code 與 Codex。列出容器與連線測試會共用一條 ssh 連線最多 60 秒；每個分格都用自己的連線，所以關閉分格會立刻釋放它的隧道。Windows 版 Navide 一律不共用連線（Windows 的 OpenSSH 沒有 ControlMaster）。
 
+### SSH Remote 分格（實驗功能）
+
+目前還不能用：這一版只加了設定對話框，真的在遠端機器開分格會在之後的版本加入。
+
+到 **設定 → 一般 → 實驗功能 → 遠端容器分格** 打開後，**＋** 選單的 **終端機** 下方會多出 **SSH Remote…**。
+
+- **主機**：主機名稱、IP 位址或 ssh 設定裡的名稱。**使用者** 可以不填，不填就沿用 ssh 設定。**連接埠** 預設 22。
+- **私鑰路徑** 可以不填。Navide 只記住路徑、交給 `ssh -i` 使用，不會讀取、複製或上傳私鑰。
+- **最近連線** 只存在這台電腦，最多八筆（主機、使用者、連接埠、私鑰路徑），不會進 Navide Cloud 同步，也不會被匯出的設定包帶走。
+- **SSH agent 轉送保持關閉**（`ForwardAgent=no`，不帶 `-A`）；`ssh` 本身需要以外的環境變數都會移除，所以任何 `SendEnv` 設定都帶不走本機的 API key。
+- 按 **連線** 會檢查設定，接著顯示「尚未支援 SSH Remote 分格」，不會真的建立連線。
+
 ### CLI risk observations
 
 An active agent 分格 can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active 分格, while network findings belong to the observed 分格's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

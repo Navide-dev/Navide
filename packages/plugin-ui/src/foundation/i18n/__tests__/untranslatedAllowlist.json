@@ -172,6 +172,9 @@
     "settings.tab.pipelines",
     "settings.tab.roles",
     "skill-approval.script",
+    "sshRemote.dialog-title",
+    "sshRemote.host-label",
+    "sshRemote.menu-entry",
     "statusBadges.col.color",
     "turn-stats.col-total",
     "turn-stats.row-total",
@@ -437,7 +440,10 @@
     "webhooks.reveal.secret",
     "webhooks.form.fieldType",
     "webhooks.fieldType.date",
-    "label.terminal"
+    "label.terminal",
+    "sshRemote.menu-entry",
+    "sshRemote.dialog-title",
+    "sshRemote.port-label"
   ],
   "de-DE": [
     "account.title",
@@ -620,7 +626,12 @@
     "webhooks.nav",
     "webhooks.reveal.secret",
     "webhooks.fieldType.text",
-    "label.terminal"
+    "label.terminal",
+    "sshRemote.menu-entry",
+    "sshRemote.dialog-title",
+    "sshRemote.host-label",
+    "sshRemote.port-label",
+    "sshRemote.key-placeholder"
   ],
   "pt-BR": [
     "account.title",
@@ -808,6 +819,9 @@
     "settings.tab.pipelines",
     "settings.voice.download-progress",
     "skill-approval.script",
+    "sshRemote.dialog-title",
+    "sshRemote.host-label",
+    "sshRemote.menu-entry",
     "statusBadges.col.status",
     "turn-stats.col-total",
     "turn-stats.row-total",
@@ -926,7 +940,9 @@
     "turn-stats.title",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
-    "remoteDevcontainer.host-placeholder"
+    "remoteDevcontainer.host-placeholder",
+    "sshRemote.menu-entry",
+    "sshRemote.dialog-title"
   ],
   "vi-VN": [
     "account.title",
@@ -1078,9 +1094,13 @@
     "webhooks.reveal.secret",
     "webhooks.fieldType.email",
     "label.terminal",
-    "remoteDevcontainer.host-placeholder"
+    "remoteDevcontainer.host-placeholder",
+    "sshRemote.menu-entry",
+    "sshRemote.dialog-title"
   ],
   "ja-JP": [
+    "sshRemote.dialog-title",
+    "sshRemote.menu-entry",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
@@ -1088,6 +1108,8 @@
     "webhooks.outcome.ping"
   ],
   "ko-KR": [
+    "sshRemote.dialog-title",
+    "sshRemote.menu-entry",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
@@ -1095,6 +1117,8 @@
     "webhooks.outcome.ping"
   ],
   "zh-CN": [
+    "sshRemote.dialog-title",
+    "sshRemote.menu-entry",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",
     "webhooks.kind.github",
@@ -1103,6 +1127,8 @@
     "webhooks.reveal.secret"
   ],
   "zh-TW": [
+    "sshRemote.dialog-title",
+    "sshRemote.menu-entry",
     "webhooks.fieldType.email",
     "webhooks.form.pipeline",
     "webhooks.host.placeholder",

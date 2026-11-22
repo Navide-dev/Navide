@@ -342,6 +342,7 @@ const prose = computed(() => ({
         <li v-html="$t('settings.help.workspace.s3.addMenu.role')"></li>
         <li v-html="$t('settings.help.workspace.s3.addMenu.cliList', prose)"></li>
         <li v-html="$t('settings.help.workspace.s3.addMenu.terminal')"></li>
+        <li v-html="$t('settings.help.workspace.s3.addMenu.sshRemote')"></li>
       </ul>
       <p class="wph-p" v-html="$t('settings.help.workspace.s3.p2')"></p>
 
