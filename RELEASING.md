@@ -66,8 +66,10 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    (`scripts/pip-audit-severity-gate.py`): read those warnings too and decide
    whether the release bumps the package.
 5. **What's New and CHANGELOG** — add the `whatsNew.ts` entry (below) and the
-   `CHANGELOG.md` section for the new version. `release.sh` bumps versions and
-   README download links but writes neither of these.
+   release notes under `CHANGELOG.md`'s `## [Unreleased]` heading. `release.sh`
+   bumps versions and README download links and renames that heading to
+   `## [X.Y.Z] — YYYY-MM-DD` (left alone when the dated heading is already
+   there; it stops when there is neither), but writes no notes of its own.
 6. **Signing status** — macOS signs and notarizes in CI; Windows is unsigned
    and shows SmartScreen's "Unknown publisher" prompt. Do not describe a Windows
    build as signed anywhere until that changes. Windows signing, once a
