@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { leaveLimitMenuAndResume, limitMenuDismissKey, screenShowsLimitMenu } from '../claudeLimitMenu'
+import { leaveLimitMenuAndResume, LIMIT_MENU_DISMISS_KEY, screenShowsLimitMenu } from '../claudeLimitMenu'
 
 // The real screen, as backend/tests/channels/test_manager.py records it.
 const MENU = [
@@ -39,15 +39,23 @@ describe('claudeLimitMenu', () => {
     expect(screenShowsLimitMenu(PROMPT)).toBe(false)
   })
 
-  it('leaves with option 1 when the cursor is on it, else with Esc — never toward usage credits', () => {
-    expect(limitMenuDismissKey(MENU)).toBe('\r')
-    expect(limitMenuDismissKey(MENU.replace('❯ 1.', '  1.').replace('  3.', '❯ 3.'))).toBe('\x1b')
+  it('counts only the live menu at the bottom of the screen', () => {
+    // The same words higher up (scrollback, an agent printing them) are not the menu.
+    expect(screenShowsLimitMenu(`${MENU}\n\n> tell me about the limit menu\n${PROMPT}`)).toBe(false)
+    // A different prompt with the same footer but no limit header is not it either.
+    const permission = ' Do you want to proceed?\n ❯ 1. Stop and wait for limit to reset\n Enter to confirm · Esc to cancel'
+    expect(screenShowsLimitMenu(permission)).toBe(false)
+    expect(screenShowsLimitMenu(`${'x\n'.repeat(50)}${MENU}\n\n`)).toBe(true)
+  })
+
+  it('leaves with Esc, never a choice', () => {
+    expect(LIMIT_MENU_DISMISS_KEY).toBe('\x1b')
   })
 
   it('dismisses the menu, then continues the task', async () => {
     const f = fake([MENU, PROMPT])
     expect(await leaveLimitMenuAndResume(f.deps)).toBe('resumed')
-    expect(f.writes).toEqual(['\r'])
+    expect(f.writes).toEqual(['\x1b'])
     expect(f.resumed()).toBe(1)
   })
 
@@ -61,7 +69,7 @@ describe('claudeLimitMenu', () => {
   it('never types the continue text while the menu is still up', async () => {
     const f = fake([MENU])
     expect(await leaveLimitMenuAndResume(f.deps)).toBe('menu-stuck')
-    expect(f.writes).toEqual(['\r'])
+    expect(f.writes).toEqual(['\x1b'])
     expect(f.resumed()).toBe(0)
   })
 

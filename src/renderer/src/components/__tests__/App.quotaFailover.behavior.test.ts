@@ -192,12 +192,12 @@ describe('leaving the limit menu after a hot switch', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-21T10:01:00Z')) })
   afterEach(() => { vi.clearAllTimers(); vi.useRealTimers() })
 
-  it('answers the menu with "stop" and continues the task', async () => {
+  it('leaves the menu with Esc and continues the task', async () => {
     const h = harness()
     const send = onLimitMenu(h, false)
     h.commit(hotCommit)
     await vi.advanceTimersByTimeAsync(2000)
-    expect(send).toHaveBeenCalledWith('terminal.input', { terminal_session_id: 'term-1', data: '\r' })
+    expect(send).toHaveBeenCalledWith('terminal.input', { terminal_session_id: 'term-1', data: '\x1b' })
     expect(h.inject).toHaveBeenCalledTimes(1)
     expect(h.inject.mock.calls[0].slice(1, 3)).toEqual(['continue', 'failover-continue'])
   })
