@@ -1568,12 +1568,9 @@ describe('Plans packaged backend composition', () => {
         const frameToken = (): string | undefined =>
           /var documentToken = "([0-9a-f]+)"/.exec((find('.plan-doc-frame') as HTMLIFrameElement | null)?.srcdoc ?? '')?.[1]
 
-        for (let i = 0; i < 50; i++) {
-          await flushPromises()
-          if (find('.selected-document')) break
-          await new Promise((resolve) => setTimeout(resolve, 20))
-        }
-        expect(find('.selected-document')).not.toBeNull()
+        // Opening the document is a real round trip through the packaged
+        // child, so a slow runner gets more than one second.
+        await vi.waitFor(() => expect(find('.selected-document')).not.toBeNull(), { timeout: 5_000 })
 
         // Verify todo toggle preserves iframe identity and documentToken without remount/flash
         const frameElBefore = find('.plan-doc-frame')!
@@ -1664,9 +1661,22 @@ describe('Plans packaged backend composition', () => {
         await new DOMWrapper(document.querySelector('.modal .ghost')!).trigger('click')
         await flushPromises()
         await clickWhenEnabled('[data-test="edit-n1"]')
+        const backendCalls = (name: string): number => mock.invocations.filter((entry) =>
+          entry.channel === 'plugin:backend:call' && (entry.payload as { name?: string })?.name === name).length
+        const listsBeforeSave = backendCalls('plans.list')
+        const readsBeforeSave = backendCalls('plans.read')
         await get('[data-test="review-note-edit-input"]').setValue('Draft text')
         await get('[data-test="review-note-edit-save"]').trigger('click')
         await vi.waitFor(() => expect(root.textContent).toContain('Draft text'))
+        // The write reaches the app again as plans.changed from the workspace
+        // watcher, which lists the plans and re-reads the open document. Wait
+        // for that re-read: asserting before it lands is what let a re-render
+        // on that path pass or fail by timing alone.
+        await vi.waitFor(() => {
+          expect(backendCalls('plans.list')).toBeGreaterThan(listsBeforeSave)
+          expect(backendCalls('plans.read')).toBeGreaterThan(readsBeforeSave)
+        }, { timeout: 5_000 })
+        await flushPromises()
 
         // Review Notes are metadata-only. They must not cause an incidental iframe
         // reread/remount or materialize note markup into the plan body.
