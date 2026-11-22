@@ -73,6 +73,18 @@ A remote container pane runs Claude Code or Codex inside a Docker container on a
 - **Disconnects:** when the connection drops or the pane closes, the CLI in the container stops (Navide records its process in a file under the container's `/tmp`, so the container needs `sh` and a writable `/tmp`), and the pane shows **Reconnect**, which opens a new session in the same container. Long-running work that must survive a disconnect needs `tmux` or similar inside the container.
 - Only Claude Code and Codex are supported in remote panes. Listing and testing share one ssh connection for up to 60 seconds; each pane has a connection of its own, so closing a pane releases its tunnel at once. Windows hosts of Navide never share connections (Windows OpenSSH has no ControlMaster).
 
+### SSH Remote panes (experimental)
+
+Not available yet: this release adds the setup dialog only. Opening a pane on the remote machine comes in a later update.
+
+With **Settings → General → Experimental features → Remote container panes** on, the **+** menu shows **SSH Remote…** below **Terminal**.
+
+- **Host** is a host name, an IP address or a name from your ssh configuration. **User** is optional; empty, ssh uses your configuration. **Port** is 22 unless you change it.
+- **Private key path** is optional. Navide saves only the path and passes it to `ssh -i`; it never reads, copies or uploads the key.
+- **Recent connections** keeps the last eight targets (host, user, port, key path) on this computer only. They are not part of Navide Cloud sync or an exported settings bundle.
+- **SSH agent forwarding stays off** (`ForwardAgent=no`, never `-A`), and environment variables other than what `ssh` itself needs are removed, so no `SendEnv` rule can carry a local API key.
+- **Connect** checks the settings and then says that SSH Remote panes are not supported yet. It does not open a connection.
+
 ### CLI risk observations
 
 An active agent pane can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active panes, while network findings belong to the observed pane's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.

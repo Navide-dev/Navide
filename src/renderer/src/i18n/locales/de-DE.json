@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "Oben befindet sich das Dropdown <strong>Rolle auswählen …</strong> – wählen Sie eine vordefinierte Rolle.",
             "cliList": "Darunter ist die Liste in zwei Blöcke mit Überschrift geteilt. <strong>{cli}</strong> enthält die Coding-CLIs; nicht installierte sind entsprechend markiert. <strong>{agents}</strong> listet Ihre dauerhaften Agents (OpenClaw, Hermes Agent) nach Namen auf – ein geöffneter wird angezeigt, ein geschlossener setzt sein Gespräch fort – dazu einen Eintrag <em>Neu …</em>, der zuerst nach einem Namen fragt; ACP-Agents stehen ebenfalls dort. Ein Hinweis unter der Liste erklärt, dass Cloud-Agents wie Grok Bot und dots als Navide-Plug-ins kommen.",
-            "terminal": "Unten stehen <strong>Terminal</strong> (ein einfaches Terminal ohne Agent) und <strong>Manuell starten</strong>."
+            "terminal": "Unten stehen <strong>Terminal</strong> (ein einfaches Terminal ohne Agent) und <strong>Manuell starten</strong>.",
+            "sshRemote": "Mit <strong>Einstellungen → Allgemein → Experimentelle Funktionen → Remote-Container-Bereiche</strong> erscheint unter <strong>Terminal</strong> der Eintrag <strong>SSH Remote…</strong>. Er fragt Host, Benutzer, Port (standardmäßig 22) und den Pfad zum privaten Schlüssel ab und speichert letzte Verbindungen nur auf diesem Computer. Gespeichert wird nur der Schlüsselpfad; der Schlüssel wird nie gelesen oder kopiert, und die SSH-Agent-Weiterleitung bleibt aus. Das Öffnen des Bereichs wird noch nicht unterstützt: Verbinden prüft die Einstellungen und meldet das."
           },
           "p2": "<em>Manuell starten</em> öffnet den vollständigen Dialog, in dem Sie Agent und Rolle wählen, festlegen, ob er zur Bühne hinzugefügt und ob daneben ein Terminal geöffnet wird, und eine Session-ID einfügen können, um eine frühere Unterhaltung direkt fortzusetzen.",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "Die CLI im Container wurde beendet. Neu verbinden öffnet eine neue Sitzung im selben Container.",
     "reconnect": "Neu verbinden",
     "close-pane": "Bereich schließen"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "Host",
+    "host-placeholder": "Hostname, IP-Adresse oder Name aus der ssh-Konfiguration",
+    "user-label": "Benutzer",
+    "user-placeholder": "Aus deiner ssh-Konfiguration",
+    "port-label": "Port",
+    "key-label": "Pfad zum privaten Schlüssel",
+    "key-placeholder": "~/.ssh/id_ed25519 (optional)",
+    "key-hint": "Gespeichert wird nur der Pfad. Navide liest, kopiert oder überträgt den Schlüssel nie; ssh verwendet ihn auf diesem Computer.",
+    "recent-label": "Letzte Verbindungen",
+    "recent-empty": "Noch keine letzten Verbindungen.",
+    "connect": "Verbinden",
+    "connecting": "Verbinde…",
+    "cancel": "Abbrechen",
+    "unsupported": "SSH-Remote-Bereiche werden noch nicht unterstützt. Die Verbindungseinstellungen wurden geprüft und gespeichert; das Öffnen des Bereichs folgt in einem späteren Update.",
+    "error": "Diese Verbindung kann nicht verwendet werden: {detail}",
+    "privacy-note": "Letzte Verbindungen werden nur auf diesem Computer gespeichert: Host, Benutzer, Port und Schlüsselpfad. Die SSH-Agent-Weiterleitung bleibt aus, und es werden weder Schlüssel noch Passwörter gespeichert."
   },
   "shippedLog": {
     "menu": {

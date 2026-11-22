@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "At the top is the <strong>Select role…</strong> dropdown — pick a preset role.",
             "cliList": "Below it the list is split into two headed blocks. <strong>{cli}</strong> holds the coding CLIs, with the ones that are not installed marked as such. <strong>{agents}</strong> lists your standing agents (OpenClaw, Hermes Agent) by name — picking an open one switches to it, picking a closed one resumes it — plus a <em>New …</em> entry that asks for a name first; ACP agents are listed there too. A note under the list points out that cloud agents such as Grok Bot and dots come as Navide plugins.",
-            "terminal": "At the bottom are <strong>Terminal</strong> (a plain terminal with no agent attached) and <strong>Manual spawn…</strong>."
+            "terminal": "At the bottom are <strong>Terminal</strong> (a plain terminal with no agent attached) and <strong>Manual spawn…</strong>.",
+            "sshRemote": "With <strong>Settings → General → Experimental features → Remote container panes</strong> on, <strong>SSH Remote…</strong> appears below <strong>Terminal</strong>. It takes a host, user, port (22 by default) and a private key path, and keeps recent connections on this computer. Only the key's path is saved; the key is never read or copied, and SSH agent forwarding stays off. Opening the pane itself is not supported yet: Connect checks the settings and says so."
           },
           "p2": "<em>Manual spawn…</em> opens the full dialog, where you can choose the agent and role, decide whether to add it to the stage, whether to open a terminal alongside it, and paste a session id to resume an earlier conversation directly.",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "The CLI in the container has stopped. Reconnect opens a new session in the same container.",
     "reconnect": "Reconnect",
     "close-pane": "Close pane"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "Host",
+    "host-placeholder": "Host name, IP address or ssh config alias",
+    "user-label": "User",
+    "user-placeholder": "From your ssh config",
+    "port-label": "Port",
+    "key-label": "Private key path",
+    "key-placeholder": "~/.ssh/id_ed25519 (optional)",
+    "key-hint": "Only the path is saved. Navide never reads, copies or uploads the key; ssh uses it on this computer.",
+    "recent-label": "Recent connections",
+    "recent-empty": "No recent connections yet.",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "cancel": "Cancel",
+    "unsupported": "SSH Remote panes are not supported yet. The connection settings were checked and saved; opening the pane comes in a later update.",
+    "error": "Could not use this connection: {detail}",
+    "privacy-note": "Recent connections are saved on this computer only: host, user, port and key path. SSH agent forwarding stays off, and no key or password is stored."
   },
   "shippedLog": {
     "menu": {

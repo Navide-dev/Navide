@@ -260,3 +260,24 @@ async def create_remote_pane(
         raise _TerminalCreateCancelled
     transaction["response_payload"] = response_payload
     transaction["committed"] = True
+
+
+@handler("remote_ssh.connect")
+async def remote_ssh_connect(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """SSH Remote panes: the target is validated and the argv is built, but
+    opening the pane is not implemented yet, so the answer is always
+    ``REMOTE_SSH_UNSUPPORTED`` for a valid target. Rides the same
+    experimental switch as remote container panes."""
+    from . import remote_ssh
+
+    if not await _enabled():
+        await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote panes are off"))
+        return
+    try:
+        target = remote_ssh.parse_target(payload.get("target"))
+        remote_ssh.shell_argv(target)
+    except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    await session.send_json(make_error(
+        msg_id, msg_type, "REMOTE_SSH_UNSUPPORTED", "SSH Remote panes are not supported yet"))

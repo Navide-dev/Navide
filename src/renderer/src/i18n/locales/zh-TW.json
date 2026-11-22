@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "最上面是 <strong>選擇角色…</strong> 下拉——選一個預設角色。",
             "cliList": "下面的清單分成兩個有標題的區塊。<strong>{cli}</strong> 是寫程式用的 CLI，沒安裝的會標示出來。<strong>{agents}</strong> 依名字列出你的常駐 Agent（OpenClaw、Hermes Agent）：已開啟的點了會切過去，已關閉的點了會接續原本的對話；另有一個<em>新增 …</em>，會先請你取名字。ACP Agent 也列在這一區。清單下方有一行提示：Grok Bot、dots 這類雲端 Agent 是以 Navide 外掛的形式提供。",
-            "terminal": "最下面是 <strong>Terminal</strong>（開一般終端機，不掛 agent）與 <strong>啟動 Agent…</strong>。"
+            "terminal": "最下面是 <strong>Terminal</strong>（開一般終端機，不掛 agent）與 <strong>啟動 Agent…</strong>。",
+            "sshRemote": "在 <strong>設定 → 一般 → 實驗功能 → 遠端容器分格</strong> 打開後，<strong>終端機</strong> 下方會多出 <strong>SSH Remote…</strong>：填主機、使用者、連接埠（預設 22）與私鑰路徑，最近連線只存在這台電腦。只記住私鑰的路徑，不會讀取或複製私鑰，SSH agent 轉送保持關閉。目前還不能真的開啟分格：按「連線」會檢查設定，並顯示「尚未支援」。"
           },
           "p2": "<em>啟動 Agent…</em> 開的是完整對話框，可以指定 agent 與角色、決定要不要加進舞台、要不要同時開終端機，也可以貼一個 session id 直接接續舊對話。",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "容器裡的 CLI 已經停止。按「重新連線」會在同一個容器開一個新的工作階段。",
     "reconnect": "重新連線",
     "close-pane": "關閉分格"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "主機",
+    "host-placeholder": "主機名稱、IP 位址或 ssh 設定裡的名稱",
+    "user-label": "使用者",
+    "user-placeholder": "沿用 ssh 設定",
+    "port-label": "連接埠",
+    "key-label": "私鑰路徑",
+    "key-placeholder": "~/.ssh/id_ed25519（選填）",
+    "key-hint": "只會記住路徑。Navide 不會讀取、複製或上傳私鑰，由這台電腦上的 ssh 自己使用。",
+    "recent-label": "最近連線",
+    "recent-empty": "還沒有最近連線。",
+    "connect": "連線",
+    "connecting": "連線中…",
+    "cancel": "取消",
+    "unsupported": "尚未支援 SSH Remote 分格。連線設定已檢查並記住，開啟分格會在之後的版本加入。",
+    "error": "無法使用這組連線：{detail}",
+    "privacy-note": "最近連線只存在這台電腦，內容是主機、使用者、連接埠與私鑰路徑。SSH agent 轉送保持關閉，不儲存任何金鑰或密碼。"
   },
   "shippedLog": {
     "menu": {

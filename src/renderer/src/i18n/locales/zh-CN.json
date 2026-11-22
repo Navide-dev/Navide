@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
             "cliList": "下面的列表分成两个带标题的区块。<strong>{cli}</strong> 是写代码用的 CLI，未安装的会标示出来。<strong>{agents}</strong> 按名字列出你的常驻 Agent（OpenClaw、Hermes Agent）：已打开的点击后切换过去，已关闭的点击后接续原来的对话；另有一个<em>新建 …</em>，会先请你起名字。ACP Agent 也列在这一区。列表下方有一行提示：Grok Bot、dots 这类云端 Agent 以 Navide 插件的形式提供。",
-            "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。"
+            "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。",
+            "sshRemote": "在 <strong>设置 → 一般 → 实验功能 → 远程容器分格</strong> 打开后，<strong>终端</strong> 下方会多出 <strong>SSH Remote…</strong>：填写主机、用户、端口（默认 22）与私钥路径，最近连接只存在这台电脑。只记住私钥的路径，不会读取或复制私钥，SSH agent 转发保持关闭。目前还不能真正打开分格：点击“连接”会检查设置，并显示“尚未支持”。"
           },
           "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "容器中的 CLI 已停止。重新连接会在同一个容器中开启新的会话。",
     "reconnect": "重新连接",
     "close-pane": "关闭分格"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "主机",
+    "host-placeholder": "主机名、IP 地址或 ssh 配置里的名称",
+    "user-label": "用户",
+    "user-placeholder": "沿用 ssh 配置",
+    "port-label": "端口",
+    "key-label": "私钥路径",
+    "key-placeholder": "~/.ssh/id_ed25519（选填）",
+    "key-hint": "只会记住路径。Navide 不会读取、复制或上传私钥，由这台电脑上的 ssh 自己使用。",
+    "recent-label": "最近连接",
+    "recent-empty": "还没有最近连接。",
+    "connect": "连接",
+    "connecting": "连接中…",
+    "cancel": "取消",
+    "unsupported": "尚未支持 SSH Remote 分格。连接设置已检查并记住，打开分格会在之后的版本加入。",
+    "error": "无法使用这组连接：{detail}",
+    "privacy-note": "最近连接只存在这台电脑，内容是主机、用户、端口与私钥路径。SSH agent 转发保持关闭，不保存任何密钥或密码。"
   },
   "shippedLog": {
     "menu": {

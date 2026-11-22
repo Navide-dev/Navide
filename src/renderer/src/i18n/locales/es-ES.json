@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "Arriba está el desplegable <strong>Seleccionar rol…</strong>: elige un rol predefinido.",
             "cliList": "Debajo, la lista se divide en dos bloques con encabezado. <strong>{cli}</strong> reúne las CLI de programación y marca las que no están instaladas. <strong>{agents}</strong> muestra tus agentes permanentes (OpenClaw, Hermes Agent) por nombre: si eliges uno abierto, cambias a él; si eliges uno cerrado, se reanuda su conversación. También hay una entrada <em>Nuevo …</em> que primero pide un nombre, y los agentes ACP aparecen en este bloque. Una nota bajo la lista indica que los agentes en la nube, como Grok Bot y dots, se ofrecen como complementos de Navide.",
-            "terminal": "Abajo están <strong>Terminal</strong> (un terminal normal sin agent) y <strong>Creación manual…</strong>."
+            "terminal": "Abajo están <strong>Terminal</strong> (un terminal normal sin agent) y <strong>Creación manual…</strong>.",
+            "sshRemote": "Con <strong>Ajustes → General → Funciones experimentales → Panes de contenedor remoto</strong> activado, aparece <strong>SSH Remote…</strong> debajo de <strong>Terminal</strong>. Pide host, usuario, puerto (22 por defecto) y la ruta de la clave privada, y guarda las conexiones recientes solo en este equipo. Solo se guarda la ruta de la clave; nunca se lee ni se copia, y el reenvío del agente SSH sigue desactivado. Abrir el pane aún no es compatible: Conectar comprueba la configuración y lo indica."
           },
           "p2": "<em>Creación manual…</em> abre el diálogo completo, donde puedes elegir el agent y el rol, decidir si añadirlo al escenario y si abrir un terminal junto a él, y pegar un id de session para reanudar directamente una conversación anterior.",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "La CLI del contenedor se detuvo. Reconectar abre una nueva sesión en el mismo contenedor.",
     "reconnect": "Reconectar",
     "close-pane": "Cerrar pane"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "Host",
+    "host-placeholder": "Nombre de host, dirección IP o alias de la configuración de ssh",
+    "user-label": "Usuario",
+    "user-placeholder": "Según tu configuración de ssh",
+    "port-label": "Puerto",
+    "key-label": "Ruta de la clave privada",
+    "key-placeholder": "~/.ssh/id_ed25519 (opcional)",
+    "key-hint": "Solo se guarda la ruta. Navide nunca lee, copia ni sube la clave; ssh la usa en este equipo.",
+    "recent-label": "Conexiones recientes",
+    "recent-empty": "Todavía no hay conexiones recientes.",
+    "connect": "Conectar",
+    "connecting": "Conectando…",
+    "cancel": "Cancelar",
+    "unsupported": "Los panes de SSH Remote aún no son compatibles. La configuración de conexión se comprobó y se guardó; abrir el pane llegará en una actualización posterior.",
+    "error": "No se puede usar esta conexión: {detail}",
+    "privacy-note": "Las conexiones recientes se guardan solo en este equipo: host, usuario, puerto y ruta de la clave. El reenvío del agente SSH sigue desactivado y no se guarda ninguna clave ni contraseña."
   },
   "shippedLog": {
     "menu": {

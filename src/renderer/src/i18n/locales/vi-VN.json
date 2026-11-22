@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "Trên cùng là danh sách thả xuống <strong>Chọn vai trò…</strong> — chọn một vai trò có sẵn.",
             "cliList": "Bên dưới, danh sách chia thành hai khối có tiêu đề. <strong>{cli}</strong> gồm các CLI lập trình, CLI nào chưa cài sẽ được đánh dấu. <strong>{agents}</strong> liệt kê các agent thường trực của bạn (OpenClaw, Hermes Agent) theo tên: chọn agent đang mở sẽ chuyển sang nó, chọn agent đã đóng sẽ tiếp tục cuộc trò chuyện cũ. Còn có mục <em>Mới …</em> hỏi tên trước, và các agent ACP cũng nằm ở khối này. Một ghi chú dưới danh sách cho biết các agent đám mây như Grok Bot và dots được cung cấp dưới dạng plugin Navide.",
-            "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>."
+            "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>.",
+            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Việc mở pane chưa được hỗ trợ: Kết nối sẽ kiểm tra cài đặt rồi báo như vậy."
           },
           "p2": "<em>Khởi chạy thủ công…</em> mở hộp thoại đầy đủ, nơi bạn có thể chọn agent và vai trò, quyết định có thêm vào khu vực chính hay không, có mở terminal bên cạnh hay không, và dán id session để tiếp tục ngay một cuộc trò chuyện trước.",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "CLI trong container đã dừng. Kết nối lại sẽ mở một phiên mới trong cùng container.",
     "reconnect": "Kết nối lại",
     "close-pane": "Đóng pane"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "Máy chủ",
+    "host-placeholder": "Tên máy chủ, địa chỉ IP hoặc tên trong cấu hình ssh",
+    "user-label": "Người dùng",
+    "user-placeholder": "Theo cấu hình ssh",
+    "port-label": "Cổng",
+    "key-label": "Đường dẫn khóa riêng",
+    "key-placeholder": "~/.ssh/id_ed25519 (không bắt buộc)",
+    "key-hint": "Chỉ lưu đường dẫn. Navide không bao giờ đọc, sao chép hay tải khóa lên; ssh trên máy này tự dùng khóa.",
+    "recent-label": "Kết nối gần đây",
+    "recent-empty": "Chưa có kết nối gần đây.",
+    "connect": "Kết nối",
+    "connecting": "Đang kết nối…",
+    "cancel": "Hủy",
+    "unsupported": "Pane SSH Remote chưa được hỗ trợ. Cài đặt kết nối đã được kiểm tra và lưu; tính năng mở pane sẽ có trong bản cập nhật sau.",
+    "error": "Không thể dùng kết nối này: {detail}",
+    "privacy-note": "Kết nối gần đây chỉ lưu trên máy này: máy chủ, người dùng, cổng và đường dẫn khóa. Chuyển tiếp SSH agent vẫn tắt và không lưu khóa hay mật khẩu nào."
   },
   "shippedLog": {
     "menu": {

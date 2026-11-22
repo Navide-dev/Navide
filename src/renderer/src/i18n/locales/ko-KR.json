@@ -4684,7 +4684,8 @@
           "addMenu": {
             "role": "맨 위에 <strong>역할 선택…</strong> 드롭다운이 있어 미리 정의된 역할을 골라요.",
             "cliList": "그 아래 목록은 제목이 붙은 두 블록으로 나뉘어요. <strong>{cli}</strong>에는 코딩용 CLI가 있고, 설치되지 않은 것은 따로 표시돼요. <strong>{agents}</strong>에는 상주 에이전트(OpenClaw, Hermes Agent)가 이름으로 나열되는데, 열려 있는 것을 고르면 그쪽으로 전환되고 닫힌 것을 고르면 이전 대화를 이어서 열어요. 이름을 먼저 입력받는 <em>새로 만들기 …</em> 항목도 있고, ACP 에이전트도 여기에 표시돼요. 목록 아래에는 Grok Bot, dots 같은 클라우드 에이전트는 Navide 플러그인으로 제공된다는 안내가 있어요.",
-            "terminal": "맨 아래에 <strong>터미널</strong>(agent가 없는 일반 터미널)과 <strong>수동 생성…</strong>이 있어요."
+            "terminal": "맨 아래에 <strong>터미널</strong>(agent가 없는 일반 터미널)과 <strong>수동 생성…</strong>이 있어요.",
+            "sshRemote": "<strong>설정 → 일반 → 실험 기능 → 원격 컨테이너 pane</strong>을 켜면 <strong>터미널</strong> 아래에 <strong>SSH Remote…</strong>가 나타나요. 호스트, 사용자, 포트(기본 22), 개인 키 경로를 입력하고, 최근 연결은 이 컴퓨터에만 저장돼요. 키는 경로만 저장하고 읽거나 복사하지 않으며, SSH agent 전달은 꺼진 상태로 유지돼요. pane 열기는 아직 지원되지 않아서 연결을 누르면 설정을 확인한 뒤 그렇게 알려 줘요."
           },
           "p2": "<em>수동 생성…</em>은 전체 대화 상자를 열어요. agent와 역할을 고르고, 스테이지에 추가할지, 옆에 터미널을 함께 열지 정하고, session ID를 붙여 넣어 이전 대화를 바로 재개할 수 있어요.",
           "table": {
@@ -12574,6 +12575,26 @@
     "disconnected-body": "컨테이너의 CLI가 종료됐어요. 다시 연결하면 같은 컨테이너에서 새 세션을 열어요.",
     "reconnect": "다시 연결",
     "close-pane": "pane 닫기"
+  },
+  "sshRemote": {
+    "menu-entry": "SSH Remote…",
+    "dialog-title": "SSH Remote",
+    "host-label": "호스트",
+    "host-placeholder": "호스트 이름, IP 주소 또는 ssh 설정의 이름",
+    "user-label": "사용자",
+    "user-placeholder": "ssh 설정 사용",
+    "port-label": "포트",
+    "key-label": "개인 키 경로",
+    "key-placeholder": "~/.ssh/id_ed25519 (선택)",
+    "key-hint": "경로만 저장해요. Navide는 키를 읽거나 복사하거나 업로드하지 않고, 이 컴퓨터의 ssh가 사용해요.",
+    "recent-label": "최근 연결",
+    "recent-empty": "아직 최근 연결이 없어요.",
+    "connect": "연결",
+    "connecting": "연결 중…",
+    "cancel": "취소",
+    "unsupported": "SSH Remote pane은 아직 지원되지 않아요. 연결 설정은 확인하고 저장했으며, pane 열기는 이후 업데이트에서 추가돼요.",
+    "error": "이 연결을 사용할 수 없어요: {detail}",
+    "privacy-note": "최근 연결은 이 컴퓨터에만 저장돼요(호스트, 사용자, 포트, 키 경로). SSH agent 전달은 꺼진 상태로 유지되며 키나 비밀번호는 저장하지 않아요."
   },
   "shippedLog": {
     "menu": {

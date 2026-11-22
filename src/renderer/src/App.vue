@@ -533,6 +533,7 @@ const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vu
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
 const RemoteDevcontainerDialog = defineAsyncComponent(() => import('./components/RemoteDevcontainerDialog.vue'))
+const SshRemoteDialog = defineAsyncComponent(() => import('./components/SshRemoteDialog.vue'))
 const ArenaPanel = defineAsyncComponent(() => import('./components/ArenaPanel.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
@@ -24929,6 +24930,12 @@ const { remoteEnabled: remoteDevcontainerEnabled } = useRemoteDevcontainerPrefs(
 /** Where the dialog's pane goes; null while the dialog is closed. */
 const remoteDialogTarget = ref<{ workspacePath: string; runGroupId?: string } | null>(null)
 
+/** ＋ menu → SSH Remote… (same experimental switch). */
+const sshRemoteDialogOpen = ref(false)
+function openSshRemoteDialog(): void {
+  if (remoteDevcontainerEnabled.value) sshRemoteDialogOpen.value = true
+}
+
 function openRemoteDialog(payload: { workspacePath: string; runGroupId?: string }): void {
   if (!remoteDevcontainerEnabled.value) return
   remoteDialogTarget.value = { workspacePath: payload.workspacePath || currentWorkspace.value, runGroupId: payload.runGroupId }
@@ -26447,6 +26454,13 @@ function paneIsCommander(p: ActivePane): boolean {
     @open="onRemoteDialogOpen"
     @cancel="remoteDialogTarget = null"
   />
+  <SshRemoteDialog
+    v-if="sshRemoteDialogOpen"
+    :open="sshRemoteDialogOpen"
+    :backend="backend"
+    @connected="sshRemoteDialogOpen = false"
+    @cancel="sshRemoteDialogOpen = false"
+  />
   <ArenaStartDialog
     v-if="arenaStartOpen"
     :open="arenaStartOpen"
@@ -26728,6 +26742,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @spawn="onManualSpawn"
       @spawn-acp="onAcpSpawn"
       @spawn-remote="openRemoteDialog"
+      @spawn-ssh-remote="openSshRemoteDialog"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"
