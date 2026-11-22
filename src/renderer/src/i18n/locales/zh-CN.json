@@ -11798,7 +11798,9 @@
       "title": "Build for Navide：做你自己的 Navide 插件",
       "step-init": "用模板创建 Navide 插件（Navide 0.2.39 起）：",
       "step-load": "在“设置 → Navide 插件 → 开发者模式 → 从文件夹加载…”加载试用",
+      "step-check": "验证并打包，与审核运行的是同一套检查：",
       "step-apply": "在下方登录，实名填写一次开发者申请，由专人审核。",
+      "step-publish": "签名后用 {command} 提交审核，专人审核通过后就会在 Navide 市场上架。",
       "next": {
         "apply": "下一步：填写下方的开发者申请。",
         "pending": "下一步：等待审核。这段时间可以先构建 Navide 插件，用开发者模式 加载试用。",

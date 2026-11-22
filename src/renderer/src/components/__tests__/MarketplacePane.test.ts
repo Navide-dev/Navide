@@ -462,6 +462,16 @@ describe('MarketplacePane', () => {
     setMarketplaceView('browse')
   })
 
+  it('still offers to build a Navide plugin when the Registry cannot be reached', async () => {
+    mockPlugins({ marketplaceSearch: vi.fn().mockRejectedValue(new Error('offline')) })
+    setMarketplaceView('browse')
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-testid="marketplace-build-own"] button').trigger('click')
+    expect(marketplaceView.value).toBe('developer')
+    setMarketplaceView('browse')
+  })
+
   it('marks installed items and offers Update only when the main process reports one', async () => {
     const api = mockPlugins({
       marketplaceSearch: vi.fn().mockResolvedValue({

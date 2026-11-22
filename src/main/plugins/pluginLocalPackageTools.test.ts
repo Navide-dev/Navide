@@ -160,3 +160,17 @@ describe('plugins_validate_package', () => {
     expect(report.errors).toHaveLength(1)
   })
 })
+
+describe('the navide-plugin init template', () => {
+  // The one-step template the Developer entry card offers: Navide's own
+  // plugins_validate_package and plugins_package accept it as scaffolded.
+  it('validates and packages in Navide without a build step', async () => {
+    const scaffold = join(base, 'acme-hello')
+    const init = spawnSync(process.execPath, [cli, 'init', scaffold, '--id', 'acme.hello'], { encoding: 'utf8' })
+    expect(init.status, init.stderr).toBe(0)
+    expect(await validateLocalPackage(scaffold, deps())).toMatchObject({ valid: true, errors: [], packageKind: 'folder', id: 'acme.hello' })
+    const report = await packageLocalFolder(scaffold, {}, deps())
+    expect(report).toMatchObject({ valid: true, errors: [], target: 'universal', path: join(base, 'acme.hello-0.1.0-universal.vsix') })
+    expect(await validateLocalPackage(report.path, deps())).toMatchObject({ valid: true, packageKind: 'file', id: 'acme.hello' })
+  })
+})

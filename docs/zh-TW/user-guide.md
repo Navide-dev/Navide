@@ -310,6 +310,18 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 
 `.agent-team/` 目前不是可攜機制。未來在不同裝置間移轉時，應使用具有 Redaction 與 Retention Control 的明確本機 Export／Import，而不是透過 Git 同步。
 
+### 開發自己的 Navide 外掛
+
+任何人都可以自己做 Navide 外掛，並上架到 Navide 市集。**設定 → Navide 市集 → 開發者**會在 App 裡一步步帶你做；完整指令在 [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md)（英文）。
+
+1. **用範本建立。** `navide-plugin init acme-hello --id acme.hello` 會建立一個不用建置的外掛；加上 `--template vue` 則會建立 Vue 畫面、小型後端和一個 agent 工具。開發套件還沒上 npm，指南裡有一行 `npx` 指令，直接從 GitHub Release `plugin-packages-1.0.0` 執行。
+2. **不上架就能載入試用。** 開啟[開發者模式](#開發者模式)，選 **從資料夾載入…**。載入的資料夾在你儲存後會自動重新載入。
+3. **驗證並打包。** `navide-plugin validate` 和 `navide-plugin package` 跑的是 Navide 市集審核前的同一套檢查，並產生 `.vsix` 檔。分格裡的 agent 也能用 `plugins_validate_package` 和 `plugins_package` 跑同樣的檢查，兩者都不會安裝任何東西。
+4. **申請開發者（一次就好）。** 在開發者頁登入，實名填寫申請，由專人審核。
+5. **送審上架。** 認領命名空間、註冊簽章金鑰，再簽章並用 `navide-plugin publish` 或 Navide 的上架表單送出。每個版本都由專人審核（目標 3 個工作天），通過後才會上架。
+
+第 1～3 步都只在你的電腦上進行。第 4～5 步要等你自己按下按鈕或執行指令才會送出，由 agent 代填表單時也一樣。
+
 ### Navide 外掛指令
 
 Navide 外掛可以宣告指令，它們會列在**設定 → 快捷鍵**的外掛名稱底下；建議的按鍵要你接受才會綁定，已被佔用的按鍵會標示出來。指令只在你按下按鍵時執行，Agent 不能執行。

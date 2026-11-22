@@ -108,11 +108,16 @@ describe('MarketplaceDeveloperPanel', () => {
       return w
     }
 
-    it('lists three steps and opens the guide and the console when signed out', async () => {
+    it('lists the five steps from template to review and opens the guide and the console when signed out', async () => {
       wrapper = await mountWith(false, null)
       const card = wrapper.get('[data-testid="developer-entry"]')
-      expect(card.findAll('.dev-entry-steps li')).toHaveLength(3)
-      expect(card.text()).toContain('--template vue')
+      expect(card.findAll('.dev-entry-steps li')).toHaveLength(5)
+      // The public packages are not on npm: the command runs the CLI from the pinned GitHub Release tarballs.
+      const command = card.get('[data-testid="developer-entry-init"]').text()
+      expect(command).toContain('https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0/navide-plugin-sdk-1.0.0.tgz')
+      expect(command).toContain('navide-plugin init acme-hello --id acme.hello')
+      expect(card.get('[data-testid="developer-entry-check"]').text()).toBe('navide-plugin validate acme-hello && navide-plugin package acme-hello')
+      expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('navide-plugin publish')
       expect(card.find('[data-testid="developer-entry-next"]').exists()).toBe(false)
       const openExternal = (window as unknown as { agentTeam: { openExternal: ReturnType<typeof vi.fn> } }).agentTeam.openExternal
       await card.get('[data-testid="developer-entry-guide"]').trigger('click')

@@ -35,7 +35,7 @@ import type {
   DeveloperVersionRow,
   StagedPackage,
 } from '../../../shared/marketplaceDeveloper'
-import { BUILD_FOR_NAVIDE_URL, DEVELOPER_DOC_URLS, DEVELOPERS_URL } from '../../../shared/marketplaceDeveloper'
+import { BUILD_FOR_NAVIDE_URL, DEVELOPER_DOC_URLS, DEVELOPERS_URL, PLUGIN_CHECK_COMMAND, PLUGIN_INIT_COMMAND } from '../../../shared/marketplaceDeveloper'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
@@ -399,9 +399,11 @@ onMounted(() => {
     <section class="dev-section dev-entry" data-testid="developer-entry" :aria-label="$t('marketplace-developer.entry.title')">
       <h2 class="dev-title">{{ $t('marketplace-developer.entry.title') }}</h2>
       <ol v-if="entryStep === 'signed-out'" class="dev-entry-steps">
-        <li>{{ $t('marketplace-developer.entry.step-init') }} <code>npx navide-plugin init acme-hello --id acme.hello --template vue</code></li>
+        <li>{{ $t('marketplace-developer.entry.step-init') }} <code data-testid="developer-entry-init">{{ PLUGIN_INIT_COMMAND }}</code></li>
         <li>{{ $t('marketplace-developer.entry.step-load') }}</li>
+        <li>{{ $t('marketplace-developer.entry.step-check') }} <code data-testid="developer-entry-check">{{ PLUGIN_CHECK_COMMAND }}</code></li>
         <li>{{ $t('marketplace-developer.entry.step-apply') }}</li>
+        <li><i18n-t keypath="marketplace-developer.entry.step-publish" tag="span" scope="global"><template #command><code>navide-plugin publish</code></template></i18n-t></li>
       </ol>
       <p v-else-if="entryStep" class="dev-muted" data-testid="developer-entry-next">{{ $t(`marketplace-developer.entry.next.${entryStep}`) }}</p>
       <div class="dev-actions">

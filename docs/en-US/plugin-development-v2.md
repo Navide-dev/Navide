@@ -3778,7 +3778,10 @@ internal v1 loader/adapter. It is not the third-party API support policy.
 
 Issue 06 supports the following external frontend workflow:
 
-1. Install the three public packages from their SemVer registry ranges.
+1. Install the three public packages. They are not on npm yet: install the
+   tarballs of the GitHub Release `plugin-packages-1.0.0` (see
+   [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin));
+   once they are published to npm, their SemVer ranges work the same way.
 2. Declare the smallest permissions and run `navide-plugin validate <directory>`.
 3. Run the plugin project's `typecheck` and `build` scripts to create a
    frontend-only staging directory.
@@ -3790,6 +3793,10 @@ Issue 06 supports the following external frontend workflow:
 Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
+[Build for Navide](build-for-navide.md#the-whole-path-at-a-glance) lists the
+whole path from `navide-plugin init` to a reviewed listing, with the Navide
+screen and the MCP tool for each step; Settings → Navide Marketplace →
+Developer shows the same steps in the app.
 
 An agent learns this workflow from the skill that ships with Navide: it calls
 `skills_prepare_install` with the source `navide:plugin-authoring`, and the

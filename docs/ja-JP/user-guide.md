@@ -233,6 +233,18 @@ Claude Code はリクエストごとに Credential を読み直すため、何�
 
 `.agent-team/` は現在 Portability Mechanism ではありません。将来 Machine 間で移行する場合は Git Synchronization ではなく、Redaction と Retention Control を備えた明示的な Local Export/Import Flow を使用すべきです。
 
+### 自分の Navide プラグインを作る
+
+誰でも Navide プラグインを作り、Navide マーケットプレイスに公開できます。**設定 → Navide マーケットプレイス → 開発者** が App の中で手順を案内します。すべてのコマンドはガイド [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md)（英語）にあります。
+
+1. **テンプレートから作成する。** `navide-plugin init acme-hello --id acme.hello` はビルド不要のプラグインを作ります。`--template vue` を付けると、Vue のビュー、小さなバックエンド、エージェントツールを作ります。開発用パッケージはまだ npm にありません。GitHub Release `plugin-packages-1.0.0` から直接実行する 1 行の `npx` コマンドがガイドにあります。
+2. **公開せずに読み込む。** 開発者モードをオンにして **フォルダーから読み込む…** を選びます。読み込んだフォルダーは保存すると自動で再読み込みされます。
+3. **検証してパッケージにする。** `navide-plugin validate` と `navide-plugin package` は、Navide マーケットプレイスが審査前に行うのと同じチェックを実行し、`.vsix` ファイルを書き出します。ペインのエージェントも `plugins_validate_package` と `plugins_package` で同じチェックを実行できます。どちらも何もインストールしません。
+4. **開発者申請を一度だけ行う。** 開発者ページでサインインし、実名で申請を記入します。担当者が審査します。
+5. **審査に提出する。** 名前空間を取得して署名鍵を登録し、パッケージに署名して `navide-plugin publish` または Navide の公開フォームで提出します。各バージョンは担当者が審査し（目安は 3 営業日）、通過後に掲載されます。
+
+手順 1～3 はこのコンピューターの中だけで行われます。手順 4～5 は、エージェントがフォームを代わりに記入した場合も含め、あなたがボタンを押すかコマンドを実行するまで送信されません。
+
 ### Navide プラグインのコマンド
 
 Navide プラグインはコマンドを宣言できます。コマンドは**設定 → ショートカット**のプラグイン名の下に表示されます。提案されたキーは受け入れたときにだけ割り当てられ、すでに使われているキーはそのように表示されます。コマンドはキーを押したときにだけ実行され、Agent は実行できません。

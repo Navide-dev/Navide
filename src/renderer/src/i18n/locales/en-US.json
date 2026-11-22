@@ -11798,7 +11798,9 @@
       "title": "Build for Navide",
       "step-init": "Create a Navide plugin from the template (Navide 0.2.39 or later):",
       "step-load": "Load it with Settings → Navide Plugins → Developer Mode → Load from Folder…",
+      "step-check": "Validate and package it with the same checks review runs:",
       "step-apply": "Sign in below and fill in the developer application once, with your real name; a person reviews it.",
+      "step-publish": "Sign it and submit it with {command}; a person reviews it, then it is listed on the Navide Marketplace.",
       "next": {
         "apply": "Next: fill in the developer application below.",
         "pending": "Next: wait for the review. Meanwhile, build your Navide plugin and load it with Developer Mode.",

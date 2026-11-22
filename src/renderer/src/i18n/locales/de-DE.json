@@ -11798,7 +11798,9 @@
       "title": "Build for Navide: Ihr eigenes Navide-Plug-in",
       "step-init": "Ein Navide-Plug-in aus der Vorlage erstellen (ab Navide 0.2.39):",
       "step-load": "Mit „Einstellungen → Navide-Plug-ins → Entwicklermodus → Aus Ordner laden …“ laden und ausprobieren",
+      "step-check": "Mit denselben Prüfungen wie bei der Freigabe validieren und packen:",
       "step-apply": "Unten anmelden und die Entwickler-Bewerbung einmal mit Ihrem echten Namen ausfüllen; ein Mensch prüft sie.",
+      "step-publish": "Signieren und mit {command} einreichen; nach der Prüfung durch einen Menschen erscheint es im Navide Marketplace.",
       "next": {
         "apply": "Als Nächstes: Füllen Sie unten die Entwickler-Bewerbung aus.",
         "pending": "Als Nächstes: Warten Sie auf die Prüfung. Bis dahin können Sie Ihr Navide-Plug-in bauen und im Entwicklermodus laden.",
