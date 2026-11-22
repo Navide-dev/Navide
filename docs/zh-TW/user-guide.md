@@ -75,7 +75,7 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 
 ### SSH Remote 分格（實驗功能）
 
-目前還不能用：這一版只加了設定對話框，真的在遠端機器開分格會在之後的版本加入。
+在另一台電腦上透過 `ssh` 執行 shell 的終端機分格。只支援終端機分格，不會在遠端主機開 Claude Code 或 Codex。
 
 到 **設定 → 一般 → 實驗功能 → 遠端容器分格** 打開後，**＋** 選單的 **終端機** 下方會多出 **SSH Remote…**。
 
@@ -83,7 +83,9 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 - **私鑰路徑** 可以不填。Navide 只記住路徑、交給 `ssh -i` 使用，不會讀取、複製或上傳私鑰。
 - **最近連線** 只存在這台電腦，最多八筆（主機、使用者、連接埠、私鑰路徑），不會進 Navide Cloud 同步，也不會被匯出的設定包帶走。
 - **SSH agent 轉送保持關閉**（`ForwardAgent=no`，不帶 `-A`）；`ssh` 本身需要以外的環境變數都會移除，所以任何 `SendEnv` 設定都帶不走本機的 API key。
-- 按 **連線** 會檢查設定，接著顯示「尚未支援 SSH Remote 分格」，不會真的建立連線。
+- 按 **連線** 時，Navide 會先用不互動的 `ssh` 檢查主機一次。連得上就開一個在那台主機執行登入 shell 的終端機分格；連不上時，對話框會用白話說明原因：連不上主機、金鑰被拒，或主機驗證失敗。如果是金鑰或主機驗證被拒，可以按 **仍然開啟**，讓 `ssh` 在分格裡詢問私鑰密碼或主機指紋。
+- **連線中斷會自動重新連線。** `ssh` 斷線後，分格會在 2、5、15、30、60 秒後重新檢查主機，並顯示每次失敗的原因；金鑰或主機驗證被拒就不再重試。按 **重新連線** 會立刻再試一次。在分格裡輸入 `exit` 結束後不會自動重連。
+- Navide 重新啟動後不會還原 SSH Remote 分格，請從 **最近連線** 再開一次。
 
 ### CLI risk observations
 

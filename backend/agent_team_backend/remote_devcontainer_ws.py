@@ -176,6 +176,11 @@ async def create_remote_pane(
     from . import app
     from .mcp_server import wiring
 
+    remote = payload.get("remote")
+    if isinstance(remote, dict) and remote.get("kind") == "ssh":
+        await create_ssh_pane(session, msg_id, msg_type, payload, transaction, generation)
+        return
+
     settings = await _settings()
     if not rd.enabled(settings):
         await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote devcontainer panes are off"))
@@ -264,20 +269,114 @@ async def create_remote_pane(
 
 @handler("remote_ssh.connect")
 async def remote_ssh_connect(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """SSH Remote panes: the target is validated and the argv is built, but
-    opening the pane is not implemented yet, so the answer is always
-    ``REMOTE_SSH_UNSUPPORTED`` for a valid target. Rides the same
-    experimental switch as remote container panes."""
-    from . import remote_ssh
+    """SSH Remote dialog → Connect: one BatchMode ssh call to the target. On
+    success, or with ``force`` after a key or host-key refusal (the pane's
+    own ssh can then ask for a passphrase or the fingerprint), the target is
+    remembered as trusted and the answer is ``{"spec": ...}`` for
+    ``terminal.create``. A failure is ``REMOTE_SSH_FAILED`` with ``reason``,
+    one of remote_ssh.REASONS. Rides the remote panes switch."""
+    from . import app, remote_ssh
+    from .db_executor import run_in_db_thread
 
     if not await _enabled():
         await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote panes are off"))
         return
     try:
         target = remote_ssh.parse_target(payload.get("target"))
-        remote_ssh.shell_argv(target)
+        argv = remote_ssh.preflight_argv(target)
     except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
-    await session.send_json(make_error(
-        msg_id, msg_type, "REMOTE_SSH_UNSUPPORTED", "SSH Remote panes are not supported yet"))
+    code, out, err = await _run_ssh(argv)
+    reason = remote_ssh.classify(code, out, err)
+    if reason is not None and not (payload.get("force") is True and reason in ("auth", "host-key")):
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_SSH_FAILED", f"ssh failed: {reason}",
+            {"reason": reason, **_ssh_error(code, err)},
+        ))
+        return
+    trusted = remote_ssh.with_trusted(await _settings(), target)
+    await run_in_db_thread(app.ui_settings_store.set, {remote_ssh.TRUSTED_KEY: trusted})
+    await session.send_json(make_response(msg_id, msg_type, {"spec": {"kind": "ssh", **target}}))
+
+
+async def create_ssh_pane(
+    session: "Session",
+    msg_id: str,
+    msg_type: str,
+    payload: dict,
+    transaction: dict[str, Any],
+    generation: str,
+) -> None:
+    """``terminal.create`` for an SSH Remote terminal pane: the login shell on
+    a target the user connected to from the dialog, never one a pane record
+    alone names."""
+    from . import app, remote_ssh
+
+    settings = await _settings()
+    if not rd.enabled(settings):
+        await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote panes are off"))
+        return
+    pane_id = str(payload["pane_id"])
+    try:
+        spec = remote_ssh.parse_spec(payload.get("remote"))
+        if str(payload.get("agent_key") or "") != "terminal":
+            raise remote_ssh.SshTargetError("an SSH Remote pane is a terminal pane")
+        argv = remote_ssh.shell_argv(spec)
+    except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    if not remote_ssh.is_trusted(settings, spec):
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_UNTRUSTED", "connect to this host from the SSH Remote dialog first",
+            {"host": spec["host"]},
+        ))
+        return
+
+    metadata = dict(payload.get("metadata") or {})
+    for key in _SERVER_KEYS:
+        metadata.pop(key, None)
+    metadata[remote_ssh.METADATA_KEY] = spec
+
+    replaces_tid = str(payload.get("replaces_terminal_id") or "")
+    if replaces_tid:
+        stale = session.terminals.get(replaces_tid)
+        if stale is not None and not stale.closed and stale.pane_id == pane_id:
+            await session.terminals.kill(replaces_tid, force=True)
+            await session.terminals.wait_until_reaped(replaces_tid)
+    if transaction["cancelled"]:
+        from .ws_handlers import _TerminalCreateCancelled
+
+        raise _TerminalCreateCancelled
+
+    cwd = str(payload.get("cwd") or "")
+    if not os.path.isdir(cwd):
+        cwd = rd.default_cwd()
+    term = session.terminals.create(
+        pane_id=pane_id,
+        agent_key="terminal",
+        command=argv,
+        cwd=cwd,
+        cols=int(payload.get("cols", 100)),
+        rows=int(payload.get("rows", 30)),
+        env_remove=rd.spawn_env_remove(os.environ),
+        metadata=metadata,
+    )
+    transaction["term_id"] = term.id
+    app._PTY_OWNERS[term.id] = session
+    response_payload = {
+        "terminal_session_id": term.id,
+        "pane_id": term.pane_id,
+        "pid": term.proc.pid,
+        "command": [argv[0], remote_ssh.destination(spec)],
+        "startup_probe": None,
+        "create_generation": generation,
+        "remote": spec,
+    }
+    await session.send_json(make_response(msg_id, msg_type, response_payload))
+    if session.dead or transaction["cancelled"]:
+        from .ws_handlers import _TerminalCreateCancelled
+
+        raise _TerminalCreateCancelled
+    transaction["response_payload"] = response_payload
+    transaction["committed"] = True

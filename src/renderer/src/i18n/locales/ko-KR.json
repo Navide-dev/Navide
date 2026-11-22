@@ -4685,7 +4685,7 @@
             "role": "맨 위에 <strong>역할 선택…</strong> 드롭다운이 있어 미리 정의된 역할을 골라요.",
             "cliList": "그 아래 목록은 제목이 붙은 두 블록으로 나뉘어요. <strong>{cli}</strong>에는 코딩용 CLI가 있고, 설치되지 않은 것은 따로 표시돼요. <strong>{agents}</strong>에는 상주 에이전트(OpenClaw, Hermes Agent)가 이름으로 나열되는데, 열려 있는 것을 고르면 그쪽으로 전환되고 닫힌 것을 고르면 이전 대화를 이어서 열어요. 이름을 먼저 입력받는 <em>새로 만들기 …</em> 항목도 있고, ACP 에이전트도 여기에 표시돼요. 목록 아래에는 Grok Bot, dots 같은 클라우드 에이전트는 Navide 플러그인으로 제공된다는 안내가 있어요.",
             "terminal": "맨 아래에 <strong>터미널</strong>(agent가 없는 일반 터미널)과 <strong>수동 생성…</strong>이 있어요.",
-            "sshRemote": "<strong>설정 → 일반 → 실험 기능 → 원격 컨테이너 pane</strong>을 켜면 <strong>터미널</strong> 아래에 <strong>SSH Remote…</strong>가 나타나요. 호스트, 사용자, 포트(기본 22), 개인 키 경로를 입력하고, 최근 연결은 이 컴퓨터에만 저장돼요. 키는 경로만 저장하고 읽거나 복사하지 않으며, SSH agent 전달은 꺼진 상태로 유지돼요. pane 열기는 아직 지원되지 않아서 연결을 누르면 설정을 확인한 뒤 그렇게 알려 줘요."
+            "sshRemote": "<strong>설정 → 일반 → 실험 기능 → 원격 컨테이너 pane</strong>을 켜면 <strong>터미널</strong> 아래에 <strong>SSH Remote…</strong>가 나타나요. 호스트, 사용자, 포트(기본 22), 개인 키 경로를 입력하고, 최근 연결은 이 컴퓨터에만 저장돼요. 키는 경로만 저장하고 읽거나 복사하지 않으며, SSH agent 전달은 꺼진 상태로 유지돼요. 연결을 누르면 호스트를 확인하고 그곳에서 셸이 실행되는 터미널 pane을 열어요. 연결이 끊기면 pane이 알아서 다시 연결해요."
           },
           "p2": "<em>수동 생성…</em>은 전체 대화 상자를 열어요. agent와 역할을 고르고, 스테이지에 추가할지, 옆에 터미널을 함께 열지 정하고, session ID를 붙여 넣어 이전 대화를 바로 재개할 수 있어요.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "연결",
     "connecting": "연결 중…",
     "cancel": "취소",
-    "unsupported": "SSH Remote pane은 아직 지원되지 않아요. 연결 설정은 확인하고 저장했으며, pane 열기는 이후 업데이트에서 추가돼요.",
     "error": "이 연결을 사용할 수 없어요: {detail}",
-    "privacy-note": "최근 연결은 이 컴퓨터에만 저장돼요(호스트, 사용자, 포트, 키 경로). SSH agent 전달은 꺼진 상태로 유지되며 키나 비밀번호는 저장하지 않아요."
+    "privacy-note": "최근 연결은 이 컴퓨터에만 저장돼요(호스트, 사용자, 포트, 키 경로). SSH agent 전달은 꺼진 상태로 유지되며 키나 비밀번호는 저장하지 않아요.",
+    "reason-unreachable": "{host}에 연결할 수 없습니다. 호스트 이름을 찾을 수 없거나, 컴퓨터가 꺼져 있거나, 네트워크 또는 방화벽이 SSH 포트를 막고 있습니다. 호스트 이름, 포트, 네트워크를 확인하세요.",
+    "reason-auth": "{host}이(가) 키를 거부했습니다. 키 경로가 틀렸거나, 암호가 있는 키가 ssh-agent에 로드되지 않았거나, 공개 키가 아직 원격 authorized_keys에 없습니다.",
+    "reason-host-key": "{host}을(를) 확인할 수 없습니다. 아직 known_hosts에 없거나 호스트 키가 지난번과 달라졌습니다. 처음 연결이라면 “그래도 열기”를 누르고 pane에서 지문을 확인한 뒤 수락하세요.",
+    "reason-other": "{host}에 연결하는 중 예상치 못한 오류가 발생했습니다. 터미널에서 ssh를 직접 실행해 자세한 내용을 확인하세요.",
+    "open-anyway": "그래도 열기(pane에서 ssh에 응답)",
+    "sub": "SSH · {target}",
+    "lost-title": "{host}와(과)의 연결이 끊어졌습니다",
+    "ended-title": "{host}의 터미널이 종료되었습니다",
+    "reconnecting": "다시 연결하는 중…",
+    "retry-in": "{seconds}초 후 자동으로 다시 연결합니다",
+    "reconnect": "다시 연결",
+    "close-pane": "pane 닫기"
   },
   "shippedLog": {
     "menu": {

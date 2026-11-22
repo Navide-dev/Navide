@@ -4685,7 +4685,7 @@
             "role": "En haut, la liste déroulante <strong>Sélectionner un rôle…</strong> – choisissez un rôle prédéfini.",
             "cliList": "En dessous, la liste est divisée en deux blocs titrés. <strong>{cli}</strong> regroupe les CLI de développement ; ceux qui ne sont pas installés sont signalés. <strong>{agents}</strong> affiche vos agents permanents (OpenClaw, Hermes Agent) par leur nom : choisir un agent ouvert vous y amène, choisir un agent fermé reprend sa conversation. Une entrée <em>Nouveau …</em> demande d’abord un nom, et les agents ACP figurent aussi dans ce bloc. Une note sous la liste rappelle que les agents cloud comme Grok Bot et dots sont fournis sous forme de plugins Navide.",
             "terminal": "En bas, <strong>Terminal</strong> (un simple terminal sans agent associé) et <strong>Lancement manuel…</strong>.",
-            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. L’ouverture du pane n’est pas encore prise en charge : Se connecter vérifie les réglages et l’indique."
+            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. Se connecter vérifie l’hôte et ouvre un pane de terminal dont le shell s’exécute là-bas ; si la connexion tombe, le pane se reconnecte tout seul."
           },
           "p2": "<em>Lancement manuel…</em> ouvre la boîte de dialogue complète, où vous pouvez choisir l’agent et le rôle, décider de l’ajouter ou non à la scène, d’ouvrir ou non un terminal à côté, et coller un identifiant de session pour reprendre directement une conversation antérieure.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "Se connecter",
     "connecting": "Connexion…",
     "cancel": "Annuler",
-    "unsupported": "Les panes SSH Remote ne sont pas encore pris en charge. Les réglages de connexion ont été vérifiés et enregistrés ; l’ouverture du pane arrivera dans une prochaine mise à jour.",
     "error": "Impossible d’utiliser cette connexion : {detail}",
-    "privacy-note": "Les connexions récentes sont enregistrées sur cet ordinateur uniquement : hôte, utilisateur, port et chemin de la clé. Le transfert de l’agent SSH reste désactivé et aucune clé ni aucun mot de passe n’est enregistré."
+    "privacy-note": "Les connexions récentes sont enregistrées sur cet ordinateur uniquement : hôte, utilisateur, port et chemin de la clé. Le transfert de l’agent SSH reste désactivé et aucune clé ni aucun mot de passe n’est enregistré.",
+    "reason-unreachable": "Impossible de joindre {host} : le nom ne se résout pas, la machine est éteinte, ou un réseau ou un pare-feu bloque le port SSH. Vérifiez le nom d’hôte, le port et le réseau.",
+    "reason-auth": "{host} a refusé la clé : le chemin de la clé est faux, la clé a une phrase secrète mais n’est pas chargée dans ssh-agent, ou sa clé publique n’est pas encore dans authorized_keys sur la machine distante.",
+    "reason-host-key": "Impossible de vérifier {host} : il n’est pas encore dans known_hosts, ou sa clé d’hôte a changé depuis la dernière fois. Pour une première connexion, choisissez Ouvrir quand même et vérifiez l’empreinte dans le pane avant de l’accepter.",
+    "reason-other": "Une erreur inattendue s’est produite lors de la connexion à {host}. Lancez ssh à la main dans un terminal pour voir le détail.",
+    "open-anyway": "Ouvrir quand même (répondre à ssh dans le pane)",
+    "sub": "SSH · {target}",
+    "lost-title": "Connexion à {host} perdue",
+    "ended-title": "Le terminal sur {host} s’est terminé",
+    "reconnecting": "Reconnexion…",
+    "retry-in": "Reconnexion automatique dans {seconds} s",
+    "reconnect": "Reconnecter",
+    "close-pane": "Fermer le pane"
   },
   "shippedLog": {
     "menu": {

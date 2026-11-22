@@ -4685,7 +4685,7 @@
             "role": "Arriba está el desplegable <strong>Seleccionar rol…</strong>: elige un rol predefinido.",
             "cliList": "Debajo, la lista se divide en dos bloques con encabezado. <strong>{cli}</strong> reúne las CLI de programación y marca las que no están instaladas. <strong>{agents}</strong> muestra tus agentes permanentes (OpenClaw, Hermes Agent) por nombre: si eliges uno abierto, cambias a él; si eliges uno cerrado, se reanuda su conversación. También hay una entrada <em>Nuevo …</em> que primero pide un nombre, y los agentes ACP aparecen en este bloque. Una nota bajo la lista indica que los agentes en la nube, como Grok Bot y dots, se ofrecen como complementos de Navide.",
             "terminal": "Abajo están <strong>Terminal</strong> (un terminal normal sin agent) y <strong>Creación manual…</strong>.",
-            "sshRemote": "Con <strong>Ajustes → General → Funciones experimentales → Panes de contenedor remoto</strong> activado, aparece <strong>SSH Remote…</strong> debajo de <strong>Terminal</strong>. Pide host, usuario, puerto (22 por defecto) y la ruta de la clave privada, y guarda las conexiones recientes solo en este equipo. Solo se guarda la ruta de la clave; nunca se lee ni se copia, y el reenvío del agente SSH sigue desactivado. Abrir el pane aún no es compatible: Conectar comprueba la configuración y lo indica."
+            "sshRemote": "Con <strong>Ajustes → General → Funciones experimentales → Panes de contenedor remoto</strong> activado, aparece <strong>SSH Remote…</strong> debajo de <strong>Terminal</strong>. Pide host, usuario, puerto (22 por defecto) y la ruta de la clave privada, y guarda las conexiones recientes solo en este equipo. Solo se guarda la ruta de la clave; nunca se lee ni se copia, y el reenvío del agente SSH sigue desactivado. Conectar comprueba el host y abre un pane de terminal cuyo shell se ejecuta allí; si la conexión se corta, el pane se reconecta solo."
           },
           "p2": "<em>Creación manual…</em> abre el diálogo completo, donde puedes elegir el agent y el rol, decidir si añadirlo al escenario y si abrir un terminal junto a él, y pegar un id de session para reanudar directamente una conversación anterior.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "Conectar",
     "connecting": "Conectando…",
     "cancel": "Cancelar",
-    "unsupported": "Los panes de SSH Remote aún no son compatibles. La configuración de conexión se comprobó y se guardó; abrir el pane llegará en una actualización posterior.",
     "error": "No se puede usar esta conexión: {detail}",
-    "privacy-note": "Las conexiones recientes se guardan solo en este equipo: host, usuario, puerto y ruta de la clave. El reenvío del agente SSH sigue desactivado y no se guarda ninguna clave ni contraseña."
+    "privacy-note": "Las conexiones recientes se guardan solo en este equipo: host, usuario, puerto y ruta de la clave. El reenvío del agente SSH sigue desactivado y no se guarda ninguna clave ni contraseña.",
+    "reason-unreachable": "No se puede llegar a {host}: el nombre no se resuelve, el equipo está apagado o una red o un cortafuegos bloquea el puerto SSH. Revisa el nombre del host, el puerto y la red.",
+    "reason-auth": "{host} rechazó la clave: la ruta de la clave es incorrecta, la clave tiene frase de contraseña pero no está cargada en ssh-agent, o su clave pública aún no está en authorized_keys del equipo remoto.",
+    "reason-host-key": "No se puede verificar {host}: aún no está en known_hosts o su clave de host cambió desde la última vez. En una primera conexión, elige Abrir de todos modos y comprueba la huella en el pane antes de aceptarla.",
+    "reason-other": "Algo inesperado falló al conectar con {host}. Ejecuta ssh a mano en una terminal para ver los detalles.",
+    "open-anyway": "Abrir de todos modos (responder a ssh en el pane)",
+    "sub": "SSH · {target}",
+    "lost-title": "Se perdió la conexión con {host}",
+    "ended-title": "La terminal en {host} terminó",
+    "reconnecting": "Reconectando…",
+    "retry-in": "Reconexión automática en {seconds} s",
+    "reconnect": "Reconectar",
+    "close-pane": "Cerrar pane"
   },
   "shippedLog": {
     "menu": {

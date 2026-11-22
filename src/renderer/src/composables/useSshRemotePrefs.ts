@@ -60,3 +60,15 @@ export function rememberSshRemoteRecent(entry: SshRemoteTarget): void {
 export function sshTargetLabel(t: SshRemoteTarget): string {
   return `${t.user ? `${t.user}@` : ''}${t.host}${t.port === SSH_DEFAULT_PORT ? '' : `:${t.port}`}`
 }
+
+/** Plain-language failure reasons `remote_ssh.connect` names (remote_ssh.REASONS). */
+export const SSH_FAILURE_REASONS = ['unreachable', 'auth', 'host-key', 'other'] as const
+export type SshFailureReason = (typeof SSH_FAILURE_REASONS)[number]
+
+/** The reason of a failed `remote_ssh.connect` reply; 'other' for anything else. */
+export function sshFailureReason(error: { code?: string; details?: unknown } | null | undefined): SshFailureReason {
+  const reason = (error?.details as { reason?: unknown } | undefined)?.reason
+  return error?.code === 'REMOTE_SSH_FAILED' && SSH_FAILURE_REASONS.includes(reason as SshFailureReason)
+    ? (reason as SshFailureReason)
+    : 'other'
+}

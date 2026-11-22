@@ -4685,7 +4685,7 @@
             "role": "Oben befindet sich das Dropdown <strong>Rolle auswählen …</strong> – wählen Sie eine vordefinierte Rolle.",
             "cliList": "Darunter ist die Liste in zwei Blöcke mit Überschrift geteilt. <strong>{cli}</strong> enthält die Coding-CLIs; nicht installierte sind entsprechend markiert. <strong>{agents}</strong> listet Ihre dauerhaften Agents (OpenClaw, Hermes Agent) nach Namen auf – ein geöffneter wird angezeigt, ein geschlossener setzt sein Gespräch fort – dazu einen Eintrag <em>Neu …</em>, der zuerst nach einem Namen fragt; ACP-Agents stehen ebenfalls dort. Ein Hinweis unter der Liste erklärt, dass Cloud-Agents wie Grok Bot und dots als Navide-Plug-ins kommen.",
             "terminal": "Unten stehen <strong>Terminal</strong> (ein einfaches Terminal ohne Agent) und <strong>Manuell starten</strong>.",
-            "sshRemote": "Mit <strong>Einstellungen → Allgemein → Experimentelle Funktionen → Remote-Container-Bereiche</strong> erscheint unter <strong>Terminal</strong> der Eintrag <strong>SSH Remote…</strong>. Er fragt Host, Benutzer, Port (standardmäßig 22) und den Pfad zum privaten Schlüssel ab und speichert letzte Verbindungen nur auf diesem Computer. Gespeichert wird nur der Schlüsselpfad; der Schlüssel wird nie gelesen oder kopiert, und die SSH-Agent-Weiterleitung bleibt aus. Das Öffnen des Bereichs wird noch nicht unterstützt: Verbinden prüft die Einstellungen und meldet das."
+            "sshRemote": "Mit <strong>Einstellungen → Allgemein → Experimentelle Funktionen → Remote-Container-Bereiche</strong> erscheint unter <strong>Terminal</strong> der Eintrag <strong>SSH Remote…</strong>. Er fragt Host, Benutzer, Port (standardmäßig 22) und den Pfad zum privaten Schlüssel ab und speichert letzte Verbindungen nur auf diesem Computer. Gespeichert wird nur der Schlüsselpfad; der Schlüssel wird nie gelesen oder kopiert, und die SSH-Agent-Weiterleitung bleibt aus. Verbinden prüft den Host und öffnet einen Terminalbereich, dessen Shell dort läuft; reißt die Verbindung ab, verbindet er sich von selbst neu."
           },
           "p2": "<em>Manuell starten</em> öffnet den vollständigen Dialog, in dem Sie Agent und Rolle wählen, festlegen, ob er zur Bühne hinzugefügt und ob daneben ein Terminal geöffnet wird, und eine Session-ID einfügen können, um eine frühere Unterhaltung direkt fortzusetzen.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "Verbinden",
     "connecting": "Verbinde…",
     "cancel": "Abbrechen",
-    "unsupported": "SSH-Remote-Bereiche werden noch nicht unterstützt. Die Verbindungseinstellungen wurden geprüft und gespeichert; das Öffnen des Bereichs folgt in einem späteren Update.",
     "error": "Diese Verbindung kann nicht verwendet werden: {detail}",
-    "privacy-note": "Letzte Verbindungen werden nur auf diesem Computer gespeichert: Host, Benutzer, Port und Schlüsselpfad. Die SSH-Agent-Weiterleitung bleibt aus, und es werden weder Schlüssel noch Passwörter gespeichert."
+    "privacy-note": "Letzte Verbindungen werden nur auf diesem Computer gespeichert: Host, Benutzer, Port und Schlüsselpfad. Die SSH-Agent-Weiterleitung bleibt aus, und es werden weder Schlüssel noch Passwörter gespeichert.",
+    "reason-unreachable": "{host} ist nicht erreichbar: Der Name lässt sich nicht auflösen, der Rechner ist aus, oder ein Netzwerk bzw. eine Firewall blockiert den SSH-Port. Prüfen Sie Hostname, Port und Netzwerk.",
+    "reason-auth": "{host} hat den Schlüssel abgelehnt: Der Schlüsselpfad stimmt nicht, der Schlüssel hat eine Passphrase, ist aber nicht in ssh-agent geladen, oder sein öffentlicher Schlüssel steht noch nicht in authorized_keys auf dem entfernten Rechner.",
+    "reason-host-key": "{host} lässt sich nicht verifizieren: Er steht noch nicht in known_hosts, oder sein Hostschlüssel hat sich seit dem letzten Mal geändert. Bei der ersten Verbindung wählen Sie „Trotzdem öffnen“ und prüfen den Fingerabdruck im Bereich, bevor Sie ihn akzeptieren.",
+    "reason-other": "Beim Verbinden mit {host} ist ein unerwarteter Fehler aufgetreten. Führen Sie ssh in einem Terminal von Hand aus, um die Details zu sehen.",
+    "open-anyway": "Trotzdem öffnen (ssh im Bereich antworten)",
+    "sub": "SSH · {target}",
+    "lost-title": "Verbindung zu {host} getrennt",
+    "ended-title": "Das Terminal auf {host} wurde beendet",
+    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "retry-in": "Automatische Wiederverbindung in {seconds} s",
+    "reconnect": "Neu verbinden",
+    "close-pane": "Bereich schließen"
   },
   "shippedLog": {
     "menu": {
