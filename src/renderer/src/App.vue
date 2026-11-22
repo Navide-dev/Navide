@@ -237,6 +237,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
+import { sshFailureReason, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -2024,6 +2025,11 @@ interface ActivePane {
    *  reconnect, restore) goes back to the same container. Persisted on the
    *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
   remote?: RemoteTarget
+  /** An SSH Remote terminal pane (same experimental switch): its shell runs
+   *  on this host over ssh. Runtime only — such a pane is not restored. */
+  sshRemote?: SshRemoteTarget
+  /** An SSH pane's last exit code (255: ssh lost or never made the link). */
+  sshExitCode?: number | null
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -8612,6 +8618,8 @@ interface SpawnInternal {
   accountDirLogin?: boolean
   /** Remote container target; see ActivePane.remote. */
   remote?: RemoteTarget
+  /** SSH Remote terminal target; see ActivePane.sshRemote. */
+  sshRemote?: SshRemoteTarget
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8835,6 +8843,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
     remote: opts.remote,
+    sshRemote: opts.sshRemote,
   }
   acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
@@ -9003,6 +9012,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
       ...(opts.remote ? { remote: opts.remote } : {}),
+      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote } } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -11112,6 +11122,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     muted: isPaneMuted(paneId),
     // A remote pane reconnects to the same container.
     remote: pane.remote,
+    // An SSH Remote pane reconnects to the same host.
+    sshRemote: pane.sshRemote,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -11134,6 +11146,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       model: snap.model,
       effort: snap.effort,
       remote: snap.remote,
+      sshRemote: snap.sshRemote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -11141,7 +11154,11 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       rekeyLineage(paneId, newId)
       setPaneMuted(paneId, false)
       if (snap.muted) setPaneMuted(newId, true)
-      if (snap.origin !== 'pipeline') {
+      // An SSH Remote pane has no record (it is not restored); writing one
+      // here would bring it back after a restart as a LOCAL shell.
+      if (snap.sshRemote) {
+        // nothing to record
+      } else if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
           pane_id: newId,
@@ -19459,6 +19476,8 @@ backend.on('terminal.exit', (raw) => {
   // Any other non-zero exit of an agent CLI used to look exactly like the user
   // quitting it. Keep the code for the title-bar badge, and record it.
   pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  // ssh's own failure code: the SSH pane's banner reconnects only on it.
+  if (pane.sshRemote) pane.sshExitCode = typeof ev.exit_code === 'number' ? ev.exit_code : null
   if (pane.exitFault) {
     recordDiagnostic({
       level: 'error',
@@ -24936,6 +24955,36 @@ function openSshRemoteDialog(): void {
   if (remoteDevcontainerEnabled.value) sshRemoteDialogOpen.value = true
 }
 
+/** The dialog connected (the backend checked the host and trusted it): a
+ *  terminal pane whose shell runs there. */
+async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
+  sshRemoteDialogOpen.value = false
+  const workspacePath = currentWorkspace.value
+  const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
+  await spawnPane({
+    agentKey: 'terminal',
+    roleKey: '',
+    stageId: '',
+    commandOverride: '',
+    workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    autoName: sshTargetLabel(target),
+    sshRemote: target,
+  })
+}
+
+/** An SSH pane's banner asks the backend to check the host again (the same
+ *  check the dialog runs); only a reachable host gets a new shell. */
+async function reconnectSshPane(paneId: string): Promise<string | null> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.sshRemote) return 'other'
+  const reply = await backend.send('remote_ssh.connect', { target: { ...pane.sshRemote } }, 20_000)
+  if (!reply.ok) return sshFailureReason(reply.error)
+  await rebuildPaneClean(paneId)
+  return null
+}
+
 function openRemoteDialog(payload: { workspacePath: string; runGroupId?: string }): void {
   if (!remoteDevcontainerEnabled.value) return
   remoteDialogTarget.value = { workspacePath: payload.workspacePath || currentWorkspace.value, runGroupId: payload.runGroupId }
@@ -26458,7 +26507,7 @@ function paneIsCommander(p: ActivePane): boolean {
     v-if="sshRemoteDialogOpen"
     :open="sshRemoteDialogOpen"
     :backend="backend"
-    @connected="sshRemoteDialogOpen = false"
+    @connected="onSshRemoteConnected"
     @cancel="sshRemoteDialogOpen = false"
   />
   <ArenaStartDialog
@@ -27258,6 +27307,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :remote="p.remote"
           :remote-reconnect="() => rebuildPaneClean(p.id)"
           :remote-close-pane="() => onKill(p.id)"
+          :ssh-remote="p.sshRemote"
+          :ssh-exit-code="p.sshExitCode ?? null"
+          :ssh-reconnect="() => reconnectSshPane(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"
           @minimize="minimizePane(p.id)"

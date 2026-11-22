@@ -75,7 +75,7 @@ A remote container pane runs Claude Code or Codex inside a Docker container on a
 
 ### SSH Remote panes (experimental)
 
-Not available yet: this release adds the setup dialog only. Opening a pane on the remote machine comes in a later update.
+A terminal pane whose shell runs on another machine over `ssh`. Only terminal panes: Claude Code and Codex are not opened on the remote host.
 
 With **Settings → General → Experimental features → Remote container panes** on, the **+** menu shows **SSH Remote…** below **Terminal**.
 
@@ -83,7 +83,9 @@ With **Settings → General → Experimental features → Remote container panes
 - **Private key path** is optional. Navide saves only the path and passes it to `ssh -i`; it never reads, copies or uploads the key.
 - **Recent connections** keeps the last eight targets (host, user, port, key path) on this computer only. They are not part of Navide Cloud sync or an exported settings bundle.
 - **SSH agent forwarding stays off** (`ForwardAgent=no`, never `-A`), and environment variables other than what `ssh` itself needs are removed, so no `SendEnv` rule can carry a local API key.
-- **Connect** checks the settings and then says that SSH Remote panes are not supported yet. It does not open a connection.
+- **Connect** checks the host once with a non-interactive `ssh` call. When it answers, Navide opens a terminal pane running your login shell there. When it does not, the dialog says why in plain words: the host can't be reached, the key was refused, or the host can't be verified. After a key or host-key refusal, **Open anyway** opens the pane so `ssh` itself can ask for the key's passphrase or the host's fingerprint.
+- **Dropped connections reconnect on their own.** When `ssh` loses the link, the pane checks the host again after 2, 5, 15, 30 and 60 seconds and shows the reason each try failed; a refused key or host key stops the retries. **Reconnect** tries at once. Typing `exit` ends the pane without reconnecting.
+- An SSH Remote pane is not restored after Navide restarts; open it again from **Recent connections**.
 
 ### CLI risk observations
 

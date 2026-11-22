@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // ＋ menu → SSH Remote…: host, user, port and a private key path, plus the
-// recent connections. Connect sends the target to `remote_ssh.connect`; the
-// backend does not open SSH Remote panes yet, so the expected answer is
-// REMOTE_SSH_UNSUPPORTED, shown as a notice — never a hang.
+// recent connections. Connect sends the target to `remote_ssh.connect`, which
+// checks the host once; on success the app opens a terminal pane there. A
+// failure is explained in plain terms; after a key or host-key refusal the
+// user may open the pane anyway, where ssh itself asks for the passphrase or
+// the fingerprint.
 //
 // The key is a path only: nothing here reads, copies or uploads it.
 import { computed, ref, watch } from 'vue'
@@ -12,14 +14,16 @@ import {
   SSH_DEFAULT_PORT,
   loadSshRemoteRecent,
   rememberSshRemoteRecent,
+  sshFailureReason,
   sshTargetLabel,
+  type SshFailureReason,
   type SshRemoteTarget,
 } from '../composables/useSshRemotePrefs'
 
 interface BackendReply {
   ok: boolean
   payload?: unknown
-  error?: { code?: string; message?: string } | null
+  error?: { code?: string; message?: string; details?: unknown } | null
 }
 
 const props = defineProps<{
@@ -28,7 +32,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ connected: [target: SshRemoteTarget]; cancel: [] }>()
 
-const CONNECT_TIMEOUT_MS = 15_000
+// The backend's own ssh check gives up after 25 s.
+const CONNECT_TIMEOUT_MS = 30_000
 
 const host = ref('')
 const user = ref('')
@@ -37,7 +42,9 @@ const keyPath = ref('')
 const recent = ref<SshRemoteTarget[]>([])
 const busy = ref(false)
 const error = ref('')
-const unsupported = ref(false)
+/** Why the last check failed; null when it did not. */
+const reason = ref<SshFailureReason | null>(null)
+const canForce = computed(() => reason.value === 'auth' || reason.value === 'host-key')
 
 function fill(t: SshRemoteTarget): void {
   host.value = t.host
@@ -53,11 +60,11 @@ function reset(): void {
   port.value = SSH_DEFAULT_PORT
   keyPath.value = ''
   error.value = ''
-  unsupported.value = false
+  reason.value = null
 }
 
 watch(() => props.open, (open) => { if (open) reset() }, { immediate: true })
-watch([host, user, port, keyPath], () => { unsupported.value = false; error.value = '' })
+watch([host, user, port, keyPath], () => { reason.value = null; error.value = '' })
 
 const root = ref<HTMLElement | null>(null)
 const hostInput = ref<HTMLInputElement | null>(null)
@@ -70,24 +77,22 @@ const target = computed<SshRemoteTarget | null>(() => {
   return { host: name, user: user.value.trim(), port: p, keyPath: keyPath.value.trim() }
 })
 
-async function connect(): Promise<void> {
+async function connect(force = false): Promise<void> {
   const t = target.value
   if (!t || busy.value) return
   busy.value = true
   error.value = ''
-  unsupported.value = false
+  reason.value = null
   try {
-    const reply = await props.backend.send('remote_ssh.connect', { target: { ...t } }, CONNECT_TIMEOUT_MS)
+    const reply = await props.backend.send(
+      'remote_ssh.connect', { target: { ...t }, ...(force ? { force: true } : {}) }, CONNECT_TIMEOUT_MS)
     if (reply.ok) {
       rememberSshRemoteRecent(t)
       emit('connected', t)
       return
     }
-    if (reply.error?.code === 'REMOTE_SSH_UNSUPPORTED') {
-      // The target itself was accepted; only the pane is not built yet.
-      rememberSshRemoteRecent(t)
-      recent.value = loadSshRemoteRecent()
-      unsupported.value = true
+    if (reply.error?.code === 'REMOTE_SSH_FAILED') {
+      reason.value = sshFailureReason(reply.error)
       return
     }
     error.value = i18n.global.t('sshRemote.error', { detail: reply.error?.message || reply.error?.code || '' })
@@ -115,7 +120,7 @@ async function connect(): Promise<void> {
           <button class="x" :aria-label="$t('sshRemote.cancel')" @click="emit('cancel')">✕</button>
         </header>
 
-        <form class="grid" @submit.prevent="connect">
+        <form class="grid" @submit.prevent="connect()">
           <label class="field wide">
             <span class="lb">{{ $t('sshRemote.host-label') }}</span>
             <input ref="hostInput" v-model="host" type="text" spellcheck="false" autocomplete="off" :placeholder="$t('sshRemote.host-placeholder')" data-testid="ssh-host" />
@@ -146,14 +151,17 @@ async function connect(): Promise<void> {
           </div>
         </div>
 
-        <p v-if="unsupported" class="notice" role="status" data-testid="ssh-unsupported">{{ $t('sshRemote.unsupported') }}</p>
+        <div v-if="reason" class="err" role="alert" data-testid="ssh-reason">
+          <p class="reason-text">{{ $t(`sshRemote.reason-${reason}`, { host: target?.host ?? '' }) }}</p>
+          <button v-if="canForce" type="button" data-testid="ssh-force" :disabled="busy" @click="connect(true)">{{ $t('sshRemote.open-anyway') }}</button>
+        </div>
         <p v-if="error" class="err" role="alert">{{ error }}</p>
 
         <p class="note">{{ $t('sshRemote.privacy-note') }}</p>
 
         <footer class="actions">
           <button data-testid="ssh-cancel" @click="emit('cancel')">{{ $t('sshRemote.cancel') }}</button>
-          <button class="primary" :disabled="!target || busy" data-testid="ssh-connect" @click="connect">
+          <button class="primary" :disabled="!target || busy" data-testid="ssh-connect" @click="connect()">
             {{ busy ? $t('sshRemote.connecting') : $t('sshRemote.connect') }}
           </button>
         </footer>
@@ -209,7 +217,7 @@ input {
 .recent-row:hover { background: var(--bg-subtle); }
 .muted { color: var(--text-secondary); font-size: 12px; margin: 0; }
 .note { color: var(--text-secondary); font-size: 11px; margin: 0 0 6px; }
-.notice { color: var(--attention-fg, #9a6700); font-size: 12px; margin: 0 0 10px; }
+.reason-text { margin: 0 0 6px; }
 .err { color: var(--danger-fg, #cf222e); font-size: 12px; margin: 0 0 10px; white-space: pre-wrap; word-break: break-word; }
 button {
   min-height: 30px;

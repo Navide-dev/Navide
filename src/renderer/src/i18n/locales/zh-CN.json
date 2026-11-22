@@ -4685,7 +4685,7 @@
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
             "cliList": "下面的列表分成两个带标题的区块。<strong>{cli}</strong> 是写代码用的 CLI，未安装的会标示出来。<strong>{agents}</strong> 按名字列出你的常驻 Agent（OpenClaw、Hermes Agent）：已打开的点击后切换过去，已关闭的点击后接续原来的对话；另有一个<em>新建 …</em>，会先请你起名字。ACP Agent 也列在这一区。列表下方有一行提示：Grok Bot、dots 这类云端 Agent 以 Navide 插件的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。",
-            "sshRemote": "在 <strong>设置 → 一般 → 实验功能 → 远程容器分格</strong> 打开后，<strong>终端</strong> 下方会多出 <strong>SSH Remote…</strong>：填写主机、用户、端口（默认 22）与私钥路径，最近连接只存在这台电脑。只记住私钥的路径，不会读取或复制私钥，SSH agent 转发保持关闭。目前还不能真正打开分格：点击“连接”会检查设置，并显示“尚未支持”。"
+            "sshRemote": "在 <strong>设置 → 一般 → 实验功能 → 远程容器分格</strong> 打开后，<strong>终端</strong> 下方会多出 <strong>SSH Remote…</strong>：填写主机、用户、端口（默认 22）与私钥路径，最近连接只存在这台电脑。只记住私钥的路径，不会读取或复制私钥，SSH agent 转发保持关闭。点击“连接”会检查主机，然后打开一个在那台主机上运行 shell 的终端分格；连接中断时会自动重新连接。"
           },
           "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "连接",
     "connecting": "连接中…",
     "cancel": "取消",
-    "unsupported": "尚未支持 SSH Remote 分格。连接设置已检查并记住，打开分格会在之后的版本加入。",
     "error": "无法使用这组连接：{detail}",
-    "privacy-note": "最近连接只存在这台电脑，内容是主机、用户、端口与私钥路径。SSH agent 转发保持关闭，不保存任何密钥或密码。"
+    "privacy-note": "最近连接只存在这台电脑，内容是主机、用户、端口与私钥路径。SSH agent 转发保持关闭，不保存任何密钥或密码。",
+    "reason-unreachable": "连不上 {host}：主机名查不到、主机没开，或网络／防火墙挡住了 SSH 端口。请检查主机名、端口和网络。",
+    "reason-auth": "{host} 拒绝了这把密钥：私钥路径不对、私钥有密码但没有加载到 ssh-agent，或公钥还没加到远程的 authorized_keys。",
+    "reason-host-key": "无法验证 {host} 的身份：这台主机还不在 known_hosts 里，或它的主机密钥和上次不一样。第一次连接可以点“仍然打开”，在分格里核对指纹后再接受。",
+    "reason-other": "连接 {host} 时发生了意外错误。请在终端里手动运行 ssh 查看详情。",
+    "open-anyway": "仍然打开（在分格里回答 ssh）",
+    "sub": "SSH · {target}",
+    "lost-title": "与 {host} 的连接中断了",
+    "ended-title": "{host} 上的终端已结束",
+    "reconnecting": "正在重新连接…",
+    "retry-in": "{seconds} 秒后自动重新连接",
+    "reconnect": "重新连接",
+    "close-pane": "关闭分格"
   },
   "shippedLog": {
     "menu": {

@@ -317,7 +317,7 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   })
 })
 
-describe('0.2.47 — SSH Remote setup dialog, connecting comes later', () => {
+describe('0.2.47 — SSH Remote terminal panes', () => {
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.47')
 
@@ -328,11 +328,17 @@ describe('0.2.47 — SSH Remote setup dialog, connecting comes later', () => {
     }
   })
 
-  it('says the remote connection is not built yet and the key never leaves', () => {
+  it('says terminal panes open on the remote host, reconnect, and the key never leaves', () => {
     const en = [entry!.title, ...entry!.highlights].map((text) => text['en-US']).join('\n')
-    expect(en).toContain('not supported yet')
+    expect(en).toContain('opens a terminal pane whose shell runs there')
+    expect(en).toContain('reconnects on its own')
     expect(en).toContain('SSH agent forwarding is always off')
-    expect(entry!.highlights.some((text) => text['zh-TW'].includes('尚未支援'))).toBe(true)
+    expect(entry!.title['zh-TW']).toBe('SSH Remote：在遠端主機開終端機分格（實驗功能）')
+    for (const text of [entry!.title, ...entry!.highlights]) {
+      expect(text['en-US']).not.toContain('not supported yet')
+      expect(text['zh-TW']).not.toContain('尚未支援')
+      expect(text['zh-TW']).not.toContain('待後續')
+    }
   })
 
   it('puts a no-break space before French : ; ? !', () => {

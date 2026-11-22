@@ -4685,7 +4685,7 @@
             "role": "Trên cùng là danh sách thả xuống <strong>Chọn vai trò…</strong> — chọn một vai trò có sẵn.",
             "cliList": "Bên dưới, danh sách chia thành hai khối có tiêu đề. <strong>{cli}</strong> gồm các CLI lập trình, CLI nào chưa cài sẽ được đánh dấu. <strong>{agents}</strong> liệt kê các agent thường trực của bạn (OpenClaw, Hermes Agent) theo tên: chọn agent đang mở sẽ chuyển sang nó, chọn agent đã đóng sẽ tiếp tục cuộc trò chuyện cũ. Còn có mục <em>Mới …</em> hỏi tên trước, và các agent ACP cũng nằm ở khối này. Một ghi chú dưới danh sách cho biết các agent đám mây như Grok Bot và dots được cung cấp dưới dạng plugin Navide.",
             "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>.",
-            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Việc mở pane chưa được hỗ trợ: Kết nối sẽ kiểm tra cài đặt rồi báo như vậy."
+            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Kết nối sẽ kiểm tra máy chủ rồi mở một pane terminal chạy shell trên máy đó; nếu mất kết nối, pane sẽ tự kết nối lại."
           },
           "p2": "<em>Khởi chạy thủ công…</em> mở hộp thoại đầy đủ, nơi bạn có thể chọn agent và vai trò, quyết định có thêm vào khu vực chính hay không, có mở terminal bên cạnh hay không, và dán id session để tiếp tục ngay một cuộc trò chuyện trước.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "Kết nối",
     "connecting": "Đang kết nối…",
     "cancel": "Hủy",
-    "unsupported": "Pane SSH Remote chưa được hỗ trợ. Cài đặt kết nối đã được kiểm tra và lưu; tính năng mở pane sẽ có trong bản cập nhật sau.",
     "error": "Không thể dùng kết nối này: {detail}",
-    "privacy-note": "Kết nối gần đây chỉ lưu trên máy này: máy chủ, người dùng, cổng và đường dẫn khóa. Chuyển tiếp SSH agent vẫn tắt và không lưu khóa hay mật khẩu nào."
+    "privacy-note": "Kết nối gần đây chỉ lưu trên máy này: máy chủ, người dùng, cổng và đường dẫn khóa. Chuyển tiếp SSH agent vẫn tắt và không lưu khóa hay mật khẩu nào.",
+    "reason-unreachable": "Không kết nối được tới {host}: không phân giải được tên, máy đang tắt, hoặc mạng hay tường lửa chặn cổng SSH. Hãy kiểm tra tên máy chủ, cổng và mạng.",
+    "reason-auth": "{host} đã từ chối khóa: đường dẫn khóa sai, khóa có mật khẩu nhưng chưa được nạp vào ssh-agent, hoặc khóa công khai chưa có trong authorized_keys của máy từ xa.",
+    "reason-host-key": "Không xác minh được {host}: máy này chưa có trong known_hosts, hoặc khóa máy chủ đã thay đổi so với lần trước. Với lần kết nối đầu tiên, hãy chọn Vẫn mở và đối chiếu dấu vân tay trong pane trước khi chấp nhận.",
+    "reason-other": "Đã xảy ra lỗi không mong muốn khi kết nối tới {host}. Hãy tự chạy ssh trong terminal để xem chi tiết.",
+    "open-anyway": "Vẫn mở (trả lời ssh trong pane)",
+    "sub": "SSH · {target}",
+    "lost-title": "Mất kết nối với {host}",
+    "ended-title": "Terminal trên {host} đã kết thúc",
+    "reconnecting": "Đang kết nối lại…",
+    "retry-in": "Tự động kết nối lại sau {seconds} giây",
+    "reconnect": "Kết nối lại",
+    "close-pane": "Đóng pane"
   },
   "shippedLog": {
     "menu": {

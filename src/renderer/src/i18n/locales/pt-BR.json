@@ -4685,7 +4685,7 @@
             "role": "No topo fica o menu suspenso <strong>Selecionar papel…</strong>: escolha um papel predefinido.",
             "cliList": "Abaixo, a lista se divide em dois blocos com título. <strong>{cli}</strong> reúne as CLIs de programação, marcando as que não estão instaladas. <strong>{agents}</strong> mostra seus agentes permanentes (OpenClaw, Hermes Agent) pelo nome: escolher um que está aberto leva até ele, escolher um fechado retoma a conversa dele. Há também uma entrada <em>Novo …</em> que pede um nome primeiro, e os agentes ACP aparecem nesse bloco. Uma nota sob a lista avisa que agentes na nuvem, como Grok Bot e dots, vêm como plug-ins do Navide.",
             "terminal": "Embaixo ficam <strong>Terminal</strong> (um terminal comum sem agent) e <strong>Iniciar manualmente…</strong>.",
-            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Abrir o pane ainda não é suportado: Conectar verifica as configurações e avisa."
+            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Conectar verifica o host e abre um pane de terminal cujo shell roda lá; se a conexão cair, o pane se reconecta sozinho."
           },
           "p2": "<em>Iniciar manualmente…</em> abre a caixa de diálogo completa, onde você pode escolher o agent e o papel, decidir se ele entra no palco e se um terminal abre ao lado, e colar um id de session para retomar diretamente uma conversa anterior.",
           "table": {
@@ -12594,9 +12594,20 @@
     "connect": "Conectar",
     "connecting": "Conectando…",
     "cancel": "Cancelar",
-    "unsupported": "Os panes do SSH Remote ainda não são suportados. As configurações de conexão foram verificadas e salvas; abrir o pane chega em uma atualização futura.",
     "error": "Não foi possível usar esta conexão: {detail}",
-    "privacy-note": "As conexões recentes ficam salvas só neste computador: host, usuário, porta e caminho da chave. O encaminhamento do agente SSH continua desligado e nenhuma chave ou senha é salva."
+    "privacy-note": "As conexões recentes ficam salvas só neste computador: host, usuário, porta e caminho da chave. O encaminhamento do agente SSH continua desligado e nenhuma chave ou senha é salva.",
+    "reason-unreachable": "Não foi possível alcançar {host}: o nome não resolve, a máquina está desligada ou uma rede ou firewall bloqueia a porta SSH. Confira o nome do host, a porta e a rede.",
+    "reason-auth": "{host} recusou a chave: o caminho da chave está errado, a chave tem senha mas não está carregada no ssh-agent, ou a chave pública ainda não está no authorized_keys da máquina remota.",
+    "reason-host-key": "Não foi possível verificar {host}: ele ainda não está no known_hosts ou a chave do host mudou desde a última vez. Na primeira conexão, escolha Abrir mesmo assim e confira a impressão digital no pane antes de aceitar.",
+    "reason-other": "Algo inesperado deu errado ao conectar a {host}. Rode ssh manualmente em um terminal para ver os detalhes.",
+    "open-anyway": "Abrir mesmo assim (responder ao ssh no pane)",
+    "sub": "SSH · {target}",
+    "lost-title": "Conexão com {host} perdida",
+    "ended-title": "O terminal em {host} terminou",
+    "reconnecting": "Reconectando…",
+    "retry-in": "Reconectando automaticamente em {seconds} s",
+    "reconnect": "Reconectar",
+    "close-pane": "Fechar pane"
   },
   "shippedLog": {
     "menu": {

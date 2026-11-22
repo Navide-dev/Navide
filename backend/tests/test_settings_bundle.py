@@ -701,10 +701,13 @@ def _bundle(scopes: dict[str, dict]) -> dict:
 def test_ssh_remote_recent_connections_never_reach_a_bundle_or_a_sync_round(
     settings, mcp_store, skills, home
 ):
-    """The SSH Remote dialog's recent list is local only: it names hosts and
+    """The SSH Remote dialog's recent and trusted lists are local only: it names hosts and
     key paths, and neither the export nor a sync scope may carry it."""
     marker = "ssh-recent-" + "canary.example"
     settings.doc["sshRemoteRecent"] = [
+        {"host": marker, "user": "dev", "port": 22, "keyPath": "/k/" + marker}
+    ]
+    settings.doc["sshRemoteTrusted"] = [
         {"host": marker, "user": "dev", "port": 22, "keyPath": "/k/" + marker}
     ]
     settings.doc[sync_scopes.PROMPT_SKILLS_KEY] = [_prompt("p1")]
