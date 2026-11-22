@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Terminal (macOS): the output of a command that exits right away, or the last lines a CLI prints before it exits, no longer goes missing from the pane and its output log when the backend is busy or the pane is holding output back. macOS discards what a terminal has not read about half a second after the program exits; Navide now keeps the terminal open until everything queued has been read. Linux and Windows are unchanged.
+
 ## [0.2.46] — 2026-11-22
 
 ### Added
