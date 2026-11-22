@@ -102,7 +102,7 @@ describe('the queued verdict over a pre-existing hint', () => {
     const before = readScreenTail(HOLDING)
     const after = readScreenTail(SUBMITTED)
     const baseline = submitBaseline({ screen: before, tail: TAIL })
-    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: true })
+    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: true, tailEndsScreen: false })
     expect(
       submitEvidence({ tailWasOnScreen: true, tail: TAIL, screen: after, grownBy: 900, baseline }),
     ).toBe('queued')
