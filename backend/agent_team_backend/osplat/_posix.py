@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import select
 import shlex
 import signal
 import struct
 import subprocess
+import sys
 from collections.abc import Mapping
-from typing import Callable
+from typing import Any, Callable
 
 from .. import frozen_env
 
@@ -287,19 +289,94 @@ class PosixTerminalHandle:
     read/write paths through pipes); everything except `pid` works without it.
     """
 
-    def __init__(self, fd: int, proc: ChildProcess | None = None) -> None:
+    def __init__(
+        self, fd: int, proc: ChildProcess | None = None, slave_fd: int | None = None
+    ) -> None:
         self.fd = fd
         self.proc = proc  # type: ignore[assignment]
         self._loop: asyncio.AbstractEventLoop | None = None
         self._on_readable: Callable[[], None] | None = None
         self._write_loop: asyncio.AbstractEventLoop | None = None
+        # macOS discards what the master has not read once the last slave fd
+        # closes: the exiting child's close waits ~0.5 s for the master to read
+        # and then drops the rest. So on macOS the parent keeps a slave copy
+        # until the child has exited and the master reads empty (see read);
+        # only then does the master see EOF, with nothing left behind.
+        self._slave_fd = slave_fd
+        self._child_exited = False
+        self._exit_kq: Any = None
+        self._reading = False
 
     @property
     def pid(self) -> int:
         return self.proc.pid if self.proc is not None else 0
 
     def read(self, max_bytes: int) -> bytes | None:
-        return os.read(self.fd, max_bytes) or None
+        try:
+            return os.read(self.fd, max_bytes) or None
+        except BlockingIOError:
+            if self._child_exited:
+                # Drained after the child is gone: let the master reach EOF.
+                self._release_slave()
+            raise
+
+    def _release_slave(self) -> None:
+        fd, self._slave_fd = self._slave_fd, None
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+    def _watch_child_exit(self, loop: asyncio.AbstractEventLoop) -> None:
+        if self._slave_fd is None or self.proc is None:
+            return
+        kq = select.kqueue()
+        try:
+            kq.control(
+                [
+                    select.kevent(
+                        self.proc.pid,
+                        filter=select.KQ_FILTER_PROC,
+                        flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                        fflags=select.KQ_NOTE_EXIT,
+                    )
+                ],
+                0,
+            )
+        except ProcessLookupError:
+            # Already gone (and reaped) before the watch was armed.
+            kq.close()
+            loop.call_soon(self._on_child_exit)
+            return
+        self._exit_kq = kq
+        loop.add_reader(kq.fileno(), self._on_child_exit)
+
+    def _unwatch_child_exit(self) -> None:
+        kq, self._exit_kq = self._exit_kq, None
+        if kq is None:
+            return
+        if self._loop is not None:
+            try:
+                self._loop.remove_reader(kq.fileno())
+            except (ValueError, KeyError, OSError):
+                pass
+        kq.close()
+
+    def _on_child_exit(self) -> None:
+        self._unwatch_child_exit()
+        self._child_exited = True
+        self._poke_reader()
+
+    def _poke_reader(self) -> None:
+        # A read now drains what is queued and, on reading empty, releases
+        # the slave so EOF follows. While backpressure holds the reader off,
+        # resume_reading pokes instead.
+        if self._slave_fd is None or self._on_readable is None:
+            return
+        if self._loop is not None and not self._reading:
+            return
+        self._on_readable()
 
     def write(self, data: bytes) -> int:
         return os.write(self.fd, data)
@@ -329,10 +406,13 @@ class PosixTerminalHandle:
         self._loop = loop
         self._on_readable = callback
         loop.add_reader(self.fd, callback)
+        self._reading = True
+        self._watch_child_exit(loop)
 
     def pause_reading(self) -> None:
         if self._loop is None:
             return
+        self._reading = False
         try:
             self._loop.remove_reader(self.fd)
         except (ValueError, KeyError):
@@ -342,6 +422,11 @@ class PosixTerminalHandle:
         if self._loop is None or self._on_readable is None:
             return
         self._loop.add_reader(self.fd, self._on_readable)
+        self._reading = True
+        if self._child_exited:
+            # The master may already read empty, so no readable event would
+            # come to release the slave: poke once from the loop.
+            self._loop.call_soon(self._poke_reader)
 
     def stop_reading(self) -> None:
         self.pause_reading()
@@ -362,6 +447,8 @@ class PosixTerminalHandle:
             pass
 
     def close(self) -> None:
+        self._unwatch_child_exit()
+        self._release_slave()
         try:
             os.close(self.fd)
         except OSError:
@@ -418,6 +505,10 @@ class PosixTerminalBackend:
             os.close(master)
             os.close(slave)
             raise
+        if sys.platform == "darwin":
+            # Held until the child exits and the master is drained; see
+            # PosixTerminalHandle.
+            return PosixTerminalHandle(master, proc, slave_fd=slave)
         try:
             os.close(slave)
         except BaseException:
