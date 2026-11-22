@@ -113,6 +113,24 @@ export function framedComposer(screen: string): string | null {
 export interface SubmitBaseline {
   queuedHint: boolean
   composerHeldTail: boolean
+  /** Our tail was the last thing on a frameless screen — a line editor's
+   *  cursor line. See tailEndsScreen. */
+  tailEndsScreen: boolean
+}
+
+/** Does our `tail` end the screen, on its last non-blank row? True for a line
+ *  editor that draws no box (aider and the like) while our text sits on its
+ *  cursor line. Such a CLI leaves the submitted line on screen, so 'tail-left'
+ *  never fires there; what a submit does is draw a new prompt or output BELOW
+ *  it. A framed composer never qualifies: under it sits its footer or its
+ *  closing edge, whether or not Enter took. Rule rows ABOVE the line (aider
+ *  draws one between turns) do not matter. */
+function tailEndsScreen(screen: string, tail: string): boolean {
+  if (!tail) return false
+  const rows = screen.split('\n').filter((row) => row.trim() !== '')
+  const last = rows[rows.length - 1]
+  if (last === undefined || BOX_ONLY_LINE_RE.test(last)) return false
+  return normalizeForMatch(rows.join('\n')).endsWith(tail)
 }
 
 /** Sample the composer before pressing Enter. `screen` is the same read
@@ -123,6 +141,7 @@ export function submitBaseline(opts: { screen: string; tail: string }): SubmitBa
     queuedHint: QUEUED_HINT_RE.test(normalizeForMatch(opts.screen)),
     composerHeldTail:
       !!opts.tail && normalizeForMatch(composerFromScreen(opts.screen)).includes(opts.tail),
+    tailEndsScreen: tailEndsScreen(opts.screen, opts.tail),
   }
 }
 
@@ -352,6 +371,11 @@ export function submitEvidence(opts: {
   if (opts.tailWasOnScreen && opts.tail) {
     const screen = normalizeForMatch(opts.screen)
     if (!screen.includes(opts.tail)) return 'tail-left'
+    // A frameless line editor keeps the submitted line on screen; a new prompt
+    // or output drawn below it, where our text used to end the screen, is the
+    // line having left the input position. Resending Enter there would land in
+    // whatever the CLI is now doing — its reply, or a menu it is showing.
+    if (opts.baseline?.tailEndsScreen && !screen.endsWith(opts.tail)) return 'tail-left'
     // Claude Code mid-turn: Enter enqueues the message and redraws it just
     // above the composer, so our tail never leaves the screen and 'tail-left'
     // cannot fire. Its queue hint is the positive signal instead. Without it
