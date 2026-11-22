@@ -8,30 +8,37 @@
  *   Enter to confirm · Esc to cancel
  *
  * The window's awaiting detector does not match it (its footer says
- * "confirm", not "select"); the backend channel reads it with the same
- * pattern as LIMIT_MENU_RE (channels/manager.py _LIMIT_MENU_RE).
+ * "confirm", not "select"). The backend channel only reports it
+ * (channels/manager.py _LIMIT_MENU_RE); this one writes keys, so it is stricter.
  *
  * After the swap the pane's next request already uses the new account, so the
- * menu is only in the way. It is left with option 1 when the cursor is on it,
- * otherwise with Esc — never by moving the cursor, so the "usage credits"
- * option can never be picked.
+ * menu is only in the way. It is left with Esc, the menu's own cancel: Enter
+ * could approve some other prompt if the screen were misread, and the cursor
+ * is never moved, so the "usage credits" option can never be picked.
+ *
+ * Only the live menu counts: the footer must be the last non-empty line on
+ * screen and the limit header and the "stop" option must sit in the block
+ * right above it. The same words anywhere higher up (scrollback, an agent's
+ * own output, a file it printed) are not the menu.
  */
 
-export const LIMIT_MENU_RE = /Stop and wait for limit to reset.{0,300}?Enter to confirm · Esc to cancel/
-const CURSOR_ON_STOP_RE = /❯\s*1\.\s*Stop and wait for limit to reset/
+export const LIMIT_MENU_RE = /hit your .{0,40}limit.{0,200}?Stop and wait for limit to reset.{0,300}?Enter to confirm · Esc to cancel$/
+const FOOTER_RE = /Enter to confirm · Esc to cancel\s*$/
+/** The menu, header to footer, is about nine lines. */
+const MENU_BLOCK_LINES = 14
 
-function collapse(screen: string): string {
-  return screen.split(/\s+/).filter(Boolean).join(' ')
+function collapse(lines: string[]): string {
+  return lines.join(' ').split(/\s+/).filter(Boolean).join(' ')
 }
 
 export function screenShowsLimitMenu(screen: string): boolean {
-  return LIMIT_MENU_RE.test(collapse(screen))
+  const lines = screen.split('\n').filter((line) => line.trim() !== '')
+  if (!lines.length || !FOOTER_RE.test(lines[lines.length - 1])) return false
+  return LIMIT_MENU_RE.test(collapse(lines.slice(-MENU_BLOCK_LINES)))
 }
 
-/** The key that leaves the menu without choosing anything but "stop". */
-export function limitMenuDismissKey(screen: string): string {
-  return CURSOR_ON_STOP_RE.test(collapse(screen)) ? '\r' : '\x1b'
-}
+/** The key that leaves the menu: its own cancel, never a choice. */
+export const LIMIT_MENU_DISMISS_KEY = '\x1b'
 
 export interface LimitMenuDeps {
   read(): string
@@ -49,7 +56,7 @@ export type LimitMenuOutcome = 'not-on-menu' | 'menu-stuck' | 'dismissed' | 'res
 export async function leaveLimitMenuAndResume(deps: LimitMenuDeps): Promise<LimitMenuOutcome> {
   const screen = deps.read()
   if (!screenShowsLimitMenu(screen)) return 'not-on-menu'
-  deps.write(limitMenuDismissKey(screen))
+  deps.write(LIMIT_MENU_DISMISS_KEY)
   const pollMs = deps.pollMs ?? 150
   const deadline = (deps.timeoutMs ?? 3000) / pollMs
   let gone = false
