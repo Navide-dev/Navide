@@ -7261,7 +7261,7 @@
         "failed-remote-trust-unavailable": "{device} 的信任记录目前读不出来，所以拒收了这次配对，这一轮已结束。请到 {device} 的账号窗口处理“Navide Cloud 已停止”卡片（例如按“重新开始”），再重新按“配对”。",
         "failed-remote-policy-denied": "{device} 拒收了这次配对，这一轮已结束。这台机器可能在 {device} 的封锁清单里，请到 {device} 的账号窗口确认后，再重新按“配对”。",
         "failed-remote-unauthenticated": "{device} 无法验证这次配对的签章，所以拒收了，这一轮已结束。请确认两台都更新到最新版，再重新按“配对”。",
-        "failed-remote-pairing-refused": "{device} 拒收了这次配对，这一轮已结束。通常是 {device} 那边已经有一轮配对在进行（例如两边同时按了“配对”）。请等那一轮结束或在 {device} 上取消，再重新按“配对”。",
+        "failed-remote-pairing-refused": "{device} 拒收了这次配对，这一轮已结束。通常是 {device} 那边已经有一轮配对在进行（例如两边同时按了“配对”）。请等那一轮结束或在 {device} 上取消，再重新按“配对”。也可能是两台机器不在同一个账号，也没有通过组织互连，这种情况要先在 org.navide.dev 互连。",
         "failed-remote-other": "{device} 拒收了这次配对（{reason}），这一轮已结束。请重新按“配对”再试一次。",
         "busy": "与 {device} 的配对还在进行中，约 {minutes} 分钟后会自动结束。想现在重来，请在上方“配对”区块按“取消请求”，再重新按“配对”。",
         "trust-unavailable-start": "这台机器的信任记录目前读不出来，配对不会成功。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再按“配对”。"
