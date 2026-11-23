@@ -248,6 +248,11 @@ _ACK_STATES = ("delivered", "failed", "rejected")
 #: still stores one opaque JSON object verbatim and still never interprets it.
 POLICY_SIGNATURE_FIELD = "_sig"
 
+#: Held around every read-modify-write of this device's pane policy, so a
+#: change made from the editor and one made here (dropping a revoked grant's
+#: rules) cannot each start from the same document and overwrite the other.
+POLICY_WRITE_LOCK = asyncio.Lock()
+
 LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
 #: Refused because the text is a pairing frame, or the address is the pairing
 #: pane. Pairing goes out only through _send_pair_frame, behind the p2p.pair.*
@@ -2824,8 +2829,15 @@ class ServerLink:
         same grant, and untagged rules, stay. Written back through set_policy,
         so the document is signed again. Never raises.
         """
+        if not downgraded:
+            return
+        async with POLICY_WRITE_LOCK:
+            await self._drop_grant_rules_locked(downgraded)
+
+    async def _drop_grant_rules_locked(self, downgraded: dict[str, str]) -> None:
+        # Read under the lock: the document is the one current at the write.
         policy = self._policy
-        if not downgraded or not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
+        if not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
             return
 
         def lapsed(rule: Any) -> bool:
@@ -4597,7 +4609,11 @@ class ServerLink:
         refused = trust_ring == device_trust.RING_BLOCKED or (
             trust_ring != device_trust.RING_SELF
             and not pane_policy.is_allowed(
-                pane_policy.for_grant(self._policy, str((held or {}).get("grantId") or "")),
+                pane_policy.for_grant(
+                    self._policy,
+                    str((held or {}).get("grantId") or ""),
+                    not_before=float((held or {}).get("reapprovedAt") or 0),
+                ),
                 member_id=sender_member,
                 device_id=sender_device,
                 workspace=workspace,

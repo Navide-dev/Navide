@@ -1605,6 +1605,9 @@ def pin_paired_device(
                 existing["grantId"] = org["grantId"]
                 existing["org"] = _pin_org_fields(org)
                 existing.pop("orgRevoked", None)
+                # When it was approved again: one-click rules from before
+                # this belong to the pairing a grant ended (pane_policy.for_grant).
+                existing["reapprovedAt"] = time.time()
             _save_locked(state)
             return True
         if len(pins) >= MAX_DEVICES:
