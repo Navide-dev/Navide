@@ -6913,7 +6913,10 @@
         "state-ended": "Đã kết thúc ghép đôi",
         "revoked-since": "từ {when}",
         "offline-note": "Máy bên kia đang ngoại tuyến; có thể hoàn tất ghép đôi khi máy trực tuyến",
-        "act-failed": "Chưa hoàn tất: {reason}"
+        "act-failed": "Chưa hoàn tất: {reason}",
+        "manage-opening": "Đang mở…",
+        "manage-hint-signin": "hãy kiểm tra máy này đã đăng nhập Navide Cloud rồi thử lại.",
+        "manage-hint-unreachable": "hiện không kết nối được trang tổ chức; hãy thử lại sau ít phút."
       }
     },
     "sync": {

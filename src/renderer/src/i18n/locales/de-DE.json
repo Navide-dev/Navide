@@ -6913,7 +6913,10 @@
         "state-ended": "Kopplung beendet",
         "revoked-since": "seit {when}",
         "offline-note": "Der andere Rechner ist offline; die Kopplung lässt sich abschließen, sobald er online ist",
-        "act-failed": "Nicht abgeschlossen: {reason}"
+        "act-failed": "Nicht abgeschlossen: {reason}",
+        "manage-opening": "Wird geöffnet …",
+        "manage-hint-signin": "prüfe, ob dieser Rechner bei Navide Cloud angemeldet ist, und versuche es erneut.",
+        "manage-hint-unreachable": "die Organisationsseite ist gerade nicht erreichbar; versuche es gleich noch einmal."
       }
     },
     "sync": {

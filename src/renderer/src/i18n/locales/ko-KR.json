@@ -6913,7 +6913,10 @@
         "state-ended": "페어링 종료",
         "revoked-since": "{when}부터",
         "offline-note": "상대 기기가 오프라인입니다. 온라인이 되면 페어링을 완료할 수 있습니다",
-        "act-failed": "완료되지 않았습니다: {reason}"
+        "act-failed": "완료되지 않았습니다: {reason}",
+        "manage-opening": "여는 중…",
+        "manage-hint-signin": "이 기기가 Navide Cloud에 로그인되어 있는지 확인한 뒤 다시 시도하세요.",
+        "manage-hint-unreachable": "지금은 조직 사이트에 연결할 수 없습니다. 잠시 후 다시 시도하세요."
       }
     },
     "sync": {

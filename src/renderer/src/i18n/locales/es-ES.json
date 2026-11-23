@@ -6913,7 +6913,10 @@
         "state-ended": "Emparejamiento terminado",
         "revoked-since": "desde {when}",
         "offline-note": "La otra máquina está desconectada; el emparejamiento se completa cuando vuelva a estar en línea",
-        "act-failed": "No se completó: {reason}"
+        "act-failed": "No se completó: {reason}",
+        "manage-opening": "Abriendo…",
+        "manage-hint-signin": "comprueba que esta máquina haya iniciado sesión en Navide Cloud y vuelve a intentarlo.",
+        "manage-hint-unreachable": "ahora no se puede conectar con el sitio de la organización; inténtalo de nuevo en un momento."
       }
     },
     "sync": {

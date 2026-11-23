@@ -6913,7 +6913,10 @@
         "state-ended": "配对已结束",
         "revoked-since": "自 {when} 起",
         "offline-note": "对方离线，上线后才能完成配对",
-        "act-failed": "这个操作没有完成：{reason}"
+        "act-failed": "这个操作没有完成：{reason}",
+        "manage-opening": "正在打开…",
+        "manage-hint-signin": "请确认这台机器已登录 Navide Cloud，再试一次。",
+        "manage-hint-unreachable": "组织网站暂时连不上，请稍后再试。"
       }
     },
     "sync": {

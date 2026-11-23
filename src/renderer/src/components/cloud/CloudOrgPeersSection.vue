@@ -139,10 +139,26 @@ const answer = (row: OrgPairing, accept: boolean) =>
   act(row.deviceId, 'p2p.pair.confirm', { deviceId: row.deviceId, accept })
 
 const manageError = ref('')
+const opening = ref(false)
+/** Failures main can name get a sentence in the reader's language; anything
+ *  else is passed through as main said it. */
+const MANAGE_HINTS: Record<string, string> = {
+  ASSERTION_UNAVAILABLE: 'settings.cloud.org.manage-hint-signin',
+  EXCHANGE_FAILED: 'settings.cloud.org.manage-hint-unreachable',
+}
 async function manage(): Promise<void> {
+  if (opening.value) return
   manageError.value = ''
-  const result = await window.agentTeam?.openOrgSite?.()
-  if (result && !result.ok) manageError.value = t('settings.cloud.org.manage-failed', { reason: result.message ?? result.code ?? '' })
+  opening.value = true
+  try {
+    const result = await window.agentTeam?.openOrgSite?.()
+    if (result && !result.ok) {
+      const hint = MANAGE_HINTS[result.code ?? '']
+      manageError.value = t('settings.cloud.org.manage-failed', { reason: hint ? t(hint) : result.message ?? result.code ?? '' })
+    }
+  } finally {
+    opening.value = false
+  }
 }
 
 function pairingFor(deviceId: string): OrgPairing | undefined {
@@ -217,8 +233,8 @@ function initial(name: string): string {
       :data-notice="emptyNotice"
       :message="t('settings.cloud.org.' + emptyNotice)"
     >
-      <button type="button" class="org-manage" data-action="manage" @click="manage">
-        {{ t('settings.cloud.org.manage') }} ↗
+      <button type="button" class="org-manage" data-action="manage" :disabled="opening" :aria-busy="opening" @click="manage">
+        {{ opening ? t('settings.cloud.org.manage-opening') : t('settings.cloud.org.manage') + ' ↗' }}
       </button>
     </SettingsEmptyState>
     <div v-else class="org-head">
@@ -226,11 +242,11 @@ function initial(name: string): string {
       <p v-else class="org-hint">
         {{ localOrgName ? t('settings.cloud.org.intro', { org: localOrgName }) : t('settings.cloud.org.intro-generic') }}
       </p>
-      <button type="button" class="org-manage" data-action="manage" @click="manage">
-        {{ t('settings.cloud.org.manage') }} ↗
+      <button type="button" class="org-manage" data-action="manage" :disabled="opening" :aria-busy="opening" @click="manage">
+        {{ opening ? t('settings.cloud.org.manage-opening') : t('settings.cloud.org.manage') + ' ↗' }}
       </button>
     </div>
-    <p v-if="manageError" class="org-note" data-notice="manage-failed">{{ manageError }}</p>
+    <p v-if="manageError" class="org-note danger" data-notice="manage-failed" role="alert">{{ manageError }}</p>
 
     <p v-if="error && !rowError(errorDevice)" class="org-note danger" data-notice="error">{{ error }}</p>
 
