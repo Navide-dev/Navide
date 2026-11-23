@@ -4009,6 +4009,14 @@ class ServerLink:
                 # server never carried another account's frame here; now it
                 # can, and an exchange with anyone else would end in a pin
                 # outside every grant. Refused like any other bad round.
+                #
+                # "This account" is read from the frame's member id, which the
+                # relay writes, so a hostile relay can make another account's
+                # request pass this check. That is the trust premise pairing has
+                # always rested on: the relay cannot establish trust on its own,
+                # because nothing is pinned until a person at each machine has
+                # compared the same six digits. This check narrows who can ask;
+                # the digits decide.
                 if not (
                     (bool(self._own_member) and member_id == self._own_member)
                     or self._org_peer(device_id) is not None
