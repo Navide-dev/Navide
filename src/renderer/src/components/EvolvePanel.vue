@@ -28,6 +28,7 @@ import {
 import { blockTourWhile } from '../composables/useTourBlockers'
 import { isValidHhmm, isValidTimeZone } from '../lib/schedulerJobs'
 import type { AgentSpec } from '../platform/plugin-shell/agents/types'
+import { effortSuffixConflict } from '../platform/plugin-shell/lib/cliModel'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -82,6 +83,13 @@ const pickedSpec = computed(() => cliSpecs.value.find((s) => s.agentKey === draf
 const modelSupported = computed(() => !pickedSpec.value || !!pickedSpec.value.modelArgs)
 const effortSupported = computed(() => !pickedSpec.value || !!pickedSpec.value.effortArgs)
 const knownEfforts = computed(() => pickedSpec.value?.knownEfforts ?? [])
+/** An id that names its own level next to a different effort — a hint only;
+ *  the settings still save (see effortSuffixConflict). */
+const effortConflict = computed(() => {
+  const request = { model: draft.value?.model ?? '', effort: draft.value?.effort ?? '' }
+  const suffix = effortSuffixConflict({ spec: pickedSpec.value, request })
+  return suffix ? t('spawn.model.effort-conflict', { suffix, effort: request.effort.trim() }) : ''
+})
 
 /** CLI panes of THIS workspace only. */
 const paneOptions = computed(() =>
@@ -503,6 +511,7 @@ async function openProposal(rel: string): Promise<void> {
                 :disabled="!effortSupported"
                 :placeholder="effortSupported ? t('evolve.field.effort-default') : t('evolve.field.effort-unsupported')"
               />
+              <span v-if="effortConflict" class="ev-warn" data-field="effort-conflict">{{ effortConflict }}</span>
             </div>
           </div>
 
@@ -1076,6 +1085,10 @@ async function openProposal(rel: string): Promise<void> {
 .ev-err {
   font-size: var(--font-2xs);
   color: var(--danger-bright);
+}
+.ev-warn {
+  font-size: var(--font-2xs);
+  color: var(--attention-fg);
 }
 .ev-server {
   margin: 0;

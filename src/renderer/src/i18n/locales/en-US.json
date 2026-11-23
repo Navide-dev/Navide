@@ -308,6 +308,7 @@
       "effort-label": "Effort",
       "effort-default": "Vendor default",
       "shadowed-by-command": "This CLI has a launch command set (Settings → CLI Agents). That line runs as written and Navide adds no model or effort to it, so neither can be picked here. Put the model in the launch command, or clear it.",
+      "effort-conflict": "The model id already names the \"{suffix}\" level, but \"{effort}\" is picked as the effort. Some CLIs (such as agy) refuse this combination at launch. Use the id without the level suffix, or set the effort to {suffix}.",
       "refuse": {
         "model-unsupported": "\"{agent}\" cannot be given a model at launch; opened this way it falls back to its default model. Remove the model and switch models inside the CLI instead.",
         "effort-unsupported": "\"{agent}\" has no separate effort setting. Remove the effort; if this CLI encodes the level in the model id (e.g. gpt-5.3-codex-high), put it in the model instead.",

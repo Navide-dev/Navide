@@ -308,6 +308,7 @@
       "effort-label": "Aufwand",
       "effort-default": "Standard des Anbieters",
       "shadowed-by-command": "Für diese CLI ist ein Startbefehl festgelegt („Einstellungen → CLI-Agents“). Diese Zeile wird unverändert ausgeführt und Navide fügt weder Modell noch Aufwand hinzu, daher kann hier beides nicht gewählt werden. Tragen Sie das Modell in den Startbefehl ein oder leeren Sie ihn.",
+      "effort-conflict": "Die Modell-ID nennt bereits die Stufe „{suffix}“, als Aufwand ist aber „{effort}“ gewählt. Manche CLIs (etwa agy) lehnen diese Kombination beim Start ab. Verwenden Sie die ID ohne Stufen-Suffix oder setzen Sie den Aufwand auf {suffix}.",
       "refuse": {
         "model-unsupported": "„{agent}“ kann beim Start kein Modell erhalten; auf diese Weise geöffnet, fällt es auf sein Standardmodell zurück. Entfernen Sie das Modell und wechseln Sie das Modell stattdessen in der CLI.",
         "effort-unsupported": "„{agent}“ hat keine eigene Aufwandseinstellung. Entfernen Sie den Aufwand; falls diese CLI die Stufe in der Modell-ID kodiert (z. B. gpt-5.3-codex-high), tragen Sie sie stattdessen beim Modell ein.",

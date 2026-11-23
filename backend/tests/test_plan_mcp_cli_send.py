@@ -2055,12 +2055,12 @@ async def test_open_agent_refuses_an_effort_value_outside_the_vocabulary(
 ) -> None:
     _seed()
     result = await plan_mcp.cli_open_agent(
-        "antigravity", "worker", "do the thing", _ctx(), effort="xhigh"
+        "antigravity", "worker", "do the thing", _ctx(), effort="minimal"
     )
     assert result["ok"] is False
-    # agy takes low/medium/high only — the error must list them, since the
-    # value is plausible (other CLIs do accept xhigh).
-    assert "low, medium, high" in result["error"]
+    # agy takes low/medium/high/xhigh/max only — the error must list them,
+    # since the value is plausible (other CLIs do accept minimal).
+    assert "low, medium, high, xhigh, max" in result["error"]
     assert captured == []
 
 

@@ -213,6 +213,19 @@ describe('EvolvePanel', () => {
     expect(wrapper.get('[data-field="model"]').attributes('disabled')).toBeDefined()
   })
 
+  it('warns, without blocking the save, when the id names a different level than the effort', async () => {
+    wrapper = await mountPanel(A)
+    expect(wrapper.find('[data-field="effort-conflict"]').exists()).toBe(false)
+    await wrapper.get('[data-field="model"]').setValue('gemini-4-neon-low')
+    await wrapper.get('[data-field="effort"]').setValue('high')
+    expect(wrapper.get('[data-field="effort-conflict"]').text()).toContain('low')
+    await wrapper.get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    expect(callsOf('evolve.set')).toEqual([
+      { type: 'evolve.set', payload: { workspace: A, settings: { model: 'gemini-4-neon-low', effort: 'high' } } },
+    ])
+  })
+
   it('v1.1: explains a pending catch-up and never sends the read-only flag back', async () => {
     states[A] = stateFor(A, {}, { pending_catch_up: true })
     wrapper = await mountPanel(A)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modelArgsFor, supportsModel, supportsEffort } from './cliModel'
+import { effortSuffixConflict, modelArgsFor, supportsModel, supportsEffort } from './cliModel'
 
 /** A vendor that takes both, with a closed effort vocabulary. */
 const full = {
@@ -190,5 +190,36 @@ describe('capability predicates', () => {
     expect(supportsEffort(neither)).toBe(false)
     expect(supportsModel(undefined)).toBe(false)
     expect(supportsEffort(undefined)).toBe(false)
+  })
+})
+
+describe('effortSuffixConflict', () => {
+  const ask = (model: string, effort: string, spec: Parameters<typeof effortSuffixConflict>[0]['spec'] = full) =>
+    effortSuffixConflict({ spec, request: { model, effort } })
+
+  it('names the suffix when the id carries a different level than the picked effort', () => {
+    expect(ask('gemini-4-neon-low', 'high')).toBe('low')
+    expect(ask(' gemini-4-neon-medium ', ' low ')).toBe('medium')
+  })
+
+  it('stays quiet when the levels agree, either side is empty, or the suffix is not a level', () => {
+    expect(ask('gemini-4-neon-low', 'low')).toBe('')
+    expect(ask('gemini-4-neon', 'high')).toBe('')
+    expect(ask('gemini-4-neon-low', '')).toBe('')
+    expect(ask('', 'high')).toBe('')
+    expect(ask('high', 'low')).toBe('')
+    expect(ask('gemini-4-neon-xhigh', 'low')).toBe('')
+  })
+
+  it('needs a known vocabulary to recognise a suffix', () => {
+    expect(ask('gemini-4-neon-low', 'high', modelOnly)).toBe('')
+    expect(effortSuffixConflict({ spec: undefined, request: { model: 'gemini-4-neon-low', effort: 'high' } })).toBe('')
+  })
+
+  it('never turns a conflicting pick into a refusal', () => {
+    expect(modelArgsFor({ spec: full, request: { model: 'gemini-4-neon-low', effort: 'high' } })).toEqual({
+      ok: true,
+      args: '--model gemini-4-neon-low --reasoning-effort high',
+    })
   })
 })
