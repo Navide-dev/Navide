@@ -4454,6 +4454,7 @@ class ServerLink:
                     device_name=self._device_name_for(sender_device),
                     workspace=workspace,
                     pane_name=pane_name,
+                    grant_id=str((held or {}).get("grantId") or ""),
                 )
                 await self._announce_access_requests()
             # One wire reason for both, deliberately: telling a sender that it

@@ -268,6 +268,7 @@ async def test_an_org_pin_messages_through_the_pane_policy(broadcasts):
         await _until(lambda: bool(conn.acks))
         assert conn.acks[0]["reason"] == "policy-denied"
         (knock,) = link.access_requests()
+        assert knock["grantId"] == "g_1"  # remembered on the knock itself
         assert knock["org"]["orgName"] == "北辰設計"
         assert knock["org"]["grantId"] == "g_1"
     finally:

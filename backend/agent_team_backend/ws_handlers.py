@@ -5859,13 +5859,17 @@ async def p2p_access_requests_approve(
         return
 
     # Which grant the sender was paired through, from the pin — the record the
-    # delivery path checks. Unreadable means unknown, and a rule written then
-    # would carry no grantId and outlive the grant, so nothing is written.
+    # delivery path checks. When it cannot be read, a knock known to come from
+    # another organisation is refused: its rule would carry no grantId and
+    # outlive the grant. Every other knock is approved as it always was.
+    from_org = bool(request.get("grantId") or request.get("org"))
     try:
         pin = trust_store.pin_for(str(request["deviceId"])) or {}
     except trust_store.TrustStoreLocked as err:
-        await session.send_json(make_error(msg_id, msg_type, "TRUST_UNAVAILABLE", str(err)))
-        return
+        if from_org:
+            await session.send_json(make_error(msg_id, msg_type, "TRUST_UNAVAILABLE", str(err)))
+            return
+        pin = {}
     grant_id = str(pin.get("grantId") or "")
 
     def add_rule(policy: dict) -> None:
