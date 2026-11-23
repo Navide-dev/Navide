@@ -540,3 +540,48 @@ async def test_a_dropped_connection_forgets_the_grants():
         assert link._org_status in (org_peers.STATUS_UNKNOWN, org_peers.STATUS_OK)
     finally:
         await link.stop()
+
+
+async def test_a_knock_left_under_a_personal_pairing_cannot_become_an_unscoped_rule(broadcasts):
+    """Personal pairing knocks → unpaired → paired again through a grant →
+    knocks again: the knock carries the grant, so a locked trust record
+    refuses to approve it instead of writing a rule with no grantId."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server, link = await _link_with(
+        {"grants": [_grant()]}, policy={"version": 1, "default": "deny", "rules": []}
+    )
+    try:
+        conn = server.opened[0]
+        trust_store.pin_paired_device(ORG_PEER.device_id, sign_key=ORG_PEER.sign_key,
+                                      enc_key=ORG_PEER.enc_key, member_id=ORG_MEMBER)
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:k:1", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: bool(link.access_requests()))
+        assert "grantId" not in link.access_requests()[0]
+
+        # They unpair: the knock made under that pairing goes with it.
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_REVOKED, "pair-revoked-k")})
+        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id) is None)
+        assert link.access_requests() == []
+
+        # Paired again, through the grant; a knock now remembers it.
+        await _pair(link, conn, tag="k")
+        assert trust_store.pin_for(ORG_PEER.device_id)["grantId"] == "g_1"
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:k:2", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: bool(link.access_requests()))
+        (knock,) = link.access_requests()
+        assert knock["grantId"] == "g_1"
+    finally:
+        await link.stop()
+
+
+def test_a_knock_row_says_how_its_sender_is_paired_now():
+    from agent_team_backend import device_trust
+
+    requests = device_trust.AccessRequests()
+    common = dict(member_id="m", device_id="d", device_name="n", workspace="w", pane_name="p")
+    assert "grantId" not in requests.record(**common)
+    assert requests.record(**common, grant_id="g_1")["grantId"] == "g_1"
+    assert "grantId" not in requests.record(**common)

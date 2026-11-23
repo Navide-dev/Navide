@@ -1083,3 +1083,34 @@ def test_canonical_json_matches_the_renderer_fixture_literally() -> None:
     instead of every policy save quietly refusing."""
     fixture = {'version': 1, 'default': 'deny', 'rules': [{'to': {'paneName': '審查者', 'workspace': '/w/α'}, 'from': {'deviceId': 'd-1', 'memberId': 'm-1'}, 'action': 'allow'}], 'blocked': [], 'note': 'tab\there "q" \\ /slash\u2028😀\x7f'}
     assert confirm_token.canonical_json(fixture) == '{"blocked":[],"default":"deny","note":"tab\\there \\"q\\" \\\\ /slash\\u2028\\ud83d\\ude00\\u007f","rules":[{"action":"allow","from":{"deviceId":"d-1","memberId":"m-1"},"to":{"paneName":"\\u5be9\\u67e5\\u8005","workspace":"/w/\\u03b1"}}],"version":1}'
+
+
+async def test_a_personal_knock_does_not_survive_into_an_organisation_pairing(link, monkeypatch) -> None:
+    """Knock while personally paired → unpair → paired through a grant →
+    knock → trust record locked → approve: no rule without a grantId."""
+    async def quiet(*_a, **_k) -> None:
+        return None
+
+    monkeypatch.setattr(server_link, "revoke_pairing", quiet)
+    monkeypatch.setattr(server_link, "trust_full", lambda: False)
+    trust_store.load()
+    trust_store.pin_device(THEIR_BOX, sign_key=_A_KEY, member_id=THEIRS)
+    _knock(link)
+
+    reply = await _call("p2p.trust.device.unpair", {"deviceId": THEIR_BOX})
+    assert reply["ok"] is True
+    assert link.requests.list() == []
+
+    key = link.requests.record(
+        member_id=THEIRS, device_id=THEIR_BOX, device_name="their box",
+        workspace="proj", pane_name="reviewer", grant_id="g_1",
+    )["key"]
+
+    def locked(_device_id):
+        raise trust_store.TrustStoreLocked("locked (test)")
+
+    monkeypatch.setattr(trust_store, "pin_for", locked)
+    before = len(link.writes)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["error"]["code"] == "TRUST_UNAVAILABLE"
+    assert len(link.writes) == before
