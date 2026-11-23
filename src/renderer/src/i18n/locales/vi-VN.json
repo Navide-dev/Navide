@@ -308,6 +308,7 @@
       "effort-label": "Mức nỗ lực",
       "effort-default": "Mặc định của nhà cung cấp",
       "shadowed-by-command": "CLI này đã đặt lệnh khởi chạy (Cài đặt → CLI agent). Dòng lệnh đó chạy đúng như đã viết và Navide không thêm model hay mức nỗ lực nào vào, nên không chọn được ở đây. Hãy đưa model vào lệnh khởi chạy, hoặc xóa trống lệnh đó.",
+      "effort-conflict": "ID model đã ghi sẵn mức \"{suffix}\", nhưng mức nỗ lực đang chọn là \"{effort}\". Một số CLI (như agy) từ chối tổ hợp này khi khởi chạy. Hãy dùng ID không có hậu tố mức, hoặc đặt mức nỗ lực là {suffix}.",
       "refuse": {
         "model-unsupported": "Không thể chỉ định model cho “{agent}” lúc khởi chạy; mở theo cách này nó sẽ dùng model mặc định. Hãy bỏ model và đổi model ngay trong CLI.",
         "effort-unsupported": "“{agent}” không có cài đặt mức nỗ lực riêng. Hãy bỏ mức nỗ lực; nếu CLI này mã hóa mức trong ID model (ví dụ gpt-5.3-codex-high), hãy đưa vào model.",

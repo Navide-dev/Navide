@@ -308,6 +308,7 @@
       "effort-label": "Esfuerzo",
       "effort-default": "Predeterminado del proveedor",
       "shadowed-by-command": "Esta CLI tiene definido un comando de arranque (Ajustes → Agents de CLI). Esa línea se ejecuta tal cual y Navide no le añade modelo ni nivel de esfuerzo, así que aquí no se puede elegir ninguno de los dos. Pon el modelo en el comando de arranque o bórralo.",
+      "effort-conflict": "El id del modelo ya indica el nivel \"{suffix}\", pero el esfuerzo elegido es \"{effort}\". Algunas CLI (como agy) rechazan esta combinación al arrancar. Usa el id sin el sufijo de nivel o pon el esfuerzo en {suffix}.",
       "refuse": {
         "model-unsupported": "A «{agent}» no se le puede indicar un modelo al arrancar; abierto así, usa su modelo predeterminado. Quita el modelo y cámbialo dentro de la CLI.",
         "effort-unsupported": "«{agent}» no tiene un ajuste de esfuerzo aparte. Quita el nivel de esfuerzo; si esta CLI codifica el nivel en el id del modelo (p. ej., gpt-5.3-codex-high), ponlo en el modelo.",

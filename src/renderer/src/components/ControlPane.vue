@@ -73,6 +73,7 @@ import {
   chooseLaunchCommand,
   cliCommandKey,
   cliModelKey,
+  effortSuffixConflict,
   modelArgsFor,
   parseCliModelDefault,
   supportsEffort,
@@ -2023,6 +2024,15 @@ const modelRefusal = computed<string>(() => {
   if (chosen.ok) return ''
   const { key, params } = modelRefusalMessage(activeSpawnAgent.value, chosen.refusal, request.effort)
   return i18n.global.t(key, params)
+})
+/** A model id that names its own level next to a different picked effort —
+ *  shown as a hint only; the spawn is not blocked (see effortSuffixConflict). */
+const effortConflict = computed<string>(() => {
+  const request = { model: pickedModel.value, effort: pickedEffort.value }
+  const suffix = effortSuffixConflict({ spec: spawnModelSpec.value, request })
+  return suffix
+    ? i18n.global.t('spawn.model.effort-conflict', { suffix, effort: request.effort.trim() })
+    : ''
 })
 const pipelineOpen = ref<boolean>(true)
 // Manual spawn used to be a card, and a spawn-mode workspace opened with it
@@ -4755,6 +4765,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           </div>
           <p v-if="commandShadowsModel && (canPickModel || canPickEffort)" class="hint model-shadowed">{{ $t('spawn.model.shadowed-by-command') }}</p>
           <p v-if="modelRefusal" class="hint warn">{{ modelRefusal }}</p>
+          <p v-else-if="effortConflict" class="hint warn">{{ effortConflict }}</p>
           <div class="row spawn-actions">
             <button class="primary wide" :disabled="!canSpawn || !!modelRefusal" @click="spawn()">{{ $t('action.add-to-grid') }}</button>
             <button class="ghost wide terminal-btn" :disabled="!canSpawn" @click="openTerminal">{{ $t('action.open-terminal') }}</button>

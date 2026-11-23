@@ -308,6 +308,7 @@
       "effort-label": "推理强度",
       "effort-default": "厂商默认",
       "shadowed-by-command": "这个 CLI 设了启动指令（设置 → CLI Agents），整条命令照原样运行，Navide 不会再加上模型与 effort，所以这里无法选。要指定模型，请写进该启动指令，或清空它。",
+      "effort-conflict": "模型 ID 已经带了“{suffix}”强度，但 effort 选的是“{effort}”。部分 CLI（例如 agy）启动时会拒绝这种组合。请改用不带强度后缀的 ID，或把 effort 设为 {suffix}。",
       "refuse": {
         "model-unsupported": "“{agent}”无法在启动时指定模型，这样开会落回它的默认模型 — 请拿掉 model 参数，改在 CLI 里自己切换模型",
         "effort-unsupported": "“{agent}”没有独立的 effort 参数 — 请拿掉 effort；若这家 CLI 是把强度写在模型 id 里（例如 gpt-5.3-codex-high），请改写进 model",

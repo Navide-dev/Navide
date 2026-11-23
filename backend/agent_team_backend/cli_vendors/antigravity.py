@@ -843,7 +843,7 @@ SPEC = VendorSpec(
     data_dirs=lambda ctx: (ctx.path(ctx.home / ".gemini" / "antigravity-cli"),),
     supports_model=True,
     supports_effort=True,
-    known_efforts=('low', 'medium', 'high'),
+    known_efforts=('low', 'medium', 'high', 'xhigh', 'max'),
     # Verified 2026-08-15: `gemini skills list` reports locations under
     # ~/.gemini/skills — not the ~/.gemini/antigravity-cli/skills that other
     # shared configs assume. Rides the HOME shim its MCP wiring builds.

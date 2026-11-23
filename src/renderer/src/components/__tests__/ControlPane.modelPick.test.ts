@@ -180,6 +180,22 @@ describe('ControlPane – the spawn dialog\'s model pick', () => {
     expect(payload.effort).toBeUndefined()
   })
 
+  it('warns, without blocking, when the id names a different level than the effort', async () => {
+    // agy exits 1 on `--model gemini-4-neon-low --effort high`; the dialog
+    // says so but launches the pick as chosen.
+    wrapper = mountWith()
+    await openDialog(wrapper)
+    await pickAgent(wrapper, 'modelcli')
+    await modelInput(wrapper).setValue('gemini-4-neon-low')
+    await effortSelect(wrapper)[0].setValue('high')
+    expect(wrapper.find('.spawn-card--modal .hint.warn').exists()).toBe(true)
+    await wrapper.find('.spawn-card--modal button.primary').trigger('click')
+    expect(wrapper.emitted('spawn')?.[0]?.[0]).toMatchObject({
+      model: 'gemini-4-neon-low',
+      effort: 'high',
+    })
+  })
+
   it('refuses a model id that would split into two arguments', async () => {
     // `--model "x --dangerously-skip-permissions"` is three argv entries, not
     // one. ARGUMENT_SAFE in cliModel.ts is the check; this proves the dialog
