@@ -79,6 +79,7 @@ import {
   cliCommandKey,
   cliEnvKey,
   cliModelKey,
+  effortSuffixConflict,
   isReservedSpawnEnvKey,
   isValidEnvName,
   modelArgsFor,
@@ -607,6 +608,15 @@ function applyLaunchModel(k: string, next: CliModelDefault): void {
   launchModelErrors.value = rest
   launchModels.value = { ...launchModels.value, [k]: next }
   settingsSet(cliModelKey(k), serializeCliModelDefault(next))
+}
+
+/** The stored pair names a level in the id and a different effort — a hint
+ *  only, the pair is still saved (see effortSuffixConflict). */
+function launchEffortConflict(k: string): string {
+  const spec = CLI_AGENT_SPECS.find((s) => s.agentKey === k)
+  const request = launchModelFor(k)
+  const suffix = effortSuffixConflict({ spec, request })
+  return suffix ? t('spawn.model.effort-conflict', { suffix, effort: request.effort.trim() }) : ''
 }
 
 function onLaunchModelInput(k: string, e: Event): void {
@@ -3815,6 +3825,9 @@ watch(activeTab, (tab) => {
                   <p v-if="launchModelErrors[row.agentKey]" class="launch-error">
                     {{ launchModelErrors[row.agentKey] }}
                   </p>
+                  <p v-else-if="launchEffortConflict(row.agentKey)" class="launch-effort-conflict">
+                    {{ launchEffortConflict(row.agentKey) }}
+                  </p>
 
                   <div class="launch-field">
                     <span class="launch-field-label">{{ $t('settings.cliLaunch.command-label') }}</span>
@@ -5706,6 +5719,7 @@ watch(activeTab, (tab) => {
 .launch-input { flex: 1; min-width: 0; font-size: var(--font-2xs); }
 .launch-note { margin: 0; }
 .launch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); }
+.launch-effort-conflict { margin: 0; font-size: var(--font-2xs); color: var(--attention-fg); }
 .launch-warn {
   padding: 6px 10px; border-radius: var(--radius-md);
   border: 1px solid var(--border-default); border-left: 3px solid #c77400;
