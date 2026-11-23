@@ -624,3 +624,48 @@ def test_a_grant_pin_is_not_approved_again_without_a_grant():
     pin = trust_store.pin_for(ORG_PEER.device_id)
     assert pin["approved"] is False
     assert pin["orgRevoked"]["reason"] == "link-revoked"
+
+
+async def test_not_found_downgrades_grant_pins_but_an_older_server_does_not():
+    _pin_org()
+    server, link = await _link_with({"error": "NOT_FOUND"})
+    try:
+        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id)["approved"] is False)
+        assert trust_store.pin_for(ORG_PEER.device_id)["orgRevoked"]["reason"] == org_peers.REASON_LAPSED
+        assert "grantId" not in trust_store.pin_for(PEER.device_id)
+    finally:
+        await link.stop()
+
+
+async def test_an_older_server_leaves_grant_pins_alone():
+    _pin_org()
+    server, link = await _link_with({"error": "UNKNOWN_TYPE"})
+    try:
+        assert link._org_status == org_peers.STATUS_UNSUPPORTED
+        assert trust_store.pin_for(ORG_PEER.device_id)["approved"] is True
+    finally:
+        await link.stop()
+
+
+async def test_an_org_sender_is_judged_by_its_pinned_member_not_the_frame(broadcasts):
+    """A frame naming this account's member id must not match the own-devices
+    rule for an organisation machine; it is refused outright."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    own_devices = {"version": 1, "default": "deny", "rules": [
+        {"from": {"memberId": "m1", "deviceId": "*"}, "to": {"workspace": "*", "paneName": "*"}, "action": "allow"}]}
+    server, link = await _link_with({"grants": [_grant()]}, policy=own_devices)
+    try:
+        _pin_org()
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:own:1", member_id="m1", peer=ORG_PEER)})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0]["state"] == "rejected"
+        assert broadcasts == []
+        # With its real member id it is held to the rules, which deny it.
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:own:2", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: len(conn.acks) == 2)
+        assert conn.acks[1]["reason"] == "policy-denied"
+    finally:
+        await link.stop()
