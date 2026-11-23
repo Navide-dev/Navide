@@ -3646,6 +3646,10 @@ class ServerLink:
         knock. So the failure of a legitimate new machine is "it asked and is
         waiting", which someone can see and fix, rather than "it vanished".
         """
+        # A pin an organisation grant earned is never one of ours, whatever
+        # member id it carries: those machines answer to the pane policy.
+        if pin.get("grantId"):
+            return False
         pinned = str(pin.get("memberId") or "")
         if not (bool(self._own_member) and pinned == self._own_member):
             return False
@@ -4099,6 +4103,19 @@ class ServerLink:
             self._cancel_exchange(device_id)
             log.info("not re-pairing %s: no live organisation grant reaches it", device_id)
             return False
+        # The grant tag and the member id pinned beside it come from the same
+        # source, the grant's peer row: the member id in the frame is the
+        # relay's word, and a pin carrying a grant with this account's member
+        # id would be one the own-device ring could mistake for ours.
+        org_tag = (
+            org_peers.pin_org(*found)
+            if found is not None and found[1]["memberId"] != self._own_member
+            else None
+        )
+        if began_through and org_tag is None:
+            self._cancel_exchange(device_id)
+            log.info("not pairing %s: its grant no longer names another account", device_id)
+            return False
         pairing = device_pairing.complete(device_id)
         if pairing is None:
             return False
@@ -4109,16 +4126,15 @@ class ServerLink:
                 device_id,
                 sign_key=pairing.their_key,
                 enc_key=pairing.their_enc_key,
-                member_id=member_id or member_id_for(device_id),
+                member_id=(
+                    found[1]["memberId"] if org_tag is not None
+                    else member_id or member_id_for(device_id)
+                ),
                 own_member_id=self._own_member,
                 # Recorded when the pairing ran through an organisation grant,
                 # never for this account's own machines: those pins stay as
                 # they always were and no grant can touch them.
-                org=(
-                    org_peers.pin_org(*found)
-                    if found is not None and found[1]["memberId"] != self._own_member
-                    else None
-                ),
+                org=org_tag,
             )
         except trust_store.TrustStoreFull as err:
             # Said where the person looks, not only in the log: the digits

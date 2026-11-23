@@ -585,3 +585,30 @@ def test_a_knock_row_says_how_its_sender_is_paired_now():
     assert "grantId" not in requests.record(**common)
     assert requests.record(**common, grant_id="g_1")["grantId"] == "g_1"
     assert "grantId" not in requests.record(**common)
+
+
+async def test_an_org_pin_never_reaches_the_own_device_ring_whatever_the_frame_says(broadcasts):
+    """The relay writes the frame's member id. Pairing through a grant pins the
+    grant's member id instead, and a grant-bearing pin is never 'ours' even if
+    it carries this account's member id."""
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        conn = server.opened[0]
+        reply = await link.start_pairing(ORG_PEER.device_id)
+        assert reply["ok"] is True
+        await conn.push({"type": "messages.pending", "payload": {**_frame(
+            ORG_PEER, device_pairing.PAIR_RESPONSE, "pair-resp-ring",
+            nonce="bm9uY2U=", signKey=ORG_PEER.sign_key, encKey=ORG_PEER.enc_key)}})
+        await _until(lambda: bool((device_pairing.get(ORG_PEER.device_id) or None)
+                                  and device_pairing.get(ORG_PEER.device_id).their_key))
+        assert (await link.confirm_pairing(ORG_PEER.device_id, accept=True))["ok"] is True
+        confirm = _frame(ORG_PEER, device_pairing.PAIR_CONFIRM, "pair-confirm-ring")
+        confirm["from"]["memberId"] = "m1"  # this account's own member id, as a relay could write it
+        await conn.push({"type": "messages.pending", "payload": confirm})
+        await _until(lambda: (trust_store.pin_for(ORG_PEER.device_id) or {}).get("approved") is True)
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin["memberId"] == ORG_MEMBER
+        assert link._own_device(pin) is False
+        assert link._own_device({**pin, "memberId": "m1"}) is False
+    finally:
+        await link.stop()
