@@ -6911,7 +6911,9 @@
         "knock-paired-same": "已配對（同組織成員）",
         "state-pairing": "比對中",
         "state-ended": "配對已結束",
-        "revoked-since": "自 {when} 起"
+        "revoked-since": "自 {when} 起",
+        "offline-note": "對方離線，上線後才能完成配對",
+        "act-failed": "這個動作沒有完成：{reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "任何帳號",
         "any-device": "任何裝置",
         "any": "不限",
-        "org-note": "這條規則也適用於透過組織配對的機器"
+        "org-note": "這條規則也適用於透過組織配對的機器",
+        "grant-note": "透過組織一鍵允許；組織互連解除時會一起失效"
       },
       "account": {
         "tab-login": "登入",

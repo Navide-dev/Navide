@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Paired (same organization)",
         "state-pairing": "Comparing",
         "state-ended": "Pairing ended",
-        "revoked-since": "since {when}"
+        "revoked-since": "since {when}",
+        "offline-note": "The other machine is offline; pairing can finish once it is online",
+        "act-failed": "Not completed: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "Any account",
         "any-device": "Any device",
         "any": "any",
-        "org-note": "This rule also applies to machines paired through an organization"
+        "org-note": "This rule also applies to machines paired through an organization",
+        "grant-note": "Allowed through an organization; it lapses if the organizations are unlinked"
       },
       "account": {
         "tab-login": "Sign In",

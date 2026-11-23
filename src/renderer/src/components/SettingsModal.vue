@@ -12,6 +12,7 @@ import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
 import { AVAILABLE_UI_LOCALES, isBetaUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
+import { usePairingState } from '../composables/usePairingState'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
   cliPermissionKey,
@@ -98,6 +99,7 @@ import {
   removeRuleAt as removePolicyRuleAt,
   withOwnDevices,
   type PolicyDocument,
+  type PolicyRule,
 } from '../lib/panePolicy'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
@@ -2337,7 +2339,33 @@ function policyMemberLabel(memberId: string): string {
 function policyDeviceLabel(deviceId: string): string {
   if (deviceId === POLICY_ANY) return t('settings.p2p.policy.any-device')
   const known = policyDevices.value.find((device) => device.deviceId === deviceId)
-  return known?.deviceName || deviceId
+  return known?.deviceName || policyOrgDevice(deviceId)?.deviceName || deviceId
+}
+
+/**
+ * Another organization's machine, as the network snapshot names it. The rule
+ * stores ids only; the shared snapshot (already polled for the pairing prompt)
+ * is what knows whose machine an id is.
+ */
+interface PolicyOrgDevice { deviceId: string; deviceName?: string; org?: { orgName: string; ownerName?: string; sameOrg?: boolean } }
+const pairingSnapshot = usePairingState(props.backend).snapshot
+function policyOrgDevice(deviceId: string): PolicyOrgDevice | undefined {
+  const devices = (pairingSnapshot.value?.devices ?? []) as PolicyOrgDevice[]
+  return devices.find((device) => device.deviceId === deviceId && !!device.org)
+}
+/** "Owner · machine" for a rule written through an organization grant. */
+function policySourceLabel(rule: PolicyRule): string {
+  const orgDevice = rule.grantId ? policyOrgDevice(rule.from.deviceId) : undefined
+  const member = orgDevice?.org?.ownerName || policyMemberLabel(rule.from.memberId)
+  return `${member} · ${policyDeviceLabel(rule.from.deviceId)}`
+}
+/** Which organization a grant-tagged rule came through, and that it ends with it. */
+function policyGrantNote(rule: PolicyRule): string {
+  const org = policyOrgDevice(rule.from.deviceId)?.org
+  const where = org
+    ? t(org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: org.orgName }) + ' · '
+    : ''
+  return where + t('settings.p2p.policy.grant-note')
 }
 
 watch([activeTab, cloudSubtab], ([tab, sub]) => {
@@ -4506,7 +4534,10 @@ watch(activeTab, (tab) => {
                   </li>
                   <li v-for="(rule, index) in policyDoc.rules" :key="index" class="policy-rule">
                     <span class="policy-rule-from">
-                      {{ policyMemberLabel(rule.from.memberId) }} · {{ policyDeviceLabel(rule.from.deviceId) }}
+                      {{ policySourceLabel(rule) }}
+                      <small v-if="rule.grantId" class="policy-org-note" data-org-grant-note>
+                        {{ policyGrantNote(rule) }}
+                      </small>
                       <!-- Disclosed rather than narrowed: the rule is the user's,
                            and it may also let in a machine paired through an
                            organization. -->

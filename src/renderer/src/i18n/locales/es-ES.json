@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Emparejada (misma organización)",
         "state-pairing": "Comparando",
         "state-ended": "Emparejamiento terminado",
-        "revoked-since": "desde {when}"
+        "revoked-since": "desde {when}",
+        "offline-note": "La otra máquina está desconectada; el emparejamiento se completa cuando vuelva a estar en línea",
+        "act-failed": "No se completó: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "Cualquier cuenta",
         "any-device": "Cualquier dispositivo",
         "any": "cualquiera",
-        "org-note": "Esta regla también se aplica a las máquinas emparejadas a través de una organización"
+        "org-note": "Esta regla también se aplica a las máquinas emparejadas a través de una organización",
+        "grant-note": "Permitida a través de una organización; deja de valer si se desvinculan las organizaciones"
       },
       "account": {
         "tab-login": "Iniciar sesión",

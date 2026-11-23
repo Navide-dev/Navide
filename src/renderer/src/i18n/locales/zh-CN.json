@@ -6911,7 +6911,9 @@
         "knock-paired-same": "已配对（同组织成员）",
         "state-pairing": "比对中",
         "state-ended": "配对已结束",
-        "revoked-since": "自 {when} 起"
+        "revoked-since": "自 {when} 起",
+        "offline-note": "对方离线，上线后才能完成配对",
+        "act-failed": "这个操作没有完成：{reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "任何账号",
         "any-device": "任何设备",
         "any": "不限",
-        "org-note": "这条规则也适用于通过组织配对的机器"
+        "org-note": "这条规则也适用于通过组织配对的机器",
+        "grant-note": "通过组织一键允许；组织互连解除时会一起失效"
       },
       "account": {
         "tab-login": "登录",

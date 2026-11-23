@@ -69,6 +69,8 @@ const pairings = ref<OrgPairing[]>([])
 const loaded = ref(false)
 const pending = ref('')
 const error = ref('')
+/** Which row the last failed act was on, so its reason sits beside it. */
+const errorDevice = ref('')
 let timer: number | undefined
 
 async function load(): Promise<void> {
@@ -112,9 +114,10 @@ async function act(deviceId: string, type: string, payload: Record<string, unkno
   if (pending.value) return
   pending.value = deviceId
   error.value = ''
+  errorDevice.value = deviceId
   try {
     const resp = await props.backend.send(type, await withConfirmation(type, deviceId, payload))
-    if (!resp.ok) error.value = resp.error?.message ?? ''
+    if (!resp.ok) error.value = resp.error?.message || resp.error?.code || ''
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
@@ -168,12 +171,23 @@ function stateTone(row: OrgPeerRow): string {
 
 function subline(row: OrgPeerRow): string {
   const owner = row.ownerName ? t('settings.cloud.org.owner', { name: row.ownerName }) : ''
+  // The badge beside the row already names the reason; this line says when.
   const extra = row.revoked
-    ? t('settings.cloud.org.revoked-on', { when: when(row.revoked.at), reason: reasonLabel(row.revoked.reason) })
+    ? t('settings.cloud.org.revoked-since', { when: when(row.revoked.at) })
     : row.pairedAt && row.trustState !== 'trusted'
       ? t('settings.cloud.org.paired-on', { when: when(row.pairedAt) })
       : ''
   return [owner, extra].filter(Boolean).join(' · ')
+}
+
+/** Offline, and otherwise ready to pair: the one case the row has to explain. */
+function offlineHint(row: OrgPeerRow): boolean {
+  return !row.online && row.canTrust && row.trustState !== 'trusted' && !pairingFor(row.deviceId)
+}
+
+/** The last failure belongs to this listed row, so it is shown there. */
+function rowError(deviceId: string): boolean {
+  return !!error.value && errorDevice.value === deviceId && grants.value.some((g) => g.peers.some((p) => p.deviceId === deviceId))
 }
 
 function grouped(value: string | undefined): string {
@@ -203,7 +217,7 @@ function initial(name: string): string {
     </div>
     <p v-if="manageError" class="org-note" data-notice="manage-failed">{{ manageError }}</p>
 
-    <p v-if="error" class="org-note danger" data-notice="error">{{ error }}</p>
+    <p v-if="error && !rowError(errorDevice)" class="org-note danger" data-notice="error">{{ error }}</p>
 
     <SettingsCard v-for="grant in grants" :key="grant.grantId" class="org-card" :data-grant-id="grant.grantId">
       <div class="org-card-head">
@@ -223,6 +237,14 @@ function initial(name: string): string {
           <span class="org-device">
             <span class="org-device-name" v-truncate>{{ row.deviceName || row.deviceId }}</span>
             <span class="org-device-sub">{{ subline(row) }}</span>
+            <!-- Said on the row, not only in a tooltip: pairing needs both
+                 machines, and the button stays pressable either way. -->
+            <span v-if="offlineHint(row)" class="org-device-sub org-offline" data-notice="offline">
+              {{ t('settings.cloud.org.offline-note') }}
+            </span>
+            <span v-if="rowError(row.deviceId)" class="org-device-sub org-row-error" data-notice="error" role="alert">
+              {{ t('settings.cloud.org.act-failed', { reason: error }) }}
+            </span>
           </span>
           <span class="org-badge" :class="stateTone(row)" :data-state="row.trustState">{{ stateLabel(row) }}</span>
           <button
@@ -239,6 +261,7 @@ function initial(name: string): string {
             v-else
             type="button"
             class="org-btn"
+            :class="{ ghost: offlineHint(row) }"
             data-action="pair"
             :disabled="!!pending || !row.canTrust || !!pairingFor(row.deviceId)"
             :title="!row.listed ? t('settings.cloud.org.repair-hint') : !row.online ? t('settings.cloud.org.offline-title') : undefined"
@@ -432,6 +455,12 @@ function initial(name: string): string {
 .org-badge.ok {
   color: var(--success-fg, #3fb950);
   border-color: currentColor;
+}
+.org-offline {
+  color: var(--attention-fg, var(--warning-fg, #d29922));
+}
+.org-row-error {
+  color: var(--danger-fg, #f85149);
 }
 .org-badge.accent {
   color: var(--accent-fg, var(--text-primary));

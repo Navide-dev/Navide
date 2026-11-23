@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Appairée (même organisation)",
         "state-pairing": "Comparaison en cours",
         "state-ended": "Appairage terminé",
-        "revoked-since": "depuis le {when}"
+        "revoked-since": "depuis le {when}",
+        "offline-note": "L’autre machine est hors ligne ; l’appairage pourra se terminer quand elle sera en ligne",
+        "act-failed": "Non terminé : {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "N’importe quel compte",
         "any-device": "N’importe quel appareil",
         "any": "n’importe lequel",
-        "org-note": "Cette règle s’applique aussi aux machines appairées via une organisation"
+        "org-note": "Cette règle s’applique aussi aux machines appairées via une organisation",
+        "grant-note": "Autorisée via une organisation ; elle prend fin si les organisations sont dissociées"
       },
       "account": {
         "tab-login": "Se connecter",
