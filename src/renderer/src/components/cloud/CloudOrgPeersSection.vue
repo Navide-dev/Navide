@@ -250,13 +250,21 @@ function initial(name: string): string {
       <p v-if="grant.sameOrg" class="org-hint org-card-hint">{{ t('settings.cloud.org.same-org-hint') }}</p>
       <ul class="org-list">
         <li v-for="row in grant.peers" :key="row.deviceId" class="org-row" :data-device-id="row.deviceId">
-          <span class="org-dot" :class="{ on: row.online }" aria-hidden="true"></span>
+          <!-- Not colour alone: the dot carries its word for screen readers
+               and on hover. -->
+          <span
+            class="org-dot"
+            :class="{ on: row.online }"
+            role="img"
+            :aria-label="t(row.online ? 'settings.p2p.network.device-online' : 'settings.p2p.network.device-offline')"
+            :title="t(row.online ? 'settings.p2p.network.device-online' : 'settings.p2p.network.device-offline')"
+          ></span>
           <span class="org-device">
             <span class="org-device-name" v-truncate>{{ row.deviceName || row.deviceId }}</span>
             <span class="org-device-sub">{{ subline(row) }}</span>
             <!-- Said on the row, not only in a tooltip: pairing needs both
                  machines, and the button stays pressable either way. -->
-            <span v-if="offlineHint(row)" class="org-device-sub org-offline" data-notice="offline">
+            <span v-if="offlineHint(row)" :id="'org-offline-' + row.deviceId" class="org-device-sub org-offline" data-notice="offline">
               {{ t('settings.cloud.org.offline-note') }}
             </span>
             <span v-if="rowError(row.deviceId)" class="org-device-sub org-row-error" data-notice="error" role="alert">
@@ -279,6 +287,7 @@ function initial(name: string): string {
             type="button"
             class="org-btn"
             :class="{ ghost: offlineHint(row) }"
+            :aria-describedby="offlineHint(row) ? 'org-offline-' + row.deviceId : undefined"
             data-action="pair"
             :disabled="!!pending || !row.canTrust || !!pairingFor(row.deviceId)"
             :title="!row.listed ? t('settings.cloud.org.repair-hint') : !row.online ? t('settings.cloud.org.offline-title') : undefined"
@@ -522,8 +531,22 @@ function initial(name: string): string {
 .org-btn.danger {
   color: var(--danger-fg, #f85149);
 }
+.org-btn:not(:disabled):hover,
+.org-manage:hover {
+  filter: brightness(1.12);
+}
+.org-btn.ghost:not(:disabled):hover,
+.org-manage:hover {
+  border-color: var(--border-strong, var(--border-default));
+  background: var(--bg-muted, transparent);
+}
+.org-btn:focus-visible,
+.org-manage:focus-visible {
+  outline: 2px solid var(--accent-fg);
+  outline-offset: 1px;
+}
 .org-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: default;
 }
 .org-pairing {
