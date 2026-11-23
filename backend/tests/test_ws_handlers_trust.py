@@ -1114,3 +1114,17 @@ async def test_a_personal_knock_does_not_survive_into_an_organisation_pairing(li
     reply = await _call("p2p.access_requests.approve", {"key": key})
     assert reply["error"]["code"] == "TRUST_UNAVAILABLE"
     assert len(link.writes) == before
+
+
+@pytest.mark.parametrize("pin", [None, {"approved": True}])
+async def test_an_org_knock_whose_sender_has_no_grant_now_writes_no_rule(link, monkeypatch, pin) -> None:
+    """Pin gone, or no grantId on it: an untagged rule would apply outside any grant."""
+    key = link.requests.record(
+        member_id=THEIRS, device_id=THEIR_BOX, device_name="their box",
+        workspace="proj", pane_name="reviewer", grant_id="g_1",
+    )["key"]
+    monkeypatch.setattr(trust_store, "pin_for", lambda _device_id: pin)
+    before = len(link.writes)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["error"]["code"] == "NOT_PAIRED"
+    assert len(link.writes) == before

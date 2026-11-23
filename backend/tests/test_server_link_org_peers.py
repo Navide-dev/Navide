@@ -612,3 +612,15 @@ async def test_an_org_pin_never_reaches_the_own_device_ring_whatever_the_frame_s
         assert link._own_device({**pin, "memberId": "m1"}) is False
     finally:
         await link.stop()
+
+
+def test_a_grant_pin_is_not_approved_again_without_a_grant():
+    _pin_org()
+    trust_store.revoke_org_pins("g_1", device_ids=None, local_device_id="", reason="link-revoked", at=1)
+    changed = trust_store.pin_paired_device(
+        ORG_PEER.device_id, sign_key=ORG_PEER.sign_key, enc_key=ORG_PEER.enc_key, member_id=ORG_MEMBER,
+    )
+    assert changed is False
+    pin = trust_store.pin_for(ORG_PEER.device_id)
+    assert pin["approved"] is False
+    assert pin["orgRevoked"]["reason"] == "link-revoked"

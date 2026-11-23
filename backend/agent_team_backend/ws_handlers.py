@@ -5871,6 +5871,14 @@ async def p2p_access_requests_approve(
             return
         pin = {}
     grant_id = str(pin.get("grantId") or "")
+    if from_org and not grant_id:
+        # Known to come from another organisation, yet no longer paired
+        # through a grant: a rule now would carry no grantId and apply to it
+        # outside any grant. It knocks again once it is paired again.
+        await session.send_json(
+            make_error(msg_id, msg_type, "NOT_PAIRED", "that device is no longer paired through its organisation")
+        )
+        return
 
     def add_rule(policy: dict) -> None:
         rule = {

@@ -4112,7 +4112,7 @@ class ServerLink:
             if found is not None and found[1]["memberId"] != self._own_member
             else None
         )
-        if began_through and org_tag is None:
+        if (began_through or (held is not None and held.get("grantId"))) and org_tag is None:
             self._cancel_exchange(device_id)
             log.info("not pairing %s: its grant no longer names another account", device_id)
             return False
