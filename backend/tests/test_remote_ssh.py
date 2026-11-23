@@ -48,8 +48,8 @@ def test_unusable_targets_are_refused(payload):
         remote_ssh.parse_target(payload)
 
 
-def test_the_argv_never_forwards_the_agent():
-    argv = remote_ssh.shell_argv(_target(keyPath="/keys/id_test"), Path("/tmp/cm"))
+def test_the_argv_never_forwards_the_agent(tmp_path):
+    argv = remote_ssh.shell_argv(_target(keyPath=str(tmp_path / "id_test")), Path("/tmp/cm"))
     # No -A, alone or bundled with other short flags (-tA).
     assert not any(p.startswith("-") and not p.startswith("--") and len(p) <= 4 and "A" in p for p in argv)
     assert "ForwardAgent=no" in argv
@@ -89,9 +89,9 @@ def test_the_key_goes_in_as_a_path_and_is_never_opened(tmp_path, monkeypatch):
     assert target["keyPath"] == str(key)
 
 
-def test_a_missing_key_file_is_not_checked_here():
+def test_a_missing_key_file_is_not_checked_here(tmp_path):
     # ssh reports a missing key itself; this module never stats the file.
-    target = remote_ssh.parse_target({"host": "box", "keyPath": "/nowhere/id_" + "missing"})
+    target = remote_ssh.parse_target({"host": "box", "keyPath": str(tmp_path / "nowhere" / ("id_" + "missing"))})
     assert target["keyPath"].endswith("id_missing")
 
 
