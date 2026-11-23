@@ -2,7 +2,7 @@
 
 [English](../en-US/getting-started.md) | 繁體中文 | [日本語](../ja-JP/getting-started.md) | [文件中心](README.md)
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac，以及 Linux x64 與 x64／Arm 版 Windows。[最新的 GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) 提供 macOS 的 DMG 與 ZIP 下載（已經 Developer ID 簽章與 Apple Notarization）、Windows x64 與 Arm64 的 NSIS 安裝程式，以及 Linux x64 的 AppImage 與 `.deb`。GitHub 下載很慢或失敗時，同一批檔案也由 dl.navide.dev 鏡像提供——README 的下載清單每個檔案旁都有「鏡像」連結，navide.dev 官網在鏡像可達時會自動改用它。
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac，以及 Linux x64 與 x64／Arm 版 Windows。[最新的 GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) 提供 macOS 的 DMG 與 ZIP 下載（已經 Developer ID 簽章與 Apple Notarization）、Windows x64 與 Arm64 的 NSIS 安裝程式，以及 Linux x64 的 AppImage 與 `.deb`。GitHub 下載很慢或失敗時，同一批檔案也由 dl.navide.dev 鏡像提供——README 的下載清單先連到鏡像，每個檔案旁另有「GitHub」連結，navide.dev 官網在鏡像可達時會自動改用它。
 
 若要在 macOS 安裝，請下載 DMG、將 Navide 複製到「應用程式」，接著正常開啟即可，無需繞過 Gatekeeper。
 
@@ -26,7 +26,7 @@ x64 提供兩種套件：
 - pnpm 10+
 - Python 3.12+
 - uv 0.11+
-- 至少一個受支援的 Coding CLI（共 14 種：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code），清單見[使用手冊](user-guide.md)
+- 至少一個受支援的 Coding CLI，清單見[使用手冊](user-guide.md)
 - 選用：用於本機分析的 Ollama 或本機 GGUF 模型
 - Windows 專屬：開發人員模式（**設定 → 開發人員專用**）或以系統管理員身分執行 Navide，Navide 才能建立每個分格（分格＝視窗裡的一格，通常跑一個 agent）的 CLI Home 與受管理 Skills 所需的符號連結
 

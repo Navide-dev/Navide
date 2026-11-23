@@ -100,7 +100,7 @@ is disclosed and they travel in pieces
 | `name` | yes | string | [2.2](#22-names-and-the-prefix); unique within the package |
 | `method` | yes | string | must be listed in `backend.methods`; the Host forwards the call to it |
 | `risk` | yes | `"read"` \| `"write"` | shown on every disclosure surface; `write` raises the risk level to high |
-| `title` | yes | string | [2.4](#24-text-rules); no length limit (DB9 only) |
+| `title` | yes | string | [2.4](#24-text-rules); no length limit |
 | `description` | yes | string | [2.4](#24-text-rules); no length limit (DB9 only); consent shows it in full |
 | `inputSchema` | yes | object | JSON Schema with `"type": "object"`; every number in it must be a safe integer ([3.7](#37-canonical-serialization)); no depth or size limit (DB9 only) |
 | `timeoutMs` | no | integer | 1 to 120000 (the Host's existing backend-call bound, `MAX_BACKEND_TIMEOUT_MS`); default 30000 |

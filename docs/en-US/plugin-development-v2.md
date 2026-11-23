@@ -2,9 +2,10 @@
 
 > **Status: implemented for third-party publishing.** Manifest v2 is the format
 > the Navide Marketplace accepts; the legacy manifest v1 runtime is documented in
-> [Plugin development guide](plugin-development.md). The bundled `navide.git`,
-> `navide.plans` and `navide.mini-ide` packages run on this contract, and so do
-> third-party packages installed from a Registry.
+> [Plugin development guide](plugin-development.md). The bundled
+> `navide.browser`, `navide.git`, `navide.mini-ide` and `navide.plans` packages
+> run on this contract, and so do third-party packages installed from a
+> Registry.
 >
 > Installing a v2 package from a Registry writes, as soon as the user
 > approves it, an exact package-version grant for the declared `permissions` plus
@@ -417,8 +418,9 @@ Manifest validation rejects recognizable source or script suffixes. Package
 validation also rejects empty backend entries, POSIX entries without executable
 metadata, and extensionless executable files whose contents begin with a
 shebang. The installer writes the declared backend entry with owner-only `0700`
-mode. These checks prove archive executable intent; binary-format and exact
-OS/architecture validation remain part of the canonical artifact work in B8.
+mode. These checks prove archive executable intent. `navide-plugin package` also
+checks the backend binary's format (ELF, PE or Mach-O) and CPU architecture
+against the declared target.
 
 The same publish rule applies to every implementation language: Go or Rust may
 compile directly; Node.js requires a distributable executable that does not
@@ -2802,8 +2804,8 @@ Trust, signature, revocation, grant, and capability denials fail closed and
 never raise that notice. An invalid installed package is also not hidden by the
 factory copy.
 
-The bundled first-party plugins (`navide.git`, `navide.mini-ide`,
-`navide.plans`) version independently of the App: each keeps the version in
+The bundled first-party plugins (`navide.browser`, `navide.git`,
+`navide.mini-ide`, `navide.plans`) version independently of the App: each keeps the version in
 its own `manifest.json`, which changes only when that plugin changes, and the
 App records the versions it bundles in `src/main/plugins/officialPluginVersions.ts`
 to look the copies up at `official-artifacts/<id>/<version>/<target>`. When a
@@ -3601,8 +3603,8 @@ and agent tools; it cannot be removed.
   keeps its data recorded as local, and no later install of the id (another
   folder, a file or the Marketplace) takes it over. Kept data is reused only by
   a Registry-verified id (Marketplace or pre-release).
-- **Install from a file** (Settings → Navide Plugins → **Install from .vsix
-  file…**) works in packaged builds too, without Developer Mode. The main
+- **Install from a file** (Settings → Navide Plugins → **Install from
+  File…**) works in packaged builds too, without Developer Mode. The main
   process opens its own file dialog over the main window and reads the picked
   file once; every later step uses those bytes, never the path again. Plugin
   frames, agents (MCP) and environment variables cannot start or name a file
@@ -3747,8 +3749,9 @@ and their digests. Each OS/architecture artifact is signed independently.
 Public packages and `apiVersion` share a major version. A major accepts additive
 optional fields, methods, and events only. Navide supports the current and
 previous public API major; the previous major remains supported for at least 12
-months. Public deprecations are announced for at least 6 months and span at
-least two Navide minor releases before removal.
+months. A public deprecation keeps working for at least 12 months after the
+release that deprecated it and spans at least two Navide minor releases before
+removal (see the 1.x promise above).
 
 The Host provides one API version, `PLUGIN_API_VERSION` in
 `@navide/plugin-contracts`, and a plugin reads it at run time with
@@ -3808,8 +3811,8 @@ here that it describes.
 There is no `navide-plugin dev` command; the in-app loop is Developer Mode's
 folder load, which reloads by itself when the folder's files change (see
 "Local testing" in [Backend source, development, and publish contract](#backend-source-development-and-publish-contract)). Test a
-backend alone with `navide-plugin dev-backend`, whose Host bridge refuses every
-request, and test the complete package inside Navide by loading its folder
+backend alone with `navide-plugin dev-backend`, whose Host bridge serves only the ports the
+manifest declares and denies the rest, and test the complete package inside Navide by loading its folder
 with Settings → Navide Plugins → Developer Mode, installing it from a file, or
 installing it from a local Registry; only the environment-variable Developer
 Mode of a development build (`AGENT_TEAM_PLUGIN_DEV_PATH`) cannot open a v2

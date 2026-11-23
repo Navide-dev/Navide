@@ -99,8 +99,9 @@ env/header values from any bundle it is handed, and the server refuses every
 below describe what clients before 0.2.28 did and are kept for that purge.
 
 The `credentials` scope is, to the server, indistinguishable from the other
-four: same tables, same handlers, same ciphertext-only `body`. What differs is
-on the client (`sync_scopes.CredentialsScope`, flagged `sensitive`):
+four: same tables, same handlers, same ciphertext-only `body`. On the client,
+`credentials` stays in the scope list only so an older switch reads as off; no
+adapter exists. What clients before 0.2.28 did differently:
 
 - `itemId` is `c-` plus 32 random hex characters, minted when a credential is
   first pasted and carried unchanged by every device that imports it. It is

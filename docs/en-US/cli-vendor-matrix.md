@@ -3,25 +3,14 @@
 A snapshot of every CLI agent Navide ships with, what each one declares it can
 do, and where those facts live in the tree.
 
-**Snapshot: 2026-10-20, commit `5c8b00ddc` (v0.2.27) — 15 vendors.** The
-previous snapshot (2026-09-20, `9a630efe`, v0.2.8) was re-read field by field;
-the roster, the backend and frontend matrices and their totals are unchanged.
-New since then: the [support tiers](#support-tiers-l1l5) and the OpenCode 2.x
-reader note. Goose (`goose`) was added on 2026-10-21, making 16 vendors; its
-rows below were read from the tree that adds it. OpenClaw (`openclaw`) and
-Hermes Agent (`hermes`) were added on 2026-11-07 as CLI vendors (the ＋
-menu's CLI list), making 18; they appear in the roster only — no
-reader, resume, model flag, usage or account switching to tabulate. (Since
-0.2.40 both have a SQLite reader and resume, still no model flag; their
-record in `cli-extension-guide.md` has them, the
-matrices below do not.) Devin CLI
-(`devin`, Cognition) was added on 2026-11-07 as a coding CLI (the ＋ menu's
-CLI list), making 19; it too appears in the roster only, for the same reason —
-it was wired from the docs with no binary installed (see the
-[integration record](cli-extension-guide.md)). Kiro CLI (`kiro`, AWS) was
-added on 2026-11-12 the same way, making 20: roster only, docs-wired, with
-the navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook but
-no reader, resume, model flag, usage or account switching.
+OpenClaw (`openclaw`), Hermes Agent (`hermes`), Devin CLI (`devin`) and Kiro
+CLI (`kiro`) appear in the roster only. OpenClaw and Hermes Agent have a SQLite
+reader and resume but no model flag; their record in `cli-extension-guide.md`
+has them, the matrices below do not. Devin CLI and Kiro CLI have no reader,
+resume, model flag, usage or account switching to tabulate; Kiro CLI has the
+navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook. Both
+were wired from the vendor's docs with no binary installed (see the
+[integration records](cli-extension-guide.md)).
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the
@@ -57,9 +46,9 @@ Storage and data flow per platform are in
 
 | Side | Count | Source of truth |
 |---|---|---|
-| Backend vendor modules | 16 | `backend/agent_team_backend/cli_vendors/<key>.py` |
-| Backend registry | 16 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
-| Frontend specs | 16 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
+| Backend vendor modules | 20 | `backend/agent_team_backend/cli_vendors/<key>.py` |
+| Backend registry | 20 | `cli_vendors/registry.py` — the `_ALL` tuple, then `VENDORS` |
+| Frontend specs | 20 + `terminal` | `src/renderer/src/platform/plugin-shell/agents/index.ts` — the `ORDERED` array |
 
 Runtime registries derive from `VENDORS` or `ORDERED`: install detection
 (`onboarding_deps.py`), quota polling
@@ -90,8 +79,7 @@ Display order differs on purpose: the backend tuple is alphabetical, and
 
 ## Roster
 
-Ordered as the UI lists them (`agents/index.ts`). Display labels reviewed on
-2026-09-21; the capability snapshot above is unchanged. Publisher suffixes are
+Ordered as the UI lists them (`agents/index.ts`). Publisher suffixes are
 Navide presentation choices, not part of official product names. Renaming a
 label does not upgrade a CLI or establish compatibility with a newer release.
 
@@ -142,8 +130,8 @@ the tree, so a tier is re-derived, never judged:
 
 | Key | Tier | L2 reader | L3 binding | L4 resume | L5 hook | Awaiting-input signal | Version on record |
 |---|---|---|---|---|---|---|---|
-| `claude` | **L5** | `claude.py:1567` | session id pinned at launch (`claude.ts:43`) | `claude.ts:17-18` | `install_hooks` (`claude.py:1490`) | screen (`claude.ts:106`) + Notification hook | 2.1.278 (`claude.py:1544`) |
-| `codex` | **L5** | `codex.py:1905` | SessionStart hook (`codex.ts:18` sets no marker) | `codex.ts:15,20` | per-launch `-c hooks.PreToolUse` (`codex_session_hooks.py`) | screen (`codex.ts:60`) | 0.155.1 (`codex.py:1884`) |
+| `claude` | **L5** | `ClaudeLogReader` | session id pinned at launch (`claude.ts:43`) | `claude.ts:17-18` | `install_hooks` (`claude.py:1490`) | screen (`claude.ts:106`) + Notification hook | 2.1.278 (`claude.py:1544`) |
+| `codex` | **L5** | `CodexLogReader` | SessionStart hook (`codex.ts:18` sets no marker) | `codex.ts:15,20` | per-launch `-c hooks.PreToolUse` (`codex_session_hooks.py`) | screen (`codex.ts:60`) | 0.155.1 (`codex.py:1884`) |
 | `copilot` | **L5** | `copilot.py:1539` | marker (`copilot.ts:28`) | `copilot.ts:27,31` | `install_hooks` (`copilot.py:1532`) | `notification` hook (`copilot_hooks.py`) | 1.0.81 (`copilot.py:1507`) |
 | `qwen` | **L5** | `qwen.py:979` *(silence)* | marker (`qwen.ts:14`) | `qwen.ts:13,16` | `install_hooks` (`qwen.py:946`) | Notification hook (`qwen_hooks.py`) | 0.22.2 (`qwen.py:966`) |
 | `antigravity` | L4 | `antigravity.py:895` | marker (`antigravity.ts:16`) | `antigravity.ts:15,19` | — | screen (`antigravity.ts:45`) | 1.2.7 (`antigravity.py:873`) |
@@ -175,11 +163,10 @@ How to read the columns:
   code or package, not exercised in a live A → B → A switch (see the
   `evidence` field comment in `base.py`). No spec in the tree carries a
   live-verified version. A local `--version` newer than this column is
-  untested by Navide. Goose has no account-switch adapter; its 1.55.0 is the
-  binary its reader, resume and awaiting pattern were recorded from in a
-  scratch home (`goose.py` module docstring), with no account involved. The
-  startup probe's untested-version note reads this column, so it never
-  appears for goose (planned for 0.2.29).
+  untested by Navide. Goose has no account-switch adapter; its 1.55.0
+  (`cli_verified_version` in `goose.py`) is the binary its reader, resume and
+  awaiting pattern were recorded from in a scratch home (`goose.py` module
+  docstring), with no account involved.
 - ***(silence)*** marks the readers that infer a turn's end from a quiet
   window instead of reading an end-of-turn record (frontend
   `turnEndInferredFromSilence: true` in `kimi.ts:22`, `pi.ts:21`,
@@ -208,9 +195,9 @@ How to read the columns:
   2.x's `session_v2` / `session_message` when they exist (`opencode.py:26-31`,
   `_V2_TABLES` at `opencode.py:160`). The 2.x path was built from the
   upstream source; it has not been run against a real 2.x binary.
-- **Account switching is declared for 15 of 16.** Every spec but `goose`
-  carries an `AccountSwitchSpec`; goose reads no credential at all. Switching
-  does not separate the tiers.
+- **Account switching is declared for 15 of the 20 vendors.** Every spec but
+  `goose`, `devin`, `hermes`, `kiro` and `openclaw` carries an
+  `AccountSwitchSpec`; those five read no credential at all. Switching does not separate the tiers.
 
 ### ACP
 

@@ -58,7 +58,7 @@ Start with the first row: it is the one page for the whole flow, and the others 
 | [CLI integration records](cli-extension-guide.md) | Per-vendor integration records: install routes, resume syntax, session storage formats |
 | [CLI vendor matrix](cli-vendor-matrix.md) | See every shipped CLI, the command it runs, and the capabilities its spec declares |
 | [Glossary](glossary.md) | One term per concept: Navide plugins, Agent Assets, CLI extensions, and the words never to use bare |
-| [Navide plugin agent tools and disclosure contract](plugin-agent-tools-contract.md) | Planned `backend.agentTools`, the disclosure data, Host messages and audit tables (contract only, not wired yet) |
+| [Navide plugin agent tools and disclosure contract](plugin-agent-tools-contract.md) | The `backend.agentTools` contract: tool names, the disclosure data, Host messages and audit tables |
 | [External MCP control](external-mcp-control.md) | Connect an external MCP client to control a running Navide window, and understand the security model |
 | [Release guide](releases.md) | Version, package, sign, notarize, publish, and recover a release |
 | [Release announcements](release-announcements.md) | Add a version's in-app What's New entry and its guided tour |

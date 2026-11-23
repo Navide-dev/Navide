@@ -20,7 +20,7 @@ platform list — everything platform-specific lives in the two per-platform fil
    `backend/agent_team_backend.spec` (adapters are loaded with
    `importlib`, which PyInstaller cannot see). `test_pyinstaller_spec.py` fails
    if a registered platform is missing.
-5. Tests: `backend/tests/test_channels_<id>.py` with a fake transport or a local
+5. Tests: `backend/tests/channels/test_<id>.py` with a fake transport or a local
    server on `127.0.0.1` — never the real platform. `test_channels_registry.py`
    checks the id imports and exposes a complete adapter.
 

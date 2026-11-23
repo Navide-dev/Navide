@@ -82,12 +82,16 @@ registries.
 | Codex | Rollout format, explicit turn completion, delayed discovery, launch-scoped SessionStart, pane homes, subagent exclusion and ESC interrupt |
 | Copilot | SQLite and legacy JSONL precedence, cumulative usage, completed turns, markers, hooks and resume |
 | Cursor | Executable aliases, SQLite WAL, JSON/protobuf discrimination, workspace markers, event ordering and reply tails |
+| Devin | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | Droid | Its own cwd encoding (POSIX and native Windows spellings), session layouts, cumulative sidecars, split reply/outcome and inherited parent environment |
+| Goose | One shared SQLite database, sub-agent session exclusion, marker attribution in top-level sessions, usage ledger and inferred final reply |
 | Grok | Official grok-build updates, cwd layouts, UUID resume claims, explicit completion and streamed text |
+| Hermes | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | Kilo | Its own database/root/vendor identity plus the shared OpenCode schema and authenticated TUI push |
 | Kimi | Session-directory identity, wire records, cancellation, inferred idle completion and ESC timeout environment |
 | MiniMax Code | Interactive launch/login and environment handling; no reader, session resume, model or effort contract |
 | Muse | Session-directory identity, main-stream accounting, child-stream exclusion, explicit terminal records and resume |
+| OpenClaw | Interactive launch and environment handling; no reader, session resume, model or effort contract |
 | OpenCode | SQLite streaming updates, row checkpoints, top-level markers and unauthenticated loopback TUI push |
 | Pi | Header identity, lazy flush, whole-file rewrites, entry deduplication, workspace-scoped resume and inferred idle |
 | Qwen | Active/archive logs, usage semantics, automated-record exclusion, inferred idle, hooks and input-file push |

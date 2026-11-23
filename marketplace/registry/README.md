@@ -18,7 +18,7 @@ See [`FORMAT.md`](./FORMAT.md) for the `.vsix`-style package format.
 > (`LocalStorageBackend`). Schema changes go through
 > [migrations](#schema-migrations); a version may carry one artifact per
 > platform target (see [Per-target artifacts](#per-target-artifacts)).
-> Third-party publishing is not open — see
+> Third-party publishing is open; see
 > [the plugin development guide](../../docs/en-US/plugin-development.md).
 
 ## Run locally
@@ -66,7 +66,7 @@ uv --project marketplace/registry run pytest marketplace/registry/tests
 | POST | `/api/testplace/join` | `{ "token": "tpi_…" \| "tpc_…" }`: redeem a single-use invite token or an open public test code for the calling account. Every failure is the same 404; 409 `CODE_FULL` when a code has no seats left. |
 | POST | `/api/testplace/{namespace}/{name}/leave` | Give up the caller's seat. |
 | GET | `/api/testplace/{namespace}/{name}/withdrawn` | `{withdrawn: [{version, target}]}`: the test builds taken back (yanked or revoked; all of them when the publisher is frozen or disqualified). For any account that ever held a seat, revoked or not; anyone else gets the 404 of a missing extension. The App's kill switch for installed test builds. |
-| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. At most 100 live invites per extension (409 `INVITE_LIMIT`). |
+| GET/POST | `/api/testplace/{namespace}/{name}/invites` | Developer (publisher token of the namespace, or the owning account's token): list invites, or create `{ "labels": [...] }` single-use join tokens, returned once. |
 | POST | `/api/testplace/{namespace}/{name}/invites/{id}/revoke` | Developer: revoke an invite; a tester who joined through it loses access. |
 | GET/POST | `/api/testplace/{namespace}/{name}/codes` | Developer: list public test codes, or create `{ "max_testers": n }` (any positive number; there is no upper limit). The extension's first code waits for a light admin review (`in-review`); later ones open at once. The code is returned once. |
 | POST | `/api/testplace/{namespace}/{name}/codes/{id}/revoke` | Developer: stop new joins through a code; testers already in keep their seat. |

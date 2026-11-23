@@ -1,8 +1,8 @@
 # Plugin development guide
 
 > **Current runtime (manifest v1 and v2).** This guide documents the manifest
-> v1 runtime. v1 and v2 coexist today: the three bundled packages
-> (`navide.git`, `navide.plans`, `navide.mini-ide`) ship as Manifest v2
+> v1 runtime. v1 and v2 coexist today: the four bundled packages
+> (`navide.browser`, `navide.git`, `navide.mini-ide`, `navide.plans`) ship as Manifest v2
 > packages, and v1 remains only as their recovery path. The public manifest
 > v2, SDK, permissions, and compatibility policy are specified separately in the
 > [Plugin Developer Spec v2](plugin-development-v2.md). New packages, and
@@ -189,7 +189,7 @@ windows follow the same rule (`Agent-Team — Navide`), so plugin windows need n
 `Navide` prefix of their own; the menu already sits under the app name.
 
 **A dedicated host window does not pick up your title by itself.** The window
-that hosts a plugin view (`ensureMiniIdeWindow`, `ensureGitWindow`) has a blank
+that hosts a plugin view (for example `ensureMiniIdeWindow`) has a blank
 webContents — the UI lives in the `WebContentsView`, and its `document.title`
 never reaches the window. Pass `mirrorTitle: true` to
 `frontendPluginManager.open()` for a window dedicated to one plugin; the manager
@@ -242,7 +242,9 @@ imports or spawns the packaged executable; Electron's child-process supervisor
 runs it. A third-party backend runs only inside the OS sandbox, after the user
 allows it (see
 [Third-party backends](plugin-development-v2.md#third-party-backends-sandbox-consent-and-publishing)).
-Developer Mode never runs a backend.
+The environment-variable Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`) never
+runs a backend; a folder loaded with Settings → Navide Plugins → Developer Mode
+can (see the link above).
 
 `navide_plans` is the reference implementation: it registers a route, startup
 and shutdown hooks, and a spawn transformer.
@@ -505,7 +507,7 @@ Development builds default to a local self-hosted Registry
 at `http://localhost:8787`. `AGENT_TEAM_MARKETPLACE_URL` overrides either
 default, and plaintext HTTP is rejected outside loopback in production builds.
 To try a package without a Registry, use Settings → Navide Plugins → **Install
-from .vsix file…** (any build): it installs the file you pick as an unreviewed,
+from File…** (any build): it installs the file you pick as an unreviewed,
 unsigned local package after an explicit consent and never updates it
 automatically; the rules are in the
 [v2 guide](plugin-development-v2.md).
@@ -552,7 +554,7 @@ the plugin dev menu, which registers dev descriptors pointing at local build
 output and adds entries for the `noop` and `fs_probe` probe plugins. Packaged
 builds ignore `AGENT_TEAM_PLUGIN_DEV` and `AGENT_TEAM_PLUGIN_DEV_PATH`; a
 packaged app loads third-party plugins from a Registry install, a file install
-(**Install from .vsix file…**) or a folder loaded with Settings → Navide
+(**Install from File…**) or a folder loaded with Settings → Navide
 Plugins → Developer Mode (see
 [plugin-development-v2.md](plugin-development-v2.md#backend-trust)).
 
@@ -569,9 +571,10 @@ view only with a grant for that exact package id and version. A v2 package
 loaded this way is therefore refused when its view opens ("package-version
 capability grant is missing"). To run a v2 package in the app, install it from
 a local Registry, as described in
-[Publishing to the Navide Marketplace](marketplace-publishing.md). To exercise
-a backend, use `navide-plugin dev-backend`, which answers every Host bridge
-request with `CAPABILITY_DENIED`. There is no `navide-plugin dev` command.
+[Publishing to the Navide Marketplace](marketplace-publishing.md), or load its
+folder with Settings → Navide Plugins → Developer Mode. To exercise
+a backend, use `navide-plugin dev-backend`, which serves the ports the manifest
+declares and denies the rest. There is no `navide-plugin dev` command.
 
 `noop` verifies the IPC bridge end to end with a `ping` call. `fs_probe`
 demonstrates a real capability call plus event subscription. Both are minimal
