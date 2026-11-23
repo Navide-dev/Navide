@@ -749,3 +749,65 @@ def test_parse_marks_same_organisation_grants_only_when_both_ids_match():
     (linked,) = org_peers.parse({"grants": [_grant()]})
     (blank,) = org_peers.parse({"grants": [{"grantId": "g", "peers": []}]})
     assert (same["sameOrg"], linked["sameOrg"], blank["sameOrg"]) == (True, False, False)
+
+
+# ---- who may ask to pair --------------------------------------------------------
+
+
+def _request(peer: Peer, member: str, tag: str) -> dict:
+    frame = _frame(peer, device_pairing.PAIR_REQUEST, f"pair-req-{tag}",
+                   nonce="bm9uY2U=", signKey=peer.sign_key, encKey=peer.enc_key)
+    frame["from"]["memberId"] = member
+    return frame
+
+
+async def test_a_pair_request_from_another_account_outside_every_grant_is_refused():
+    stranger = Peer("dev-stranger", name="stranger")
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _request(stranger, "m-other", "s")})
+        await _until(lambda: any(a.get("msgKey") == "pair-req-s" for a in conn.acks))
+        (ack,) = [a for a in conn.acks if a.get("msgKey") == "pair-req-s"]
+        assert ack["state"] == "rejected" and ack["reason"] == "pairing-refused"
+        assert device_pairing.get(stranger.device_id) is None
+    finally:
+        await link.stop()
+
+
+async def test_a_pair_request_through_a_grant_runs_as_an_organisation_pairing():
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _request(ORG_PEER, ORG_MEMBER, "g")})
+        await _until(lambda: device_pairing.get(ORG_PEER.device_id) is not None)
+        assert link._pairing_grants[ORG_PEER.device_id] == "g_1"
+    finally:
+        await link.stop()
+
+
+async def test_a_pair_request_from_this_account_is_accepted_as_before():
+    mine = Peer("dev-mine", name="mine")
+    server, link = await _link_with({"grants": []})
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _request(mine, "m1", "m")})
+        await _until(lambda: device_pairing.get(mine.device_id) is not None)
+        assert mine.device_id not in link._pairing_grants
+    finally:
+        await link.stop()
+
+
+async def test_a_revoked_org_pin_survives_the_other_side_unpairing():
+    server, link = await _link_with({"grants": []})
+    try:
+        _pin_org()
+        trust_store.revoke_org_pins("g_1", device_ids=None, local_device_id="", reason="link-revoked", at=1)
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_REVOKED, "pair-revoked-kept")})
+        await _until(lambda: any(a.get("msgKey") == "pair-revoked-kept" for a in conn.acks))
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin is not None and pin["orgRevoked"]["reason"] == "link-revoked"
+    finally:
+        await link.stop()

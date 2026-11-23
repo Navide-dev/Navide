@@ -4004,6 +4004,19 @@ class ServerLink:
         their_enc_key = str(frame.get("encKey") or "")
         try:
             if kind == device_pairing.PAIR_REQUEST:
+                # Only this account's own machines, a machine a live grant
+                # reaches, or one already paired. Before organisations the
+                # server never carried another account's frame here; now it
+                # can, and an exchange with anyone else would end in a pin
+                # outside every grant. Refused like any other bad round.
+                if not (
+                    (bool(self._own_member) and member_id == self._own_member)
+                    or self._org_peer(device_id) is not None
+                    or pin is not None
+                ):
+                    raise device_pairing.PairingError(
+                        "pairing requests come only from this account or a linked organisation"
+                    )
                 pairing = device_pairing.accept_request(
                     device_id,
                     device_name=name,
@@ -4062,6 +4075,12 @@ class ServerLink:
                 # from disagreeing about whether they are paired — a state in
                 # which one of them silently refuses everything the other sends.
                 self._cancel_exchange(device_id)
+                if pin is not None and pin.get("grantId") and pin.get("approved") is not True:
+                    # A pin a revoked grant left behind stays: it is the record
+                    # the organisation view shows, and dropping it would turn the
+                    # device back into a stranger rather than a revoked one.
+                    await self._ack(msg_key, "delivered")
+                    return
                 removed = await asyncio.to_thread(trust_store.forget_device, device_id)
                 if self._access_requests.forget_device(device_id):
                     await self._announce_access_requests()
