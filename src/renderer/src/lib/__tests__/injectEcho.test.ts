@@ -264,7 +264,7 @@ describe('submitEvidence', () => {
 
   it('refuses queued while the input box still holds our tail', () => {
     const baseline = submitBaseline({ screen: HOLDING, tail })
-    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: true })
+    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: true, tailEndsScreen: false })
     expect(
       submitEvidence({ tailWasOnScreen: true, tail, screen: HOLDING, grownBy: 12, baseline }),
     ).toBeNull()
@@ -308,7 +308,7 @@ describe('submitEvidence', () => {
       '  Press up to edit queued messages',
     ].join('\n')
     const baseline = submitBaseline({ screen: frameless, tail })
-    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: false })
+    expect(baseline).toEqual({ queuedHint: true, composerHeldTail: false, tailEndsScreen: false })
     expect(
       submitEvidence({ tailWasOnScreen: true, tail, screen: frameless, grownBy: 40, baseline }),
     ).toBeNull()
@@ -317,7 +317,7 @@ describe('submitEvidence', () => {
   it('accepts queued when the hint was absent before this Enter', () => {
     const baseline = submitBaseline({ screen: screenWith('│ > run the tests │', []).replace(
       '  ? for shortcuts   Press up to edit queued messages', '  ? for shortcuts'), tail })
-    expect(baseline).toEqual({ queuedHint: false, composerHeldTail: true })
+    expect(baseline).toEqual({ queuedHint: false, composerHeldTail: true, tailEndsScreen: false })
     expect(
       submitEvidence({ tailWasOnScreen: true, tail, screen: HOLDING, grownBy: 0, baseline }),
     ).toBe('queued')
@@ -424,6 +424,78 @@ describe('submitEvidence', () => {
         visibleScreen: '> run the tests\n> ',
       }),
     ).toBe('tail-left')
+  })
+
+  // A line editor (aider and the like) draws no box and leaves the submitted
+  // line on screen: our tail never leaves, so every message used to take two
+  // extra Enters — which a CLI already answering, or sitting on a menu, could
+  // read as a reply. What moves is the bottom: a new prompt or output appears
+  // BELOW the line that held our text.
+  describe('frameless line editor', () => {
+    const typed = ['aider v0.80', '> earlier question', 'an answer', '> run the tests'].join('\n')
+
+    it('records that the typed line ends the screen before Enter', () => {
+      expect(submitBaseline({ screen: typed, tail }).tailEndsScreen).toBe(true)
+    })
+
+    it('names tail-left once a new prompt appears below the submitted line', () => {
+      const baseline = submitBaseline({ screen: typed, tail })
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${typed}\n> `, grownBy: 3, baseline }),
+      ).toBe('tail-left')
+    })
+
+    it('names tail-left once output appears below the submitted line', () => {
+      const baseline = submitBaseline({ screen: typed, tail })
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${typed}\nRunning pytest…`, grownBy: 15, baseline }),
+      ).toBe('tail-left')
+    })
+
+    it('still answers null while the typed line is the last thing on screen', () => {
+      const baseline = submitBaseline({ screen: typed, tail })
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${typed}\n\n`, grownBy: 40, baseline }),
+      ).toBeNull()
+    })
+
+    // A framed composer keeps a footer under the box whether or not Enter took,
+    // so "something below our text" is not evidence there.
+    it('does not apply to a framed composer with a footer under it', () => {
+      const baseline = submitBaseline({ screen: HOLDING.replace('   Press up to edit queued messages', ''), tail })
+      expect(baseline.tailEndsScreen).toBe(false)
+      const held = HOLDING.replace('   Press up to edit queued messages', '')
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${held}\n  new footer line`, grownBy: 40, baseline }),
+      ).toBeNull()
+    })
+
+    // aider draws a rule between turns; two of them on screen look like a frame
+    // to framedComposer, but the typed line still ends the screen.
+    it('works with rule rows drawn above the typed line', () => {
+      const rule = '─'.repeat(40)
+      const ruled = [rule, '> earlier question', 'an answer', rule, '> run the tests'].join('\n')
+      const baseline = submitBaseline({ screen: ruled, tail })
+      expect(baseline.tailEndsScreen).toBe(true)
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${ruled}\n\nRunning pytest…`, grownBy: 15, baseline }),
+      ).toBe('tail-left')
+    })
+
+    it('does not apply to a framed composer whose closing edge is the last row', () => {
+      const rule = '─'.repeat(40)
+      const boxed = ['> earlier', rule, '❯ run the tests', rule].join('\n')
+      expect(submitBaseline({ screen: boxed, tail }).tailEndsScreen).toBe(false)
+    })
+
+    it('does not apply when the typed line was not the bottom before Enter', () => {
+      const below = `${typed}\n  (ghost hint)`
+      const baseline = submitBaseline({ screen: below, tail })
+      expect(baseline.tailEndsScreen).toBe(false)
+      expect(
+        submitEvidence({ tailWasOnScreen: true, tail, screen: `${below}\n> `, grownBy: 3, baseline }),
+      ).toBeNull()
+    })
   })
 
   it('agrees with submitLanded', () => {

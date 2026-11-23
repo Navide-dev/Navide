@@ -4,8 +4,13 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Added
+
+- Navide plugin developers: Settings → Navide Marketplace → Developer now lists the whole path in five steps, each with its command: create from the template, load with Developer Mode, validate and package (the checks review runs; `plugins_validate_package` and `plugins_package` for an agent), apply as a developer, and sign and submit with `navide-plugin publish`. The Marketplace page's Build a Navide Plugin entry also shows when the Registry cannot be reached. Build for Navide gains "The whole path at a glance", and the user guide (en, zh-TW, ja) a "Build your own Navide plugin" section. All 11 languages.
+
 ### Fixed
 
+- Navide plugin developers: the documented `npx navide-plugin init` and `npm install @navide/plugin-sdk` failed with 404, because the public packages are not on npm. The docs, the Developer entry card and the bundled `plugin-authoring` skill now run the CLI from the GitHub Release `plugin-packages-1.0.0` (with its SHA-256 sums), and `navide-plugin init --template vue` writes those tarball addresses into the new project's `package.json` instead of `^1.0.0`.
 - Terminal (macOS): the output of a command that exits right away, or the last lines a CLI prints before it exits, no longer goes missing from the pane and its output log when the backend is busy or the pane is holding output back. macOS discards what a terminal has not read about half a second after the program exits; Navide now keeps the terminal open until everything queued has been read. Linux and Windows are unchanged.
 
 ## [0.2.46] — 2026-11-22

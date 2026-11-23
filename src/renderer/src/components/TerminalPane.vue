@@ -34,6 +34,8 @@ import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
 import AgentControlPanel from './agent/AgentControlPanel.vue'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
+import { sshTargetLabel, type SshRemoteTarget } from '../composables/useSshRemotePrefs'
+import { useSshReconnect } from '../composables/useSshReconnect'
 import { formatClock } from '../lib/schedulerJobs'
 import {
   REMOTE_AGENT_LABELS,
@@ -180,6 +182,12 @@ interface Props {
   remoteReconnect?: () => void
   /** Banner "Close pane": App.vue's ordinary close path. */
   remoteClosePane?: () => void
+  /** Set for an SSH Remote terminal pane: its shell runs on this host. */
+  sshRemote?: SshRemoteTarget
+  /** That pane's last exit code; 255 means ssh lost the link. */
+  sshExitCode?: number | null
+  /** Checks the host and respawns the pane: null on success, else the reason. */
+  sshReconnect?: () => Promise<string | null>
 }
 
 const props = defineProps<Props>()
@@ -499,6 +507,26 @@ onBeforeUnmount(() => { if (remoteTick) clearInterval(remoteTick) })
 const remoteDownSeconds = computed<number>(() =>
   remoteDownAt.value == null ? 0 : Math.max(0, Math.floor((remoteNow.value - remoteDownAt.value) / 1000))
 )
+
+// SSH Remote terminal pane: a banner once its ssh ends, reconnecting on its
+// own when ssh lost the link (useSshReconnect).
+const sshDown = computed(() => !!props.sshRemote && (displayStatus.value === 'exited' || displayStatus.value === 'error'))
+const sshNow = ref(Date.now())
+let sshTick: ReturnType<typeof setInterval> | null = null
+watch(sshDown, (down) => {
+  if (sshTick) clearInterval(sshTick)
+  sshTick = down ? setInterval(() => { sshNow.value = Date.now() }, 1000) : null
+}, { immediate: true })
+onBeforeUnmount(() => { if (sshTick) clearInterval(sshTick) })
+const ssh = useSshReconnect({
+  down: () => sshDown.value,
+  exitCode: () => props.sshExitCode,
+  reconnect: () => props.sshReconnect?.() ?? Promise.resolve('other'),
+})
+const sshRetryInSeconds = computed<number | null>(() =>
+  ssh.nextAt.value == null ? null : Math.max(0, Math.ceil((ssh.nextAt.value - sshNow.value) / 1000))
+)
+const sshLabel = computed(() => (props.sshRemote ? sshTargetLabel(props.sshRemote) : ''))
 
 // ── Agent pane ───────────────────────────────────────────────────────────────
 const agentConsole = inject(agentConsoleKey, null)
@@ -1159,6 +1187,7 @@ onMounted(() => {
         </template>
       </div>
       <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
+      <div v-else-if="sshRemote" class="header-sub" data-testid="ssh-sub" v-truncate>{{ $t('sshRemote.sub', { target: sshLabel }) }}</div>
       <div v-else-if="remote" class="header-sub" data-testid="remote-sub" v-truncate>{{ $t('remoteDevcontainer.sub', { cli: remoteCliLabel, host: remote.host, container: remote.container }) }}</div>
       <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
@@ -1204,6 +1233,18 @@ onMounted(() => {
       <div class="remote-actions">
         <button type="button" class="primary" data-testid="remote-reconnect" @click.stop="remoteReconnect?.()">{{ $t('remoteDevcontainer.reconnect') }}</button>
         <button type="button" data-testid="remote-close-pane" @click.stop="remoteClosePane?.()">{{ $t('remoteDevcontainer.close-pane') }}</button>
+      </div>
+    </div>
+    <div v-else-if="sshDown" class="remote-disconnected" role="status" data-testid="ssh-disconnected">
+      <div class="remote-disc-head">
+        <strong>{{ sshExitCode === 255 ? $t('sshRemote.lost-title', { host: sshRemote!.host }) : $t('sshRemote.ended-title', { host: sshRemote!.host }) }}</strong>
+      </div>
+      <p v-if="ssh.reason.value" class="remote-disc-body" data-testid="ssh-banner-reason">{{ $t(`sshRemote.reason-${ssh.reason.value}`, { host: sshRemote!.host }) }}</p>
+      <p v-if="ssh.busy.value" class="remote-disc-body" data-testid="ssh-retrying">{{ $t('sshRemote.reconnecting') }}</p>
+      <p v-else-if="sshRetryInSeconds != null" class="remote-disc-body" data-testid="ssh-retry-in">{{ $t('sshRemote.retry-in', { seconds: sshRetryInSeconds }) }}</p>
+      <div class="remote-actions">
+        <button type="button" class="primary" data-testid="ssh-reconnect" :disabled="ssh.busy.value" @click.stop="ssh.reconnectNow()">{{ $t('sshRemote.reconnect') }}</button>
+        <button type="button" data-testid="ssh-close-pane" @click.stop="remoteClosePane?.()">{{ $t('sshRemote.close-pane') }}</button>
       </div>
     </div>
     <div v-else-if="remote && loginCardOpen" class="remote-login" role="dialog" data-testid="remote-login-card" :aria-label="$t('remoteDevcontainer.login-title', { cli: remoteCliLabel })">

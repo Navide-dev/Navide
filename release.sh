@@ -117,6 +117,7 @@ VERSION_FILES=(
   README.md
   README.zh-TW.md
   README.ja-JP.md
+  CHANGELOG.md
 )
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -177,6 +178,9 @@ node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
+# Date the release's CHANGELOG section: the site's /news reads each version's
+# date from its heading (scripts/export-whats-new.mjs).
+node scripts/stamp-changelog-release.mjs "$VERSION" "$(date +%Y-%m-%d)"
 uv --project backend lock
 pnpm release:check "$TAG"
 
@@ -188,7 +192,13 @@ uv --project backend run --locked ruff check backend
 # `pnpm test:run` reads, and the backend tests touch neither. Backend tests
 # run with a throwaway HOME and no reach to the real keychain.
 run_gates pnpm typecheck -- scripts/release-backend-tests.sh
-pnpm test:run
+# The artifact tests read the official plugins staged under
+# dist-plugins/official-artifacts, which Git ignores and an older build may
+# have left behind (0.2.46: stale copies failed the gate). Stage the pinned
+# versions fresh, after the type check has rebuilt the plugin SDK, and make a
+# missing copy fail instead of skip.
+node scripts/stage-official-plugin-artifacts.mjs
+NAVIDE_TEST_STAGED_PLUGINS=1 pnpm test:run
 
 echo ""
 echo "=== Building release artifacts ==="
@@ -203,7 +213,7 @@ node scripts/check-no-dev-web.mjs out
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \
     | sed -E 's/^.. //' \
-    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md)$' \
+    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|CHANGELOG\.md)$' \
     || true
 )"
 [[ -z "$unexpected_changes" ]] || \

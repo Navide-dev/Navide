@@ -177,6 +177,20 @@ server = NavideMCP(
         "and saying so is the answer, not hunting for a tool that would do "
         "it for them.\n"
         "\n"
+        "Your own Navide connection versus your window: two different links, "
+        "so say which one you mean. If the navide tools disappear or fail with "
+        "a connection error, it is YOUR CLI's link to Navide's tool server that "
+        "dropped — not the Navide window, and not the user's network. You "
+        "cannot fix it yourself (/mcp is typed by a person, and cli_send to "
+        "you would not run it): say so once, in those words; Navide types "
+        "`/mcp reconnect navide` into you on its own while you are idle, and "
+        "a commander can ask for it now with ui_invoke ui.pane.reconnectMcp "
+        "{paneId}. A tool that answers at all proves that link is up. A "
+        "`target-offline` error, or `offline: true` on a target, is the other "
+        "link: that pane's Navide window lost the backend, and its own tools "
+        "may be fine. `mcp` / `mcp_detail` on a target is its tool-server "
+        "link.\n"
+        "\n"
         "When you need the answer and not just the send, use cli_send_and_wait "
         "instead: it sends and then waits for that pane to finish the turn, "
         "handling the race a hand-written cli_send + cli_wait_idle loses (the "
@@ -571,6 +585,25 @@ def _credential(request: Any) -> _Caller:
     return _Caller(kind="pane", pane_id=pane_id)
 
 
+def _mcp_detail(mcp_state: str) -> str:
+    """What a flagged `mcp` state means, in words an agent can relay as is.
+    The pane's own CLI-to-tool-server link and its Navide window are different
+    connections; a report that ran them together contradicted itself
+    (2026-11-22)."""
+    what = (
+        "has not once reached" if mcp_state == "never-connected"
+        else "lost its connection to, and stopped retrying,"
+    )
+    return (
+        f"This pane's own CLI {what} Navide's tool server, so it has no Navide "
+        "tools. Its Navide window is a separate connection (`offline` says "
+        "whether that one is down). The pane cannot run /mcp itself and cli_send "
+        "cannot type it; Navide types `/mcp reconnect navide` into it on its own "
+        "while it is idle (a few tries), and ui_invoke ui.pane.reconnectMcp "
+        "{paneId} asks for one now. Past that, the user's Reconnect button."
+    )
+
+
 def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
     """One addressable pane, as cli_list_targets reports it."""
     view: dict[str, Any] = {
@@ -604,6 +637,7 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
     mcp_state = mcp_connect_watch.state(entry.pane_id)
     if mcp_state:
         view["mcp"] = mcp_state
+        view["mcp_detail"] = _mcp_detail(mcp_state)
     # Only an embedded AI panel carries these (which window hosts it); a window
     # pane never sets them, so its view keeps exactly the keys it always had.
     if entry.surface:
@@ -749,7 +783,16 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     minutes without once reaching Navide's tool server: its Navide tools are
     missing, so a message it is asked to answer through them will not come.
     `mcp: "disconnected"` is the same for a CLI that was connected, lost the
-    connection and stopped retrying.
+    connection and stopped retrying. `mcp_detail` comes with either: it is the
+    pane's own tool-server link, not its window (`offline`), and Navide retries
+    `/mcp reconnect navide` while it is idle.
+
+    `offline_reason` on an offline remote target names the segment that is
+    down: "device-offline" (that machine is not connected to the server),
+    "window-disconnected" (it is, but the window holding the pane is not) or
+    "session-ended" (the CLI behind it is gone). `remote_link` {state,
+    segment: "this-machine-to-server"} appears when THIS machine's own link
+    to the server is down: the remote rows are then the last copy it got.
 
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
@@ -808,7 +851,26 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     remote = [pane.to_dict() for pane in remote_roster.list_panes()]
     if remote:
         result["remote_targets"] = remote
+        link = _remote_link_down()
+        if link is not None:
+            result["remote_link"] = link
     return result
+
+
+def _remote_link_down() -> dict[str, Any] | None:
+    """This machine's own server link, when it is the broken segment."""
+    from agent_team_backend import server_link
+
+    state = server_link.link_state()
+    if state in (server_link.STATE_CONNECTED, server_link.STATE_UNCONFIGURED):
+        return None
+    return {
+        "state": state,
+        "segment": "this-machine-to-server",
+        "note": "this machine is not connected to Navide-Server, so remote_targets "
+        "is the last copy it received and host_online may be stale; the other "
+        "machines may be fine",
+    }
 
 
 @server.tool()
@@ -4349,7 +4411,9 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     `mcp: "never-connected"` appears when the pane's CLI has been up for
     three minutes without once reaching Navide's tool server, so its Navide
     tools are missing; `mcp: "disconnected"` when it was connected, lost the
-    connection and stopped retrying; absent otherwise.
+    connection and stopped retrying; absent otherwise. `mcp_detail` comes
+    with either and says what to do: that is the pane's own tool-server link,
+    not its window, and Navide retries `/mcp reconnect navide` while it is idle.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -4454,12 +4518,16 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     if result.pane is None:
         # A pane on another machine: the roster row is the whole answer, and
         # `source` says as much rather than letting it pass for a local read.
-        return {
+        answer = {
             "ok": True,
             "remote": True,
             "source": "roster_status",
             **result.entry.to_dict(),
         }
+        link = _remote_link_down()
+        if link is not None:
+            answer["remote_link"] = link
+        return answer
     pane = result.pane
     # A sign-in pane's screen holds its authorization URL or code: its text
     # stays out of this answer (the window already sends none; an older one may).
@@ -4476,6 +4544,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     mcp_state = mcp_connect_watch.state(pane.pane_id)
     if mcp_state:
         status["mcp"] = mcp_state
+        status["mcp_detail"] = _mcp_detail(mcp_state)
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
@@ -4725,7 +4794,8 @@ async def _wait_idle_remote(address: Any, timeout_s: float) -> dict[str, Any]:
             "host_online": entry.host_online,
         }
         if not entry.host_online or entry.status == "disconnected":
-            return {**answer, "idle": False, "source": "roster_offline", "reason": "offline"}
+            return {**answer, "idle": False, "source": "roster_offline", "reason": "offline",
+                    "offline_reason": entry.offline_reason}
         if entry.status in _ROSTER_IDLE_STATUSES:
             return {**answer, "idle": True, "source": "roster_status"}
         if waited >= timeout:

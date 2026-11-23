@@ -37,8 +37,9 @@ export interface TerminalSpawnOptions {
   accountDirLogin?: boolean
   /** A remote container pane (Settings → Experimental → Remote container
    *  panes): the backend runs the CLI over ssh inside this container and
-   *  ignores `command`. Absent for every local pane. */
-  remote?: TerminalRemoteTarget
+   *  ignores `command`; or an SSH Remote terminal pane (`kind: 'ssh'`), whose
+   *  login shell runs on that host. Absent for every local pane. */
+  remote?: TerminalRemoteTarget | TerminalSshTarget
 }
 
 /** The `remote` object terminal.create takes: host and container names, how
@@ -49,6 +50,15 @@ export interface TerminalRemoteTarget {
   container: string
   network: { mode: 'host' } | { mode: 'bridge'; gateway: string }
   cli: 'claude' | 'codex'
+}
+
+/** The `remote` object of an SSH Remote terminal pane. The key is a path only. */
+export interface TerminalSshTarget {
+  kind: 'ssh'
+  host: string
+  user: string
+  port: number
+  keyPath: string
 }
 
 export interface TerminalCreateRequest {
@@ -67,7 +77,7 @@ export interface TerminalCreateRequest {
   loginProfileId: string | null
   isLogin: boolean
   accountDirLogin?: boolean
-  remote?: TerminalRemoteTarget
+  remote?: TerminalRemoteTarget | TerminalSshTarget
   replacesTerminalId: string | null
 }
 

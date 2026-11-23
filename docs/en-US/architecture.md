@@ -321,6 +321,24 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   a target read from it is a claim the backend refuses (`REMOTE_UNTRUSTED`)
   until the user opens that target themselves. Navide never runs `ssh-add`
   and never reads or writes `~/.ssh`.
+- An SSH Remote pane (experimental, same switch; `remote_ssh.py`) is a
+  terminal pane whose login shell runs on another host: `ssh -tt` to a
+  target of host, user, port and a private key *path*. `remote_ssh.connect`
+  runs one BatchMode `ssh` to the target and answers either the pane spec or
+  `REMOTE_SSH_FAILED` with a plain-language reason (`unreachable`, `auth`,
+  `host-key`, `other`); a success, or `force` after an `auth` / `host-key`
+  refusal, adds the target to the app-level trusted list (`sshRemoteTrusted`).
+  `terminal.create` with `remote = {kind: "ssh", ...}` and agent key
+  `terminal` opens a shell only on a trusted target, so a target named by a
+  pane record alone runs no `ssh`. The pane carries `ssh_remote` metadata, not
+  the container panes' `remote`. Only terminal panes: no CLI and no reverse
+  tunnel run on the host. The renderer reconnects on ssh's exit 255 with
+  backoff, re-running the check each try; such panes are not restored after a
+  restart. The key is passed to `ssh -i` by path and never opened by Navide;
+  the argv always carries `ForwardAgent=no` and never `-A`; the spawn
+  environment is the same reduced set as above. Recent and trusted targets
+  live in `ui_settings` (`sshRemoteRecent`, `sshRemoteTrusted`), which no sync
+  scope, settings bundle or workspace backup reads.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

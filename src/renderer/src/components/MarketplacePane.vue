@@ -1431,7 +1431,7 @@ watch(
           {{ $t('settings.extensions.marketplace.loadFailed', { error: loadMoreError }) }}
         </span>
       </div>
-      <p v-if="listState === 'ready'" class="mkt-build-own" data-testid="marketplace-build-own">
+      <p v-if="listState !== 'loading'" class="mkt-build-own" data-testid="marketplace-build-own">
         <span class="mkt-muted">{{ $t('settings.extensions.marketplace.buildOwnHint') }}</span>
         <button class="nv-btn nv-btn--ghost nv-btn--sm" @click="setMarketplaceView('developer')">{{ $t('settings.extensions.marketplace.buildOwn') }}</button>
       </p>

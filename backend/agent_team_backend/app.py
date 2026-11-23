@@ -1424,6 +1424,24 @@ async def _notify_mcp_disconnected(entry: Any) -> None:
         await manager.notify_mcp_disconnected(entry.name)
 
 
+async def _auto_reconnect_mcp(entry: Any) -> bool:
+    """Ask the window holding a flagged pane to type `/mcp reconnect navide`
+    into it (ui.pane.reconnectMcp, in place only — never a rebuild). True when
+    the window says it went in; anything else is retried on a later sweep."""
+    from .mcp_server import server as plan_mcp
+
+    reply = await plan_mcp._ui_request(
+        entry.workspace_path,
+        "invoke",
+        caller=plan_mcp._Caller(kind="host"),
+        action="ui.pane.reconnectMcp",
+        args={"paneId": entry.pane_id, "auto": True},
+        route_pane_id=entry.pane_id,
+    )
+    result = reply.get("result") if reply.get("ok") else None
+    return isinstance(result, dict) and result.get("sent") is True
+
+
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
     """One janitor pass: kill live PTYs ownerless longer than the grace.
     Returns the killed terminal ids (for tests/logging)."""
@@ -2872,6 +2890,7 @@ async def _start_log_watcher() -> None:
     global _mcp_connect_watch_task, _parked_message_watch_task
     _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
         _notify_mcp_never_connected, _notify_mcp_connected, _notify_mcp_disconnected,
+        _auto_reconnect_mcp,
     ))
     # A stall longer than the CLIs' reconnect budget: re-check their streams
     # as soon as the loop is back.

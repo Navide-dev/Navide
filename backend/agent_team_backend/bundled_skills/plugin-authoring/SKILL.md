@@ -21,10 +21,18 @@ memory.
 
 ## 1. Start from the smallest thing that works
 
+The SDK packages are not on npm yet; run the CLI from the GitHub Release
+`plugin-packages-1.0.0` (a bare `npx navide-plugin` or `npm install
+@navide/plugin-sdk` fails with 404):
+
 ```text
-npx navide-plugin init acme-hello --id acme.hello              # no build step
-npx navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
+npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello              # no build step
+npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
 ```
+
+In a `--template vue` project, run `npm install $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz`
+before `npm install`, so `package.json` names the tarballs.
 
 The first writes a frontend-only plugin that validates and packages as written
 (the `--template vue` one is a buildable Vue view + Python backend + agent tool +

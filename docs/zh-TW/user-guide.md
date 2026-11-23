@@ -73,6 +73,20 @@ Select multiple 分格 headers with Cmd/Ctrl-click or Shift-click, then right-cl
 - **斷線**：連線中斷或關閉分格時，容器裡的 CLI 會停止（Navide 把它的程序記在容器 `/tmp` 底下的檔案，所以容器需要 `sh` 和可寫入的 `/tmp`），分格顯示 **重新連線**，會在同一個容器開新的工作階段。需要撐過斷線的長任務，請在容器裡用 `tmux` 之類的工具。
 - 遠端分格只支援 Claude Code 與 Codex。列出容器與連線測試會共用一條 ssh 連線最多 60 秒；每個分格都用自己的連線，所以關閉分格會立刻釋放它的隧道。Windows 版 Navide 一律不共用連線（Windows 的 OpenSSH 沒有 ControlMaster）。
 
+### SSH Remote 分格（實驗功能）
+
+在另一台電腦上透過 `ssh` 執行 shell 的終端機分格。只支援終端機分格，不會在遠端主機開 Claude Code 或 Codex。
+
+到 **設定 → 一般 → 實驗功能 → 遠端容器分格** 打開後，**＋** 選單的 **終端機** 下方會多出 **SSH Remote…**。
+
+- **主機**：主機名稱、IP 位址或 ssh 設定裡的名稱。**使用者** 可以不填，不填就沿用 ssh 設定。**連接埠** 預設 22。
+- **私鑰路徑** 可以不填。Navide 只記住路徑、交給 `ssh -i` 使用，不會讀取、複製或上傳私鑰。
+- **最近連線** 只存在這台電腦，最多八筆（主機、使用者、連接埠、私鑰路徑），不會進 Navide Cloud 同步，也不會被匯出的設定包帶走。
+- **SSH agent 轉送保持關閉**（`ForwardAgent=no`，不帶 `-A`）；`ssh` 本身需要以外的環境變數都會移除，所以任何 `SendEnv` 設定都帶不走本機的 API key。
+- 按 **連線** 時，Navide 會先用不互動的 `ssh` 檢查主機一次。連得上就開一個在那台主機執行登入 shell 的終端機分格；連不上時，對話框會用白話說明原因：連不上主機、金鑰被拒，或主機驗證失敗。如果是金鑰或主機驗證被拒，可以按 **仍然開啟**，讓 `ssh` 在分格裡詢問私鑰密碼或主機指紋。
+- **連線中斷會自動重新連線。** `ssh` 斷線後，分格會在 2、5、15、30、60 秒後重新檢查主機，並顯示每次失敗的原因；金鑰或主機驗證被拒就不再重試。按 **重新連線** 會立刻再試一次。在分格裡輸入 `exit` 結束後不會自動重連。
+- Navide 重新啟動後不會還原 SSH Remote 分格，請從 **最近連線** 再開一次。
+
 ### CLI risk observations
 
 An active agent 分格 can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active 分格, while network findings belong to the observed 分格's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.
@@ -297,6 +311,18 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 **App Lock**（設定 → App Lock）會用一張鎖定畫面蓋住所有 Navide 視窗，用 4～12 位數 PIN 解鎖；在 Mac 上可以先用 Touch ID，在 Windows 11 上可以先用 Windows Hello。Windows 10 與 Linux 只能用 PIN 解鎖，設定頁會註明。它是隱私遮罩，不是存取控制：底下的 agent、終端機、聊天頻道、MCP 工具、其他裝置與排程都照常執行，坐在電腦前、懂技術的人仍然可以繞過。鎖定期間，應用程式選單除了隱藏、結束、視窗控制和 PIN 輸入框需要的編輯鍵之外都會變灰，按鍵也不會送到底下的視窗，所以點選單或按快捷鍵都操作不到後面的 App。「切換開發者工具」也會變灰，鎖定時無法打開 DevTools；已經打開的 DevTools 維持原狀。可以用「立即鎖定」（⌘⌥L，Windows 與 Linux 是 Ctrl+Alt+L）手動上鎖，也可以在閒置一段時間、螢幕鎖定、電腦睡眠或 Navide 啟動時（預設關閉）自動上鎖。忘記 PIN 時，可以先用 Touch ID 或 Windows Hello 驗證再重設；兩者都沒有時，結束 Navide 後刪除 Navide 資料夾裡的 `app-lock.json`，這只會移除 App Lock 和它的 PIN，其他都不受影響。
 
 `.agent-team/` 目前不是可攜機制。未來在不同裝置間移轉時，應使用具有 Redaction 與 Retention Control 的明確本機 Export／Import，而不是透過 Git 同步。
+
+### 開發自己的 Navide 外掛
+
+任何人都可以自己做 Navide 外掛，並上架到 Navide 市集。**設定 → Navide 市集 → 開發者**會在 App 裡一步步帶你做；完整指令在 [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md)（英文）。
+
+1. **用範本建立。** `navide-plugin init acme-hello --id acme.hello` 會建立一個不用建置的外掛；加上 `--template vue` 則會建立 Vue 畫面、小型後端和一個 agent 工具。開發套件還沒上 npm，指南裡有一行 `npx` 指令，直接從 GitHub Release `plugin-packages-1.0.0` 執行。
+2. **不上架就能載入試用。** 開啟[開發者模式](#開發者模式)，選 **從資料夾載入…**。載入的資料夾在你儲存後會自動重新載入。
+3. **驗證並打包。** `navide-plugin validate` 和 `navide-plugin package` 跑的是 Navide 市集審核前的同一套檢查，並產生 `.vsix` 檔。分格裡的 agent 也能用 `plugins_validate_package` 和 `plugins_package` 跑同樣的檢查，兩者都不會安裝任何東西。
+4. **申請開發者（一次就好）。** 在開發者頁登入，實名填寫申請，由專人審核。
+5. **送審上架。** 認領命名空間、註冊簽章金鑰，再簽章並用 `navide-plugin publish` 或 Navide 的上架表單送出。每個版本都由專人審核（目標 3 個工作天），通過後才會上架。
+
+第 1～3 步都只在你的電腦上進行。第 4～5 步要等你自己按下按鈕或執行指令才會送出，由 agent 代填表單時也一樣。
 
 ### Navide 外掛指令
 

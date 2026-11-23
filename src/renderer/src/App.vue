@@ -237,6 +237,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
+import { sshFailureReason, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -364,6 +365,7 @@ import {
 } from './lib/welcomeTour'
 import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
+import { leaveLimitMenuAndResume } from './lib/claudeLimitMenu'
 import {
   LOOP_RESUME_SETTING_KEY,
   DEFAULT_LOOP_RESUME,
@@ -532,6 +534,7 @@ const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vu
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
 const RemoteDevcontainerDialog = defineAsyncComponent(() => import('./components/RemoteDevcontainerDialog.vue'))
+const SshRemoteDialog = defineAsyncComponent(() => import('./components/SshRemoteDialog.vue'))
 const ArenaPanel = defineAsyncComponent(() => import('./components/ArenaPanel.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
@@ -2022,6 +2025,11 @@ interface ActivePane {
    *  reconnect, restore) goes back to the same container. Persisted on the
    *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
   remote?: RemoteTarget
+  /** An SSH Remote terminal pane (same experimental switch): its shell runs
+   *  on this host over ssh. Runtime only — such a pane is not restored. */
+  sshRemote?: SshRemoteTarget
+  /** An SSH pane's last exit code (255: ssh lost or never made the link). */
+  sshExitCode?: number | null
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -7270,6 +7278,43 @@ const continueInFlight = new Set<string>()
  *  watcher, no re-arm, no done-marker instruction: this is a manual nudge, not
  *  an unattended loop. injectPane clears the flag, which hides the button; a
  *  failed injection restores it so the click can be retried. */
+/** After a hot account switch: leave Claude's "You've hit your limit" menu if
+ *  the pane is parked on it, then (when wanted) type the continue text so the
+ *  original task carries on under the new account. */
+async function leaveLimitMenuAfterSwitch(paneId: string, resume: boolean): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  const ref = paneRefs[paneId]
+  if (!pane?.realized || pane.agentKey !== 'claude' || pane.isLogin || !ref?.sessionId) return
+  if (continueInFlight.has(paneId)) return
+  continueInFlight.add(paneId)
+  try {
+    const screen = (): string => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+    const outcome = await leaveLimitMenuAndResume({
+      read: screen,
+      write: (data) => { void backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }) },
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      resume: resume
+        ? async () => {
+          // Same gate every other unsolicited injection passes.
+          if (messagingHoldKey(paneId) !== null) return false
+          await acquireInjectionSlot()
+          try {
+            return await injectPane(paneId, settingsGet(LOOP_RESUME_SETTING_KEY, DEFAULT_LOOP_RESUME), 'failover-continue', true)
+          } finally {
+            releaseInjectionSlot()
+          }
+        }
+        : undefined,
+    })
+    if (outcome === 'menu-stuck' || outcome === 'resume-failed') {
+      console.warn(`[failover-continue] pane ${paneId}: ${outcome}`)
+      pane.resumeContinueAvailable = true
+    }
+  } finally {
+    continueInFlight.delete(paneId)
+  }
+}
+
 async function continueRestoredPane(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.resumeContinueAvailable) return
@@ -8573,6 +8618,8 @@ interface SpawnInternal {
   accountDirLogin?: boolean
   /** Remote container target; see ActivePane.remote. */
   remote?: RemoteTarget
+  /** SSH Remote terminal target; see ActivePane.sshRemote. */
+  sshRemote?: SshRemoteTarget
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8796,6 +8843,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
     remote: opts.remote,
+    sshRemote: opts.sshRemote,
   }
   acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
@@ -8964,6 +9012,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
       ...(opts.remote ? { remote: opts.remote } : {}),
+      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote } } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -9964,6 +10013,23 @@ async function reconnectPaneMcp(paneId: string): Promise<void> {
 
 /** Claude Code's in-place reconnect of Navide's server (wiring SERVER_NAME). */
 const MCP_RECONNECT_COMMAND = '/mcp reconnect navide'
+
+/** ui.pane.reconnectMcp: only the in-place half of reconnectPaneMcp, for the
+ *  backend's automatic retry and a commander's ui_invoke (2026-11-22: neither
+ *  the pane nor its commander could type /mcp). Never the rebuild — that ends
+ *  the CLI's background work and stays the user's click. The reason goes back
+ *  so the backend counts only a try that went in. */
+async function reconnectPaneMcpInPlace(paneId: string): Promise<{ sent: boolean; reason?: string; status?: string; hold?: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.realized) return { sent: false, reason: 'not-open' }
+  const status = paneRefs[paneId]?.displayStatus as string | undefined
+  if (status !== 'idle') return { sent: false, reason: 'busy', status }
+  if (pane.agentKey !== 'claude') return { sent: false, reason: 'unsupported-cli' }
+  const hold = messagingHoldKey(paneId)
+  if (hold !== null) return { sent: false, reason: 'held', hold }
+  if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return { sent: true }
+  return { sent: false, reason: 'inject-failed' }
+}
 
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
@@ -11056,6 +11122,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     muted: isPaneMuted(paneId),
     // A remote pane reconnects to the same container.
     remote: pane.remote,
+    // An SSH Remote pane reconnects to the same host.
+    sshRemote: pane.sshRemote,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -11078,6 +11146,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       model: snap.model,
       effort: snap.effort,
       remote: snap.remote,
+      sshRemote: snap.sshRemote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -11085,7 +11154,11 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       rekeyLineage(paneId, newId)
       setPaneMuted(paneId, false)
       if (snap.muted) setPaneMuted(newId, true)
-      if (snap.origin !== 'pipeline') {
+      // An SSH Remote pane has no record (it is not restored); writing one
+      // here would bring it back after a restart as a LOCAL shell.
+      if (snap.sshRemote) {
+        // nothing to record
+      } else if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
           pane_id: newId,
@@ -11757,7 +11830,23 @@ quotaFailover.initQuotaFailover(backend, {
         }
         if (loopFailoverResumeArmed.has(pane.id)) pane.resumeContinueAvailable = false
         else if (pane.loopActive) pane.resumeContinueAvailable = true
+        // The pane's next request already uses the new account: a pane parked on
+        // Claude's limit menu leaves it and carries on with its task. A loop pane
+        // only leaves the menu; its own resume (or Continue button) goes on.
+        if (ev.switchMode === 'hot' && ev.state === 'committed' && !ev.needsLogin) {
+          void leaveLimitMenuAfterSwitch(pane.id, !loopFailoverResumeArmed.has(pane.id) && !pane.loopActive)
+        }
       }
+    }
+    // Panes the swap could not reach (their credential comes from the
+    // environment) are named one by one, so nobody reads them as switched.
+    for (const paneId of ev.overriddenPanes ?? []) {
+      const pane = panes.value.find((p) => p.id === paneId && p.realized)
+      if (!pane) continue
+      notifyRestore.toast(
+        i18n.global.t('announce.quota.pane-not-switched', { pane: pane.customName || pane.autoName || pane.agentKey }),
+        { type: 'error' },
+      )
     }
   },
   onIncidentReady: (incident: FailoverIncident) => releaseQuotaGate(incident.id),
@@ -12601,6 +12690,15 @@ registerCommand('ui.pane.interrupt', async (args) => {
     awaitingKind,
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
+})
+// A pane whose navide MCP dropped cannot reconnect itself, and cli_send cannot
+// type a slash command for it: this is the backend's automatic retry and a
+// commander's way in. In place only, idle panes only (reconnectPaneMcpInPlace).
+registerCommand('ui.pane.reconnectMcp', async (args) => {
+  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  if (!paneId) throw new Error(`ui.pane.reconnectMcp requires ${PANE_ID_HINT}`)
+  if (!panes.value.some((p) => p.id === paneId)) throw new Error(`ui.pane.reconnectMcp: pane "${paneId}" not found`)
+  return reconnectPaneMcpInPlace(paneId)
 })
 // cli_set_model: switch a running pane's model. claude through its /model
 // picker's `s` (setModelViaPicker), codex by typing `/model <id>`
@@ -13693,6 +13791,7 @@ const channelAccountDeps: ChannelAccountDeps = {
     profilesForAgent: (agentKey) => cliProfilesApi.profilesForAgent(agentKey),
     orderedSlotIds: (agentKey) => cliProfilesApi.orderedSlotIds(agentKey),
     signedOut: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.signedIn === false,
+    email: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.email ?? null,
   },
   usage: (agentKey, profileId) => {
     const snap = accountUsageFor(agentKey, profileId)
@@ -19377,6 +19476,8 @@ backend.on('terminal.exit', (raw) => {
   // Any other non-zero exit of an agent CLI used to look exactly like the user
   // quitting it. Keep the code for the title-bar badge, and record it.
   pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  // ssh's own failure code: the SSH pane's banner reconnects only on it.
+  if (pane.sshRemote) pane.sshExitCode = typeof ev.exit_code === 'number' ? ev.exit_code : null
   if (pane.exitFault) {
     recordDiagnostic({
       level: 'error',
@@ -19525,6 +19626,21 @@ backend.on('claude.account_dir_notice', (raw) => {
       { type: 'error', duration: 12000 }
     )
   }
+})
+
+// A stopped quota continuation nobody acted on: the backend reminds while it
+// stays open and once more when it expires, so it cannot sit unseen for hours.
+backend.on('quota_failover.stuck', (raw) => {
+  const ev = raw as { agentKey?: string; reason?: string | null; stoppedForSec?: number; final?: boolean; paneIds?: string[] }
+  if (!(ev.paneIds ?? []).some((id) => panes.value.some((p) => p.id === id && p.realized))) return
+  const agent = agentSpecs.find((s) => s.agentKey === ev.agentKey)?.label ?? ev.agentKey ?? ''
+  const reason = ev.reason ?? 'unknown'
+  notifyRestore.toast(
+    ev.final
+      ? i18n.global.t('announce.quota.stuck-expired', { agent, reason })
+      : i18n.global.t('announce.quota.stuck', { agent, reason, minutes: Math.floor((ev.stoppedForSec ?? 0) / 60) }),
+    { type: ev.final ? 'info' : 'error' },
+  )
 })
 
 // CLI account login: the backend harvested a profile's isolated login home
@@ -24833,6 +24949,42 @@ const { remoteEnabled: remoteDevcontainerEnabled } = useRemoteDevcontainerPrefs(
 /** Where the dialog's pane goes; null while the dialog is closed. */
 const remoteDialogTarget = ref<{ workspacePath: string; runGroupId?: string } | null>(null)
 
+/** ＋ menu → SSH Remote… (same experimental switch). */
+const sshRemoteDialogOpen = ref(false)
+function openSshRemoteDialog(): void {
+  if (remoteDevcontainerEnabled.value) sshRemoteDialogOpen.value = true
+}
+
+/** The dialog connected (the backend checked the host and trusted it): a
+ *  terminal pane whose shell runs there. */
+async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
+  sshRemoteDialogOpen.value = false
+  const workspacePath = currentWorkspace.value
+  const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
+  await spawnPane({
+    agentKey: 'terminal',
+    roleKey: '',
+    stageId: '',
+    commandOverride: '',
+    workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    autoName: sshTargetLabel(target),
+    sshRemote: target,
+  })
+}
+
+/** An SSH pane's banner asks the backend to check the host again (the same
+ *  check the dialog runs); only a reachable host gets a new shell. */
+async function reconnectSshPane(paneId: string): Promise<string | null> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.sshRemote) return 'other'
+  const reply = await backend.send('remote_ssh.connect', { target: { ...pane.sshRemote } }, 20_000)
+  if (!reply.ok) return sshFailureReason(reply.error)
+  await rebuildPaneClean(paneId)
+  return null
+}
+
 function openRemoteDialog(payload: { workspacePath: string; runGroupId?: string }): void {
   if (!remoteDevcontainerEnabled.value) return
   remoteDialogTarget.value = { workspacePath: payload.workspacePath || currentWorkspace.value, runGroupId: payload.runGroupId }
@@ -26351,6 +26503,13 @@ function paneIsCommander(p: ActivePane): boolean {
     @open="onRemoteDialogOpen"
     @cancel="remoteDialogTarget = null"
   />
+  <SshRemoteDialog
+    v-if="sshRemoteDialogOpen"
+    :open="sshRemoteDialogOpen"
+    :backend="backend"
+    @connected="onSshRemoteConnected"
+    @cancel="sshRemoteDialogOpen = false"
+  />
   <ArenaStartDialog
     v-if="arenaStartOpen"
     :open="arenaStartOpen"
@@ -26632,6 +26791,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @spawn="onManualSpawn"
       @spawn-acp="onAcpSpawn"
       @spawn-remote="openRemoteDialog"
+      @spawn-ssh-remote="openSshRemoteDialog"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"
@@ -27147,6 +27307,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :remote="p.remote"
           :remote-reconnect="() => rebuildPaneClean(p.id)"
           :remote-close-pane="() => onKill(p.id)"
+          :ssh-remote="p.sshRemote"
+          :ssh-exit-code="p.sshExitCode ?? null"
+          :ssh-reconnect="() => reconnectSshPane(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"
           @minimize="minimizePane(p.id)"

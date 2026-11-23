@@ -123,7 +123,9 @@ const HOME = /^(?:\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:[\\/]Users[\\/][^
 // where its row is full to the pane's width (`cols`); a wrap adds or drops no
 // character there. A break anywhere else, a continuation row that starts with
 // padding (Claude Code's Ink draws one, and a dropped space there cannot be
-// told from none), or a width that is not known, leaves the path unread.
+// told from none), or a width that is not known, leaves the path unread —
+// except Claude Code's trust dialog naming the pane's own launch folder, read
+// by inkBlockNames.
 
 /** The rendered rows, frame drawn as spaces, trailing blanks cut (as
  *  readScreenTail reads them), joined with '\n'. */
@@ -226,7 +228,45 @@ export function claudeTrustNamesFolder(screen: string, folder: string, cols = 0)
   if (squash(rows.slice(title, first - 1).join('')) !== 'Accessingworkspace:') return false
   const block = rows.slice(first, last + 1).join('\n')
   const sep = /^[A-Za-z]:/.test(target) ? '[\\\\/]' : '/'
-  return new RegExp(`^ *(?:${pathSpellings(target)})(?:${sep})?$`).test(block) && wrapsOnly(block, 0, block.length, cols)
+  if (new RegExp(`^ *(?:${pathSpellings(target)})(?:${sep})?$`).test(block) && wrapsOnly(block, 0, block.length, cols)) return true
+  return inkBlockNames(rows.slice(first, last + 1), target)
+}
+
+/** Whether the folder block, as Claude Code's Ink draws a path too long for
+ *  its row, is exactly `target`: broken anywhere, every continuation row
+ *  indented by the dialog's own padding (the first row's, no more). The strict
+ *  read above leaves this unread because on the screen alone that indent
+ *  cannot be told from a space of the folder's own at the break.
+ *
+ *  `target` settles it: it is the pane's workspace, the folder Navide launched
+ *  the CLI in, and the dialog names the folder the CLI runs in. So the only
+ *  freedom here is whitespace AT a row break; every other character, every
+ *  space inside a row, and the whole of the path (not a parent, not a folder
+ *  inside it, not a longer name) must match. */
+function inkBlockNames(rows: string[], target: string): boolean {
+  const pad = /^ */.exec(rows[0])![0].length
+  if (!pad || rows.length < 2) return false
+  const indent = ' '.repeat(pad)
+  if (rows.some((row) => !row.startsWith(indent) || /^\s/.test(row.slice(pad)))) return false
+  const win = /^[A-Za-z]:/.test(target)
+  const slashes = (s: string): string => (win ? s.replace(/\\/g, '/') : s)
+  const chunks = rows.map((row) => slashes(row.slice(pad)))
+  const home = HOME.exec(target)
+  const spellings = home ? [target, `~${target.slice(home[0].length)}`] : [target]
+  return spellings.some((spelling) => {
+    let rest = slashes(spelling)
+    for (let i = 0; i < chunks.length; i++) {
+      if (i > 0) rest = rest.replace(/^\s+/, '')
+      if (rest.startsWith(chunks[i])) {
+        rest = rest.slice(chunks[i].length)
+      } else if (i === chunks.length - 1 && chunks[i] === `${rest}/`) {
+        rest = ''
+      } else {
+        return false
+      }
+    }
+    return rest === ''
+  })
 }
 
 // Whatever an allowlist rule says, these are a person's call.

@@ -57,12 +57,21 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: as soon as it lands when parked reads are still out, and the reading mark
 #: carries refreshPendingSince. Switch decisions, credentials and failover
 #: are untouched.
+#: quota_failover was updated deliberately in 0.2.47 for smooth account
+#: switching (plan 0-2-47_c72cd8 t6): an automatic switch no longer gives up
+#: when only some panes take their credential from the environment (it moves
+#: the vault-backed panes and names the rest, as a manual switch already did;
+#: it still refuses when every pane is overridden), the commit event carries
+#: overriddenPanes, and an open incident left in notify-stopped is reminded
+#: (15 min, then every 2 h) and expires after 6 h or at its window's reset
+#: (_watch_stuck / _stuck_due / add_stuck_listener). Detection, ranking, the
+#: budget, the swap and the audit row are unchanged.
 MAIN_DIGESTS = {
     "usage_service": (
         "369f00219e0f4f05dac97a777b1218b9c1cca147c309bd859fc61605ebe3e247", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "534dd11c92157732e4ab3207eed2382d09cf46da5ee945d326f7ff194e3497d9", frozenset(),
+        "ea8e535f881c448f310233c169919c9a25be1d3739fc45952f2f97fc57e5eebf", frozenset(),
     ),
 }
 
