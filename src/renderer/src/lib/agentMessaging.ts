@@ -20,7 +20,7 @@
 // terminal buffer.
 
 import { AGENT_SPECS } from '@navide/plugin-shell'
-import { enUSMessages } from '@navide/plugin-ui/foundation'
+import enUSMessages from '../i18n/locales/en-US.json'
 import { CHANNEL_PLATFORM_IDS } from '../platform/channels'
 
 export const MSG_START = '---MSG-START---'
@@ -389,6 +389,20 @@ export function hasReplyRoute(ev: { origin?: string; from_pane_id?: string; from
 export const LAST_OUTPUT_REPLY_HINT =
   '（呼叫方沒有回信管道，不要用 MSG 區塊回覆：直接把回覆輸出在這個回合的最後；呼叫方會讀取你的最後輸出）'
 
+/** Characters of the correlation id that end a no-reply hint. */
+const REPLY_HINT_ID_CHARS = 8
+
+/** LAST_OUTPUT_REPLY_HINT ending in the message's own id, so no two envelopes
+ *  share a tail. The injection's echo watch matches the payload's last
+ *  TAIL_MATCH_LEN characters: an envelope typed behind one Claude Code put back
+ *  into its input box (a turn interrupted before any output) left the visible
+ *  rows unchanged and was held on pty-blocked until the pane closed (Linux VM
+ *  0.2.44). */
+function lastOutputReplyHint(correlationId?: string): string {
+  if (!correlationId) return LAST_OUTPUT_REPLY_HINT
+  return `${LAST_OUTPUT_REPLY_HINT.slice(0, -1)}；訊息 ${correlationId.slice(-REPLY_HINT_ID_CHARS)}）`
+}
+
 /** Break any boundary line a sender wrote into its own body, so forwarded text
  *  cannot close the external block early and pose as the user after it. A
  *  disguised copy counts too, by the backend's rules: matched on a folded view
@@ -466,7 +480,7 @@ export function renderEnvelope(
     ? [`${MSG_ENVELOPE_PREFIX} ${sender}`, EXTERNAL_CONTENT_START, neutralizeExternalBoundary(body), EXTERNAL_CONTENT_END]
     : [`${MSG_ENVELOPE_PREFIX} ${sender}`, body]
   if (opts.includeReplyHint !== false && opts.noReplyRoute) {
-    lines.push(LAST_OUTPUT_REPLY_HINT)
+    lines.push(lastOutputReplyHint(opts.correlationId))
   } else if (opts.includeReplyHint !== false) {
     const head = opts.correlationId
       ? `to: ${sender} re: ${opts.correlationId}`
@@ -804,6 +818,12 @@ export const PUSH_COOLDOWN_MS = 60_000
  *  that will not clear twice running is one the message will never get through,
  *  and the sender is told so instead of the queue holding it forever. */
 export const PUSH_UNCLEAR_LIMIT = 2
+
+/** How many deliveries of the same message may time out against a backend
+ *  that did not answer the write before the sender is told so. Each try is
+ *  already a few resent chunks (injectChunkSend), so this is minutes of a
+ *  stalled loop, not seconds. */
+export const INJECT_TIMEOUT_RETRY_LIMIT = 3
 
 /** The same, for a CLI whose server simply is not listening yet. That is what a
  *  pane looks like for the first seconds of its life, and it fixes itself — so

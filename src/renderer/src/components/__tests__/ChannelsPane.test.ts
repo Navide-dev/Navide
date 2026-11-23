@@ -573,7 +573,7 @@ describe('ChannelsPane', () => {
       await flushPromises()
       const sent = mock.sent.find((m) => m.type === 'channels.quick_add')
       expect(sent?.payload).toEqual({ platform: 'telegram', config: {}, secret: { token: TG_TOKEN }, link_target: 'direct' })
-      expect(sent?.timeoutMs).toBe(45_000) // outlasts the backend's worst case (see QUICK_ADD_TIMEOUT_MS)
+      expect(sent?.timeoutMs).toBe(60_000) // outlasts the backend's worst case (see QUICK_ADD_TIMEOUT_MS)
       expect(mock.sent.some((m) => m.type === 'channels.configure' || m.type === 'channels.link.create')).toBe(false)
       expect(openExternal).toHaveBeenCalledWith('https://t.me/quick_bot?start=QK7M2XAB')
       expect(clip.written).toEqual([]) // the deep link carries the code: nothing to paste
@@ -704,6 +704,32 @@ describe('ChannelsPane', () => {
         expect(openExternal).not.toHaveBeenCalled()
       })
 
+      it('warns that another program holds the bot until it connects', async () => {
+        seedEmpty()
+        const w = await render()
+        mock.setResponse('channels.quick_add', { ...quickOk(false), warning: 'conflict' })
+        const status = { lifecycle: 'recovering', connected: false, identity: '@quick_bot', last_error: '409 Conflict' }
+        mock.setResponse('channels.list', {
+          ok: true,
+          enabled: true,
+          platforms: [{
+            platform: 'telegram', configured: true, enabled: true, status, config: { name: '@quick_bot' }, capabilities: null,
+            accounts: [{ account: 'default', name: '@quick_bot', configured: true, enabled: true, status, config: { name: '@quick_bot' }, capabilities: null }],
+          }],
+        })
+        const tg = await submitTelegram(w)
+        expect(tg.get('[data-testid="channel-quick-conflict"]').text()).toContain('another program is already using this bot (409 Conflict)')
+      })
+
+      it('shows no conflict warning for a free bot', async () => {
+        seedEmpty()
+        const w = await render()
+        mock.setResponse('channels.quick_add', quickOk(false))
+        seedAdded('telegram', '@quick_bot')
+        const tg = await submitTelegram(w)
+        expect(tg.find('[data-testid="channel-quick-conflict"]').exists()).toBe(false)
+      })
+
       it('ends the steps when the chats of the new bot cannot be loaded', async () => {
         seedEmpty()
         const w = await render()
@@ -725,7 +751,7 @@ describe('ChannelsPane', () => {
       mock.setResponse('channels.quick_add', { ok: false, reason: 'rejected', error: 'Unauthorized' })
       await tg.get('form').trigger('submit')
       await flushPromises()
-      expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized')
+      expect(tg.get('form [role="alert"]').text()).toBe('Telegram rejected the credential: Unauthorized. Copy the whole token again and retry; generating a new token makes the old one stop working.')
       expect(tg.find('[data-testid="channel-quick-steps"]').exists()).toBe(false)
       expect(tg.get('[data-testid="channel-quick-add"]').text()).toBe('Quick Add')
       expect(openExternal).not.toHaveBeenCalled()
@@ -734,6 +760,14 @@ describe('ChannelsPane', () => {
       await tg.get('form').trigger('submit')
       await flushPromises()
       expect(tg.get('form [role="alert"]').text()).toContain('Telegram did not answer in time')
+
+      // Nothing came back at all: say Telegram cannot be reached, and what to check.
+      mock.setResponse('channels.quick_add', { ok: false, reason: 'network', error: 'no answer from telegram within 25s: ConnectTimeout' })
+      await tg.get('form').trigger('submit')
+      await flushPromises()
+      expect(tg.get('form [role="alert"]').text()).toBe(
+        'Could not reach Telegram: no answer from telegram within 25s: ConnectTimeout. Check that this computer can reach Telegram; '
+        + 'a company network or firewall may be blocking it. If you need a proxy, set it in the system network settings, then try again.')
     })
 
     it('ignores a clipboard that does not look like the token, and never overwrites a typed one', async () => {
@@ -986,8 +1020,9 @@ describe('ChannelsPane', () => {
       [{ reason: 'timeout', error: 'no bot was created within 600s' }, 'No bot was created within 10 minutes. Try again.'],
       [{ reason: 'token_unavailable', error: 'bot is not managed', created: true }, 'The bot was created in Telegram, but its token could not be read. Check it in BotFather.'],
       [{ reason: 'creator_not_linked', error: 'bot 999 was created by Telegram user 8', created: true }, 'The bot was created in Telegram, but by a Telegram account not linked to this bot, so it was not added. Link that account first, or delete the bot in BotFather.'],
-      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized. Copy the whole token again and retry; generating a new token makes the old one stop working. The bot was already created in Telegram; check BotFather before trying again.'],
       [{ reason: 'timeout', error: 'no answer from telegram within 10s', created: true }, 'Telegram did not answer in time. Check the network and try again. (no answer from telegram within 10s) The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'network', error: 'ConnectError', created: true }, 'Could not reach Telegram: ConnectError. Check that this computer can reach Telegram; a company network or firewall may be blocking it. If you need a proxy, set it in the system network settings, then try again. The bot was already created in Telegram; check BotFather before trying again.'],
       [{ reason: 'invalid', error: 'chat channels are turned off', created: true }, 'chat channels are turned off The bot was already created in Telegram; check BotFather before trying again.'],
     ])('shows a failure in words: %o', async (failure, text) => {
       seedManager(true)
@@ -1007,6 +1042,146 @@ describe('ChannelsPane', () => {
       mock.backend.status.value = 'disconnected'
       await flushPromises()
       expect(managerRow(w).find('[data-testid="channel-managed-waiting"]').exists()).toBe(false)
+    })
+  })
+
+  describe('Telegram "Create a New Bot" on the group header line', () => {
+    type Bot = { account: string; identity: string; canManage?: boolean; connected?: boolean; enabled?: boolean }
+
+    function seedBots(bots: Bot[], enabled = true): void {
+      const accounts = bots.map((b) => {
+        const connected = b.connected ?? true
+        const status: Record<string, unknown> = {
+          lifecycle: connected ? 'ready' : 'recovering', connected, identity: b.identity, last_error: '',
+        }
+        if (b.canManage !== undefined) status.can_manage_bots = b.canManage
+        return { account: b.account, name: '', configured: true, enabled: b.enabled ?? true, status, config: {}, capabilities: null }
+      })
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: accounts[0].status, config: {}, capabilities: null, accounts,
+        }],
+      })
+      mock.setResponse('channels.overview', ov([]))
+    }
+
+    const action = (w: VueWrapper) => w.find('[data-testid="channel-nav-group-action"]')
+    const botRow = (w: VueWrapper, account: string) => w.get(`[data-platform="telegram"] [data-account="${account}"]`)
+
+    it('sits on a TELEGRAM header outside every bot card, even as the only platform', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true }])
+      const w = await render()
+      const header = w.get('[data-testid="channel-nav-group"]')
+      expect(header.text()).toContain('Telegram')
+      expect(header.get('[data-testid="channel-nav-group-action"]').text()).toBe('TG＋ Create a New Bot')
+      expect(action(w).element.closest('[data-platform]')).toBeNull()
+      // The card and its ⋯ menu keep their own entries.
+      expect(botRow(w, 'default').find('[data-testid="channel-managed-start"]').exists()).toBe(true)
+      expect(botRow(w, 'default').find('[data-testid="channel-managed-create"]').exists()).toBe(true)
+    })
+
+    it('opens the bot\'s own confirmation and sends nothing yet', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true }])
+      const w = await render()
+      await action(w).trigger('click')
+      expect(botRow(w, 'default').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @navide_bot')
+      expect(mock.sent.some((m) => m.type === 'channels.managed_create')).toBe(false)
+    })
+
+    it('stays while the bot reconnects, disabled with a note; the card stays as it was', async () => {
+      seedBots([{ account: 'default', identity: '@navide_bot', canManage: true, connected: false }])
+      const w = await render()
+      expect(action(w).attributes('disabled')).toBeDefined()
+      expect(w.get('[data-testid="channel-nav-group-action-note"]').text()).toBe('Available again once the bot reconnects.')
+      expect(w.find('[data-testid="channel-managed-start"]').exists()).toBe(false)
+      // Reconnected: usable again without reloading.
+      mock.emit('channels.status', { platform: 'telegram', account: 'default', status: { lifecycle: 'ready', connected: true, identity: '@navide_bot', can_manage_bots: true } })
+      await flushPromises()
+      expect(action(w).attributes('disabled')).toBeUndefined()
+      expect(w.find('[data-testid="channel-nav-group-action-note"]').exists()).toBe(false)
+    })
+
+    it('is absent without the permission, on a switched-off bot, or with channels off', async () => {
+      for (const [bots, on] of [
+        [[{ account: 'default', identity: '@navide_bot', canManage: false }], true],
+        [[{ account: 'default', identity: '@navide_bot' }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: false, connected: false }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: true, enabled: false }], true],
+        [[{ account: 'default', identity: '@navide_bot', canManage: true }], false],
+      ] as [Bot[], boolean][]) {
+        wrapper?.unmount()
+        mock = createMockBackend('connected')
+        seed()
+        seedBots(bots, on)
+        const w = await render()
+        expect(action(w).exists()).toBe(false)
+        // A single platform without the action keeps its unlabelled list.
+        expect(w.find('[data-testid="channel-nav-group"]').exists()).toBe(false)
+      }
+    })
+
+    it('asks which bot when several can create one and the picked bot cannot', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+        { account: 'bot-def456', identity: '@plain_bot', canManage: false },
+      ])
+      const w = await render()
+      const plain = w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@plain_bot'))!
+      await plain.trigger('click')
+      await action(w).trigger('click')
+      const choices = w.findAll('[data-testid="channel-nav-group-action-choice"]')
+      expect(choices.map((c) => c.text())).toEqual(['Create via @navide_bot', 'Create via @second_bot'])
+      await choices[1].trigger('click')
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+    })
+
+    it('closes the bot menu on a click elsewhere or Esc, creating nothing', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+        { account: 'bot-def456', identity: '@plain_bot', canManage: false },
+      ])
+      const w = await render()
+      await w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@plain_bot'))!.trigger('click')
+      for (const close of [
+        () => document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })),
+        () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })),
+      ]) {
+        await action(w).trigger('click')
+        expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(true)
+        close()
+        await flushPromises()
+        expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      }
+      expect(w.find('[data-testid="channel-managed-title"]').exists()).toBe(false)
+    })
+
+    it('goes straight through the picked bot when it can create one', async () => {
+      seedBots([
+        { account: 'default', identity: '@navide_bot', canManage: true },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+      ])
+      const w = await render()
+      const item = w.findAll('[data-testid="channel-nav-item"]').find((i) => i.text().includes('@second_bot'))!
+      await item.trigger('click')
+      await action(w).trigger('click')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
+    })
+
+    it('goes straight through the only bot that can create one', async () => {
+      seedBots([
+        { account: 'default', identity: '@plain_bot', canManage: false },
+        { account: 'bot-abc123', identity: '@second_bot', canManage: true },
+      ])
+      const w = await render()
+      await action(w).trigger('click')
+      expect(w.find('[data-testid="channel-nav-group-action-menu"]').exists()).toBe(false)
+      expect(botRow(w, 'bot-abc123').get('[data-testid="channel-managed-title"]').text()).toBe('Create a new bot through @second_bot')
     })
   })
 

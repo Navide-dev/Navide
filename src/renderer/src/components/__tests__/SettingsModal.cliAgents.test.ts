@@ -38,6 +38,10 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
     initialTab: ModalProps['initialTab'] = 'cliAgents',
     renderSettings = false,
     binaryOverrides: Record<string, string> = {},
+    cliProfilesApi: ModalProps['cliProfilesApi'] = {
+      identityFor: () => null,
+      profilesForAgent: () => [],
+    } as unknown as ModalProps['cliProfilesApi'],
   ) {
     const mock = createMockBackend('connected')
     mock.setResponse('onboarding.status', {
@@ -68,10 +72,7 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
           benchmarkProgress: ref(null),
           benchmarkResults: ref([]),
         } as unknown as ModalProps['analyzerApi'],
-        cliProfilesApi: {
-          identityFor: () => null,
-          profilesForAgent: () => [],
-        } as unknown as ModalProps['cliProfilesApi'],
+        cliProfilesApi,
       },
       global: {
         plugins: [i18n],
@@ -396,5 +397,19 @@ describe('Settings CLI agent cards and drawer', { timeout: 15000 }, () => {
       .toContain(i18n.global.t('settings.cliAgents.chip.push-off'))
     await openAgent('qwen')
     expect((wrapper!.get('#cli-panel-push input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  // A CLI signed in from its own pane (Antigravity writes the macOS Keychain,
+  // not the file the backend watches) sends no change event, so Settings must
+  // re-read the account store itself or the card keeps saying signed out.
+  it('re-reads the account store when the CLI agents or accounts page opens', async () => {
+    const refresh = vi.fn(async () => {})
+    const api = { identityFor: () => null, profilesForAgent: () => [], refresh } as unknown as ModalProps['cliProfilesApi']
+    await mountModal('cliAgents', false, {}, api)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    await (wrapper!.vm as unknown as { setSection: (tab: string, section: string) => Promise<void> })
+      .setSection('accounts', '')
+    await flushPromises()
+    expect(refresh).toHaveBeenCalledTimes(2)
   })
 })

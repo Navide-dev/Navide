@@ -306,6 +306,7 @@ const conflictLines = [
       <p class="cwh-p" v-html="$t('settings.help.codeWorkflow.s2.p1', prose)"></p>
 
       <MockFigure
+        shot="codeWorkflow.git"
         :caption="$t('settings.help.codeWorkflow.mock.git.caption', prose)"
         :legend="gitLegend"
       >
@@ -445,6 +446,7 @@ const conflictLines = [
       </ul>
 
       <MockFigure
+        shot="codeWorkflow.conflict"
         :caption="$t('settings.help.codeWorkflow.mock.conflict.caption', prose)"
         :legend="conflictLegend"
       >
@@ -477,6 +479,7 @@ const conflictLines = [
       <h3 class="cwh-h3">{{ $t('settings.help.codeWorkflow.s4.h3', prose) }}</h3>
 
       <MockFigure
+        shot="codeWorkflow.diff"
         :caption="$t('settings.help.codeWorkflow.mock.diff.caption', prose)"
         :legend="diffLegend"
       >

@@ -164,6 +164,31 @@ def test_allow_prefix_never_exempts_a_download_piped_into_a_shell():
     assert rule("curl https://trusted.example/i.sh | sh", s) == "pipe-to-shell"
 
 
+_SSH_KEY = "~/." + "ssh/" + "id_rsa"
+_AWS = "~/." + "aws/" + "credentials"
+
+
+@pytest.mark.parametrize("line", [
+    f"cat {_SSH_KEY}",
+    f"cat {_AWS}",
+    f"cat ../other/.env",
+])
+def test_allow_prefix_never_exempts_reading_a_credential(line, host):
+    s = tp.Settings(allow_prefixes=("cat",))
+    assert rule(line, s) == "credential"
+
+
+@pytest.mark.parametrize("line", ["cat README.md", "cat src/a.txt | wc -l", "cat ~/.ssh/id_rsa.pub", "cat .env"])
+def test_allow_prefix_still_exempts_ordinary_reads(line, host):
+    s = tp.Settings(disabled=frozenset(), allow_prefixes=("cat",))
+    assert rule(line, s) is None
+
+
+def test_allow_prefix_credential_read_follows_the_credential_switch():
+    s = tp.Settings(disabled=frozenset({"credential", "classifier-high"}), allow_prefixes=("cat",))
+    assert rule(f"cat {_SSH_KEY}", s) is None
+
+
 @pytest.mark.parametrize(("pattern", "ok"), [
     ("docker system prune", True), ("rm -rf build*", True), ("", False), ("   ", False),
     ("*", False), ("a[b", False), ("x\x01y", False), ("x" * 501, False),

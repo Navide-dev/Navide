@@ -3,6 +3,9 @@
 `created: 2026-01-01` loads as a ``datetime.date``. If that value reaches the
 response frame the child cannot serialise it, the request thread dies, and the
 Host waits out its 30 s call timeout and withdraws Plans for the session.
+
+These run the pinned, staged navide.plans backend the Host ships
+(tests/staged_plugin_backend.py); Navide-dev/navide-plans tests its sources.
 """
 
 from __future__ import annotations
@@ -17,8 +20,9 @@ from typing import Any
 
 import pytest
 
+from tests.staged_plugin_backend import staged_backend_command, wait_until_healthy
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-BACKEND_ENTRY = REPOSITORY_ROOT / "plugins" / "navide-plans" / "backend" / "plans_backend.py"
 PROTOCOL_REVISION = "2026-07-28"
 SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo"
 
@@ -58,7 +62,7 @@ DOCUMENT = (
 @pytest.fixture
 def child() -> Any:
     process = subprocess.Popen(
-        [sys.executable, "-B", str(BACKEND_ENTRY)],
+        staged_backend_command("navide.plans", "navide-plans"),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -74,6 +78,7 @@ def child() -> Any:
     threading.Thread(target=pump, daemon=True).start()
     process.frames = frames  # type: ignore[attr-defined]
     try:
+        wait_until_healthy(process, frames, CLIENT_META)
         yield process
     finally:
         process.kill()

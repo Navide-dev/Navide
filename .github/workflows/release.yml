@@ -77,7 +77,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
 
@@ -103,7 +103,9 @@ jobs:
           bun run typecheck
           bun run test:run
           bun run test:packaged-plans
-          uv --project backend run --locked pytest backend/tests
+          # test:packaged-plans staged the official plugins: the Host contract
+          # tests against their backends must run, not skip.
+          NAVIDE_TEST_STAGED_PLUGINS=1 uv --project backend run --locked pytest backend/tests
 
       - name: Build Python backend
         working-directory: backend
@@ -167,8 +169,8 @@ jobs:
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans"
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans-go"
           # …and the exact selected v2 factory package carries its arm64 backend.
-          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          artifact_version="$(node -p "/'navide\\.plans': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"
           # The voice sidecar is a loose Mach-O in Resources/bin; it must carry
@@ -290,7 +292,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-suffix: release-linux
@@ -374,8 +376,8 @@ jobs:
           test -d "${work}/squashfs-root/resources/bin/agent_team_backend/_internal"
           file "${backend}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
-          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          artifact_version="$(node -p "/'navide\\.plans': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-x64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -501,7 +503,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-suffix: package-linux-arm64
@@ -584,8 +586,8 @@ jobs:
           test -d "${work}/squashfs-root/resources/bin/agent_team_backend/_internal"
           file "${backend}" | grep -q 'ELF 64-bit.*aarch64'
           # …and the selected v2 Plans package carries its Linux backend.
-          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          artifact_version="$(node -p "/'navide\\.plans': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-arm64/package/backend/navide-plans"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.browser/${browser_version}/linux-arm64/package/backend/navide-browser"
           rm -rf "${work}"
@@ -646,7 +648,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-suffix: release-windows-gates-${{ matrix.arch }}
@@ -664,6 +666,19 @@ jobs:
         run: |
           uv --project backend run --locked ruff check backend
           uv --project backend run --locked pytest backend/tests --shard ${{ matrix.shard }}
+
+      # The cli_regression harness archives each backend's log (and, under
+      # NAVIDE_SHUTDOWN_DIAG, a hung one's stack dump) into test-results/ci/,
+      # as the CI backend jobs upload it; without this a red leg here leaves
+      # only the assertion, not where the backend stopped.
+      - name: Upload diagnostic artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: release-windows-gates-${{ matrix.arch }}-${{ strategy.job-index }}-diagnostics
+          path: test-results/ci/
+          retention-days: 7
 
   release-windows-x64:
     if: github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
@@ -717,7 +732,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-suffix: release-windows
@@ -778,10 +793,11 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
-          # No signing yet: there is no Windows code-signing certificate, so
-          # SmartScreen will warn on first run and electron-updater installs
-          # updates without verifying a signature. `--publish never` still
-          # writes latest.yml, which the NSIS updater reads.
+          # Always unsigned here: CI never holds a Windows signing credential.
+          # The installer is signed afterwards on the release manager's Mac
+          # (scripts/sign-windows-local.mjs, docs/en-US/releases.md "Windows
+          # code signing"). Unsigned, SmartScreen warns on first run.
+          # `--publish never` still writes latest.yml, which the NSIS updater reads.
           # electron-builder runs under Node on Windows: under Bun it hangs after
           # the icons-bundle download, in the step that edits Navide.exe's
           # resources (dry run 39303269789). Install and build stay on Bun.
@@ -806,8 +822,8 @@ jobs:
           echo "longest installed path: ${longest} + 64"
           test "$(( longest + 64 ))" -lt 230
           test -f dist-release/win-unpacked/resources/bin/navide-hello.exe
-          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          artifact_version="$(node -p "/'navide\\.plans': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.browser/${browser_version}/win32-x64/package/backend/navide-browser.exe"
 
@@ -892,7 +908,7 @@ jobs:
           python-version: '3.12'
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           enable-cache: true
           cache-suffix: release-windows-arm64
@@ -957,8 +973,7 @@ jobs:
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
-          # Unsigned for the same reason the x64 build is: there is no Windows
-          # code-signing certificate yet.
+          # Always unsigned, like the x64 build: signing happens locally.
           # electron-builder runs under Node on Windows: under Bun it hangs after
           # the icons-bundle download, in the step that edits Navide.exe's
           # resources (dry run 39303269789). Install and build stay on Bun.
@@ -983,8 +998,8 @@ jobs:
           longest="$(cd dist-release/win-arm64-unpacked && find . -type f | sed 's#^\./##' | awk '{ if (length > m) m = length } END { print m }')"
           echo "longest installed path: ${longest} + 64"
           test "$(( longest + 64 ))" -lt 230
-          artifact_version="$(node -p "require('./plugins/navide-plans/manifest.json').version")"
-          browser_version="$(node -p "require('./plugins/navide-browser/manifest.json').version")"
+          artifact_version="$(node -p "/'navide\\.plans': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
+          browser_version="$(node -p "/'navide\\.browser': '([^']+)'/.exec(require('fs').readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))[1]")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
           test -f "${plans_backend}"
           browser_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.browser/${browser_version}/win32-arm64/package/backend/navide-browser.exe"
@@ -1049,7 +1064,11 @@ jobs:
     # assets back from GitHub rather than from each job's dist-release means
     # the mirror carries exactly what GitHub will serve — including the
     # Windows latest.yml after the arm64 job merged itself into it.
-    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
+    # With the WINDOWS_SIGN_LOCALLY variable set to true, this and the publish
+    # job are skipped so the release stays a draft until the Windows
+    # installers are signed locally; scripts/sign-windows-local.mjs then runs
+    # mirror.yml itself.
+    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49' && vars.WINDOWS_SIGN_LOCALLY != 'true'
     needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-arm64]
     uses: ./.github/workflows/mirror.yml
     with:
@@ -1064,7 +1083,9 @@ jobs:
     # release-windows-arm64 already implies it, so the dependency is explicit.
     # Any failure upstream skips this job and leaves the release a draft; a
     # "Re-run failed jobs" on the run finishes it once the cause is fixed.
-    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
+    # Skipped under WINDOWS_SIGN_LOCALLY (see mirror-release): the release
+    # manager publishes after signing.
+    if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49' && vars.WINDOWS_SIGN_LOCALLY != 'true'
     needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-gates, release-windows-x64, release-windows-arm64, mirror-release]
     name: Publish the GitHub Release
     runs-on: ubuntu-22.04

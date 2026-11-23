@@ -271,3 +271,41 @@ def test_docstring_no_longer_says_ok_means_only_that_the_pane_exists() -> None:
     doc = plan_mcp.cli_open_agent.__doc__ or ""
     assert "kickoff" in doc
     assert "`ok: true` means the PANE EXISTS — not that the task arrived" not in doc
+
+
+ADD_DIR_PROMPT = (
+    "Adding a new directory:\n/Users/u/elsewhere\nThis session hasn't worked here before. "
+    "Is this a directory you created or one you trust?\n❯ No, exit\n  Yes, add it\n"
+    "Enter to confirm · Esc to cancel"
+)
+
+
+@pytest.mark.asyncio
+async def test_open_agent_reports_a_launch_prompt_it_did_not_answer(
+    captured: list[dict[str, Any]],
+) -> None:
+    """A CLI stopped on a launch prompt off the allowlist: the window holds the
+    task, and the caller gets the prompt with the fingerprint cli_answer_prompt
+    checks — never a resend hint, which would double the held task."""
+    agent_messaging.register("pa", "lead", "/ws/alpha", agent_key="claude")
+    options = ["No, exit", "Yes, add it"]
+
+    async def window() -> None:
+        request_id = await _answer_spawn()
+        plan_mcp.resolve_kickoff(request_id, {
+            "pane_id": "child-1", "kickoff": "blocked-by-prompt",
+            "reason": "Claude asks to add /Users/u/elsewhere, which Navide did not hand this pane",
+            "prompt": ADD_DIR_PROMPT, "options": options,
+        })
+
+    task = asyncio.create_task(window())
+    result = await plan_mcp.cli_open_agent("claude", "reviewer", "review the PR", _ctx())
+    await task
+
+    assert result["ok"] is True
+    assert result["kickoff"] == "blocked-by-prompt"
+    assert result["prompt"] == ADD_DIR_PROMPT
+    assert result["options"] == options
+    assert result["prompt_fingerprint"] == plan_mcp._prompt_fingerprint(ADD_DIR_PROMPT, options)
+    assert "cli_answer_prompt" in result["hint"] and "do NOT resend" in result["hint"]
+    assert "did not hand this pane" in " ".join(result["advisories"])

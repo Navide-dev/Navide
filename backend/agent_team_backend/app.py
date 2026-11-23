@@ -5,6 +5,7 @@ import base64
 import functools
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -141,6 +142,7 @@ from .plugins import wiring as plugin_wiring
 from .plugins.host import PluginHost
 from . import ws_handlers
 from . import acp_ws  # registers the acp.* requests; ACP on disconnect, janitor and shutdown
+from . import remote_devcontainer_ws  # noqa: F401 — registers remote_devcontainer.* requests
 from .git_watcher import GitWatcher
 
 log = logging.getLogger("agent_team_backend")
@@ -163,8 +165,8 @@ app = FastAPI(
 #: same-origin with 127.0.0.1 still arrives here as ``Host: evil.com``. The
 #: /ws handshake already refuses a web Origin (see ws_auth); this is the same
 #: defence for the HTTP routes, which non-browser clients reach without ever
-#: sending an Origin at all.
-_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+#: sending an Origin at all. IP literals are accepted separately (see below).
+_LOCAL_HOSTNAMES = frozenset({"localhost"})
 
 
 def is_local_host_header(host_header: str) -> bool:
@@ -178,8 +180,24 @@ def is_local_host_header(host_header: str) -> bool:
     ``~/.claude/settings.json`` resolve the port from the port file at run
     time, and one pointing at a previous run must fail as a connection error
     rather than be rejected here as the wrong host.
+
+    Any IP literal is accepted. Rebinding needs a hostname the attacker's DNS
+    answers for; a browser that sends ``Host: 172.17.0.1`` connected to that
+    address itself, and this socket only listens on loopback, so the request
+    can only have come through loopback anyway. A devcontainer on a Docker
+    bridge network reaches us through the ssh reverse tunnel bound on its
+    gateway, and its Host is that gateway address.
     """
-    return urlparse(f"//{host_header or ''}").hostname in _LOCAL_HOSTS
+    hostname = urlparse(f"//{host_header or ''}").hostname
+    if not hostname:
+        return False
+    if hostname in _LOCAL_HOSTNAMES:
+        return True
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    return True
 
 
 @app.middleware("http")
@@ -385,18 +403,102 @@ _credential_watcher: CredentialWatcher | None = None
 _SESSIONS: set["Session"] = set()
 
 
+#: Longest one window may take to accept one broadcast event. A window that is
+#: not reading (a hung renderer, a full socket) misses that event rather than
+#: holding up the other windows and the caller; its ws ping closes it if it is
+#: really gone.
+BROADCAST_SEND_TIMEOUT_S = 10.0
+#: Broadcasts allowed in flight at once. Past it a broadcast is delivered in
+#: the caller's own task, as before this existed, so a flood of events cannot
+#: grow without bound.
+MAX_DETACHED_BROADCASTS = 512
+#: In-flight broadcasts, held so a task is not garbage-collected mid-send;
+#: each removes itself when done.
+_BROADCASTS: set["asyncio.Task[None]"] = set()
+_broadcast_cap_logged = False
+
+
+async def _send_within_timeout(session: "Session", event: dict[str, Any]) -> None:
+    try:
+        await asyncio.wait_for(session.send_json(event), BROADCAST_SEND_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        log.warning(
+            "broadcast %s to session %#x timed out after %.0fs; that window misses it",
+            event.get("type", "?"), id(session), BROADCAST_SEND_TIMEOUT_S,
+        )
+    except Exception as err:  # noqa: BLE001
+        # send_json already marks dead + discards on send failure; this is
+        # a defensive net for anything unexpected it re-raised.
+        log.warning("broadcast send failed: %s", err)
+        _SESSIONS.discard(session)
+
+
+async def _deliver(sends: list[tuple["Session", dict[str, Any]]]) -> None:
+    await asyncio.gather(*(_send_within_timeout(session, event) for session, event in sends))
+
+
+async def _deliver_detached(sends: list[tuple["Session", dict[str, Any]]]) -> None:
+    """Send each (session, event), in a task of its own: a broadcast that has
+    started is finished even if the task that asked for it is cancelled.
+
+    ws_endpoint cancels a closed connection's handler tasks, and about fifty
+    handlers answer their requester before telling every other window
+    (leftover-bugs-0243 report-c): a requester hanging up in between left the
+    other windows without the update. The caller still waits for delivery, so
+    two broadcasts in a row still arrive in order, and still sees its own
+    cancellation. Windows are sent to concurrently, each within
+    BROADCAST_SEND_TIMEOUT_S."""
+    global _broadcast_cap_logged
+    if not sends:
+        return
+    if len(_BROADCASTS) >= MAX_DETACHED_BROADCASTS:
+        if not _broadcast_cap_logged:
+            _broadcast_cap_logged = True
+            log.warning("%d broadcasts in flight; delivering the next ones in their callers' tasks", len(_BROADCASTS))
+        await _deliver(sends)
+        return
+    _broadcast_cap_logged = False
+    task = asyncio.create_task(_deliver(sends))
+    _BROADCASTS.add(task)
+    task.add_done_callback(_BROADCASTS.discard)
+    await asyncio.shield(task)
+
+
 async def broadcast(event: dict[str, Any], *, exclude: "Session | None" = None) -> None:
-    """Fire-and-forget send to every connected session (optionally minus one)."""
-    for session in list(_SESSIONS):
-        if session is exclude:
-            continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            # send_json already marks dead + discards on send failure; this is
-            # a defensive net for anything unexpected it re-raised.
-            log.warning("broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+    """Send to every connected session (optionally minus one), to its end
+    even if the caller is cancelled meanwhile (see _deliver_detached)."""
+    await _deliver_detached([(session, event) for session in list(_SESSIONS) if session is not exclude])
+
+
+async def drain_broadcasts(timeout: float = 2.0) -> None:
+    """Shutdown: let in-flight broadcasts, and the handler work running past
+    its requester (ws_handlers._outlive_requester), finish for up to
+    ``timeout`` in all, then cancel the rest.
+
+    That handler work usually ends in a broadcast of its own, so the set is
+    read again after each wait: a broadcast a finishing handler started is
+    given what is left of the same deadline."""
+    from . import ws_handlers
+
+    def running() -> list[asyncio.Future[Any]]:
+        detached = (*_BROADCASTS, *ws_handlers._OUTLIVING_REQUESTER, *ws_handlers._PROFILE_BROADCASTS)
+        return [task for task in detached if not task.done()]
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    pending = running()
+    while pending and (left := deadline - loop.time()) > 0:
+        await asyncio.wait(pending, timeout=left)
+        pending = running()
+    if not pending:
+        return
+    log.warning(
+        "shutdown: %d broadcasts or handler tails still running after %.1fs; cancelling them",
+        len(pending), timeout,
+    )
+    for task in pending:
+        task.cancel()
+    await asyncio.wait(pending)
 
 
 _tokens_version = 0
@@ -415,6 +517,7 @@ async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[st
     path = workspace_path or ""
     notice = make_event("tokens.notice", {"workspace_path": path, "version": _tokens_version})
     full: dict[str, Any] | None = None
+    sends: list[tuple[Session, dict[str, Any]]] = []
     for session in list(_SESSIONS):
         watch = session.tokens_watch
         if watch is None:
@@ -426,11 +529,8 @@ async def broadcast_tokens_changed(workspace_path: str | None, snapshot: dict[st
             event = notice
         else:
             continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            log.warning("broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+        sends.append((session, event))
+    await _deliver_detached(sends)
 
 
 async def unicast_to(session: "Session | None", event: dict[str, Any]) -> bool:
@@ -491,14 +591,10 @@ def is_main_window(session: "Session") -> bool:
 async def broadcast_main_windows(event: dict[str, Any]) -> None:
     """Send *event* to every connected main window only (not plugin, editor
     or other WS clients): for records naming a requester's pane and workspace."""
-    for session in list(_SESSIONS):
-        if session.dead or not is_main_window(session):
-            continue
-        try:
-            await session.send_json(event)
-        except Exception as err:  # noqa: BLE001
-            log.warning("main-window broadcast send failed: %s", err)
-            _SESSIONS.discard(session)
+    await _deliver_detached([
+        (session, event) for session in list(_SESSIONS)
+        if not session.dead and is_main_window(session)
+    ])
 
 
 async def nudge_plugin_request_recovery(session: "Session") -> None:
@@ -546,11 +642,30 @@ def live_main_window_ids() -> set[str]:
     }
 
 
+#: Counts host.register successes, so the newest Host registration is known.
+_host_registrations = 0
+
+
+def note_host_registration(session: "Session") -> None:
+    """Stamp a session that just registered as the Host (see host.register)."""
+    global _host_registrations
+    _host_registrations += 1
+    session.host_registration = _host_registrations
+
+
 async def unicast_host(event: dict[str, Any]) -> bool:
-    """Send one internal agent request to the authenticated Electron Host."""
-    for session in list(_SESSIONS):
-        if session.dead or not session.host_authenticated:
-            continue
+    """Send one internal agent request to the authenticated Electron Host.
+
+    The newest registration first: the Host keeps one connection and registers it again
+    on every reconnect, so an older authenticated session is one it has left. The backend
+    may not have seen that socket close yet (Windows, while the Host reconnects at
+    startup), and a request sent there is never answered."""
+    hosts = sorted(
+        (s for s in list(_SESSIONS) if not s.dead and s.host_authenticated),
+        key=lambda s: s.host_registration,
+        reverse=True,
+    )
+    for session in hosts:
         try:
             await session.send_json(event)
         except Exception as err:  # noqa: BLE001
@@ -700,6 +815,8 @@ class Session:
         # handoffs. The bearer is registered over this WebSocket and never
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
+        # Order of the host.register that authenticated it (note_host_registration).
+        self.host_registration = 0
         self.plans_backend_v2 = False
         # Built-in Navide plugins the user disabled, as the Host registered them.
         self.disabled_plugins: frozenset[str] = frozenset()
@@ -1212,6 +1329,9 @@ _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
 _plugin_audit_task: "asyncio.Task[None] | None" = None
 _session_archive_task: "asyncio.Task[None] | None" = None
 _frozen_keepalive_task: "asyncio.Task[None] | None" = None
+_mcp_connect_watch_task: "asyncio.Task[None] | None" = None
+_parked_message_watch_task: "asyncio.Task[None] | None" = None
+_PARKED_MESSAGE_SWEEP_S = 60.0
 
 _SESSION_ARCHIVE_FIRST_S = 600
 _SESSION_ARCHIVE_EVERY_S = 86_400
@@ -1236,6 +1356,90 @@ async def _session_archive_loop() -> None:
             except Exception as err:  # noqa: BLE001 — the loop must survive
                 log.warning("session archive pass failed: %s", err)
         await asyncio.sleep(_SESSION_ARCHIVE_EVERY_S)
+
+
+@app.on_event("shutdown")
+async def _drain_broadcasts() -> None:
+    """Broadcasts still in flight get a moment to finish, then are cancelled."""
+    await drain_broadcasts()
+
+
+@app.on_event("shutdown")
+async def _stop_mcp_connect_watch() -> None:
+    for task in (_mcp_connect_watch_task, _parked_message_watch_task):
+        if task is not None:
+            task.cancel()
+
+
+async def _parked_message_watch() -> None:
+    """Every minute: a cli_send still parked on a restore placeholder after 10
+    minutes goes to the windows once (agent_msg.parked_overdue), which tell
+    the user and offer to open the pane."""
+    from .mcp_server import server as plan_mcp
+
+    while True:
+        await asyncio.sleep(_PARKED_MESSAGE_SWEEP_S)
+        for item in plan_mcp.take_overdue_parked():
+            try:
+                await broadcast(make_event("agent_msg.parked_overdue", item))
+            except Exception as err:  # noqa: BLE001 — the loop must survive
+                log.warning("parked message notice failed: %s", err)
+
+
+async def _notify_mcp_connected(pane_id: str) -> None:
+    """A pane reported never-connected has connected after all: drop its badge."""
+    await broadcast(make_event("mcp.connected", {"pane_id": pane_id}))
+
+
+async def _notify_mcp_never_connected(entry: Any) -> None:
+    """A pane's CLI has been up for minutes without reaching /plan-mcp: the
+    windows badge it and toast, the bound chats get one notice."""
+    await broadcast(make_event("mcp.never_connected", {
+        "pane_id": entry.pane_id,
+        "name": entry.name,
+        "workspace_path": entry.workspace_path,
+        "agent_key": entry.agent_key,
+    }))
+    from .channels import get_manager
+
+    manager = get_manager()
+    if manager is not None:
+        await manager.notify_mcp_never_connected(entry.name)
+
+
+async def _notify_mcp_disconnected(entry: Any) -> None:
+    """A pane's CLI was connected to /plan-mcp, lost its stream and stopped
+    trying (2026-11-15 loop stall): badge, toast and one chat notice, like
+    never-connected."""
+    await broadcast(make_event("mcp.disconnected", {
+        "pane_id": entry.pane_id,
+        "name": entry.name,
+        "workspace_path": entry.workspace_path,
+        "agent_key": entry.agent_key,
+    }))
+    from .channels import get_manager
+
+    manager = get_manager()
+    if manager is not None:
+        await manager.notify_mcp_disconnected(entry.name)
+
+
+async def _auto_reconnect_mcp(entry: Any) -> bool:
+    """Ask the window holding a flagged pane to type `/mcp reconnect navide`
+    into it (ui.pane.reconnectMcp, in place only — never a rebuild). True when
+    the window says it went in; anything else is retried on a later sweep."""
+    from .mcp_server import server as plan_mcp
+
+    reply = await plan_mcp._ui_request(
+        entry.workspace_path,
+        "invoke",
+        caller=plan_mcp._Caller(kind="host"),
+        action="ui.pane.reconnectMcp",
+        args={"paneId": entry.pane_id, "auto": True},
+        route_pane_id=entry.pane_id,
+    )
+    result = reply.get("result") if reply.get("ok") else None
+    return isinstance(result, dict) and result.get("sent") is True
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -2679,6 +2883,24 @@ async def _start_log_watcher() -> None:
     global _session_archive_task
     _session_archive_task = asyncio.create_task(_session_archive_loop())
 
+    # Panes whose CLI never reached /plan-mcp (2026-11-12 mass restore): tell
+    # the windows and the bound chats once per pane.
+    from . import mcp_connect_watch
+
+    global _mcp_connect_watch_task, _parked_message_watch_task
+    _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
+        _notify_mcp_never_connected, _notify_mcp_connected, _notify_mcp_disconnected,
+        _auto_reconnect_mcp,
+    ))
+    # A stall longer than the CLIs' reconnect budget: re-check their streams
+    # as soon as the loop is back.
+    main_loop = asyncio.get_running_loop()
+    loop_watchdog.on_recovery(
+        lambda stalled_s: main_loop.call_soon_threadsafe(mcp_connect_watch.note_stall, stalled_s)
+    )
+    # A cli_send parked on a restore placeholder for 10 minutes: tell the user.
+    _parked_message_watch_task = asyncio.create_task(_parked_message_watch())
+
     # Frozen onefile build only: keep the extraction directory from being
     # purged as idle temp while the backend stays up (see frozen_env).
     from . import frozen_env
@@ -2848,6 +3070,14 @@ async def _start_log_watcher() -> None:
         await mcp_server.startup()
     except Exception as err:  # noqa: BLE001
         log.warning("MCP server startup failed: %s", err)
+    # The same endpoint on a loop of its own, before anything is wired to it:
+    # a stalled main loop no longer drops the CLIs' connections.
+    from .mcp_server import own_loop as mcp_own_loop
+
+    try:
+        await mcp_own_loop.start()
+    except Exception as err:  # noqa: BLE001 — the main port still serves
+        log.warning("plan-mcp own loop failed to start: %s", err)
     try:
         await asyncio.to_thread(mcp_server_wiring.write_claude_config_for_current_port)
     except Exception as err:  # noqa: BLE001
@@ -2934,6 +3164,12 @@ async def _stop_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("plugin shutdown hooks failed: %s", err)
     log.info("shutdown: plugin hooks done")
+    from .mcp_server import own_loop as mcp_own_loop
+
+    try:
+        await mcp_own_loop.stop()
+    except Exception as err:  # noqa: BLE001
+        log.warning("plan-mcp own loop shutdown failed: %s", err)
     try:
         await mcp_server.shutdown()
     except Exception as err:  # noqa: BLE001
@@ -3177,6 +3413,27 @@ def _hook_tool_key(payload: dict) -> str:
 _WRITE_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit"})
 
 
+def _is_shell_tool(payload: dict) -> bool:
+    """Whether a tool-result payload is of a tool the Shipped Log reads."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    return str(payload.get("tool_name") or "") in deploy_detect.SHELL_TOOLS
+
+
+def _note_ship_detection(vendor: str, pane_id: str, ws_path: str, event_kind: str, payload: dict) -> int | None:
+    """Hand a tool result to the Shipped Log's deploy-command detector, unless
+    the user turned the plugin off. Returns the recorded row id or None."""
+    from .plugins.builtin.navide_shipped_log import deploy_detect
+
+    if deploy_detect.PLUGIN_ID in host_disabled_plugins():
+        return None
+    pane = agent_messaging.current(pane_id)
+    return deploy_detect.observe(
+        ws_path, pane=str(getattr(pane, "name", "") or pane_id), vendor=vendor,
+        ok=event_kind == "post_tool_use", payload=payload,
+    )
+
+
 def _record_hook_file_write(
     vendor: str,
     pane_id: str,
@@ -3408,6 +3665,14 @@ async def cli_hook(vendor: str, request: Request) -> Any:
                 )
         except Exception as err:  # noqa: BLE001
             log.warning("preview record from %s hook failed: %s", vendor, err)
+    if event_kind in _TOOL_RESULT_EVENTS and pane_id and ws_path and _is_shell_tool(payload):
+        # Shipped Log: a deploy command that just ran is recorded as an
+        # unconfirmed hint. Records only; this answer never reaches the CLI.
+        # Checked here first so most tool results never queue for the db thread.
+        try:
+            await run_in_db_thread(_note_ship_detection, vendor, pane_id, ws_path, event_kind, payload)
+        except Exception as err:  # noqa: BLE001
+            log.warning("shipped-log detection from %s hook failed: %s", vendor, err)
     # Stop-hook delivery: a claude pane with a message waiting is told to keep
     # going and act on it, instead of stopping and being typed at afterwards.
     # Only claude, because only its Stop hook can block — and only its hook

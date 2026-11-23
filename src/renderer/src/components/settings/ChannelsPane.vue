@@ -29,7 +29,7 @@ import { channelsBotRequest, takeChannelsBotRequest, type ChannelsBotTarget } fr
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelAccessRows from './ChannelAccessRows.vue'
 import ChannelAgentRequests from './ChannelAgentRequests.vue'
-import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
+import ChannelBotNav, { type ChannelNavGroup, type ChannelNavGroupAction, type ChannelNavGrouping, type ChannelNavItem, type ChannelNavSort } from './ChannelBotNav.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -103,6 +103,8 @@ const quickInvite = reactive<Record<string, ChannelLinkInvite>>({})
 const quickCopied = reactive<Record<string, boolean>>({})
 // Added, but no invite reached the link guide: the row says to link from the guide.
 const quickAdded = reactive<Record<string, boolean>>({})
+// Added, but another program polls the same bot (409): shown until the bot connects.
+const quickConflict = reactive<Record<string, boolean>>({})
 const QUICK_STEPS: readonly QuickStep[] = ['verifying', 'opening', 'waiting', 'done']
 // Creating a bot through a managing Telegram bot: the row asking for the disclosure to be
 // confirmed, the request each manager row waits on, and why the last one failed.
@@ -335,16 +337,18 @@ async function quickAdd(spec: RegisteredChannelPlatform, bot: BotRow): Promise<v
     const linkTarget = primary?.opensLink ? primary.target : undefined
     errorByBot[bot.key] = ''
     delete quickAdded[bot.key]
+    delete quickConflict[bot.key]
     quickStep[bot.key] = 'verifying'
     const res = await store.quickAdd(spec.id, req.config, req.secret ?? {}, bot.account, linkTarget)
     if (!res.ok || !res.data) {
       delete quickStep[bot.key]
       const error = res.error ?? t('channels.error.generic')
-      errorByBot[bot.key] = res.reason === 'rejected' || res.reason === 'timeout'
+      errorByBot[bot.key] = res.reason === 'rejected' || res.reason === 'network' || res.reason === 'timeout'
         ? t(`channels.quick.${res.reason}`, { platform: platformName(spec.id), error })
         : error
       return
     }
+    if (res.data.warning === 'conflict') quickConflict[bot.key] = true
     closeForm(spec, bot)
     const agent = agentAdd[bot.key]
     if (agent) {
@@ -427,7 +431,7 @@ function managedFailureText(ev: ChannelManagedCreatedEvent): string {
   if (ev.reason === 'token_unavailable') return t('channels.managed.token-unavailable')
   if (ev.reason === 'creator_not_linked') return t('channels.managed.creator-not-linked')
   const error = ev.error || t('channels.error.generic')
-  const text = ev.reason === 'rejected' || ev.reason === 'timeout'
+  const text = ev.reason === 'rejected' || ev.reason === 'network' || ev.reason === 'timeout'
     ? t(`channels.quick.${ev.reason}`, { platform: platformName('telegram'), error })
     : error
   // The bot exists in Telegram even though it was not added: a blind retry makes a second one.
@@ -706,6 +710,36 @@ function botWorkspace(bot: BotRow): string {
   return newest ? newest.workspace_name || newest.workspace_path : ''
 }
 
+// Telegram's "Create a New Bot" on its group's header line, outside any one bot's card:
+// shown while a switched-on bot reports Bot Management Mode (getMe's can_manage_bots),
+// usable through the ones connected now. The card and ⋯ menu keep their own entries.
+const managedAction = computed<ChannelNavGroupAction | undefined>(() => {
+  if (!store.enabled.value) return undefined
+  const spec = specs.value.find((s) => s.id === 'telegram')
+  if (!spec) return undefined
+  const holders = botsOf('telegram').filter((b) => b.configured && b.enabled && b.status.can_manage_bots === true)
+  if (!holders.length) return undefined
+  const ready = holders.filter((b) => isConnected(b) && !managedWaiting[b.key])
+  // The row the user picked (not activeView, whose default is computed from navGroups).
+  const chosen = ready.find((b) => b.key === picked.value)
+  return {
+    badge: spec.badge,
+    label: t('channels.managed.create'),
+    disabled: busy.value || !ready.length,
+    note: holders.some((b) => isConnected(b)) ? '' : t('channels.managed.offline'),
+    choices: (chosen ? [chosen] : ready).map((b) => ({
+      key: b.key,
+      label: t('channels.managed.create-via', { bot: b.status.identity || botLabel(b) }),
+    })),
+  }
+})
+
+// Through the bot picked: its card opens on the same confirmation its own button opens.
+function runManagedAction(_group: string, key: string): void {
+  show(key)
+  managedAsk.value = key
+}
+
 const navGroups = computed<ChannelNavGroup[]>(() => {
   const groups = specs.value
     .map((spec) => ({
@@ -717,19 +751,22 @@ const navGroups = computed<ChannelNavGroup[]>(() => {
   const list: ChannelNavGroup[] = groups.flatMap(({ spec, bots }) => {
     const items = new Map(bots.map((b) => [b.key, navItem(spec, b)]))
     const sorted = sortBots(bots, items)
-    const platformLabel = named ? platformName(spec.id) : ''
+    const action = spec.id === 'telegram' ? managedAction.value : undefined
+    // A group carrying an action keeps its platform name, even as the only platform.
+    const platformLabel = named || action ? platformName(spec.id) : ''
     if (navGrouping.value !== 'workspace') {
-      return [{ id: spec.id, label: platformLabel, items: sorted.map((b) => items.get(b.key)!) }]
+      return [{ id: spec.id, label: platformLabel, items: sorted.map((b) => items.get(b.key)!), action }]
     }
     // Platform outside, workspace inside; the unbound ones last.
     const byWorkspace = new Map<string, BotRow[]>()
     for (const b of sorted) byWorkspace.set(botWorkspace(b), [...(byWorkspace.get(botWorkspace(b)) ?? []), b])
     const names = [...byWorkspace.keys()].filter(Boolean).sort((a, b) => a.localeCompare(b))
     if (byWorkspace.has('')) names.push('')
-    return names.map((ws) => ({
+    return names.map((ws, i) => ({
       id: `${spec.id}:${ws}`,
       label: [platformLabel, ws || t('channels.bot.flag-unbound')].filter(Boolean).join(' · '),
       items: byWorkspace.get(ws)!.map((b) => items.get(b.key)!),
+      action: i === 0 ? action : undefined,
     }))
   })
   if (hasOrphans.value) {
@@ -856,6 +893,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
         :add-active="activeView === ADD_VIEW"
         @select="show"
         @add="show(ADD_VIEW)"
+        @action="runManagedAction"
       />
       <div class="ch-layout-detail" :class="{ 'ch-one': activeView !== ADD_VIEW }">
         <button
@@ -1021,6 +1059,7 @@ function removeEntry(entry: ChannelAllowEntry): void {
               >{{ t('channels.quick.copied-code', { platform: platformName(spec.id) }) }}</p>
             </template>
             <p v-else-if="quickAdded[bot.key]" class="ch-form-hint" data-testid="channel-quick-added">{{ t('channels.quick.added') }}</p>
+            <p v-if="quickConflict[bot.key] && !isConnected(bot)" class="ch-form-hint" data-testid="channel-quick-conflict">{{ t('channels.quick.conflict') }}</p>
 
             <div
               v-if="spec.id === 'telegram' && isConnected(bot) && (bot.status.can_manage_bots || managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"

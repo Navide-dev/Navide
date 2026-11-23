@@ -43,16 +43,18 @@ describe('a fresh restore batch has a ceiling', () => {
   })
 
   it('keeps the all-scope resume ceiling it already had', () => {
-    // The fix adds a case; it must not replace one.
+    // The fix adds a case; it must not replace one. (The ceiling itself became
+    // the prep-settled cold restore limit — App.coldRestoreStartingLimit.test.ts.)
     expect(advance).toContain(
-      'await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))'
+      'await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)'
     )
   })
 
-  it('leaves every other path unbounded, as before', () => {
+  it('leaves a UI-triggered restore unbounded, as before', () => {
     // A resume under 'single'/'page'/'tab' is already capped by the semaphore at
-    // whatever the user configured. A second ceiling of 2 would make their own
-    // setting slower, so those still go straight through.
+    // whatever the user configured, so a restore the user triggers still goes
+    // straight through. Only a cold one is held to the starting limit.
+    expect(advance).toContain("} else if (trigger !== 'cold') {")
     expect(advance).toContain('await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))')
   })
 

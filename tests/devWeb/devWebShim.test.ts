@@ -27,6 +27,19 @@ describe('dev web bridge', () => {
     expect(notices).toEqual(['updater.getState', 'getDetachedGroups', 'readKeybindings'])
   })
 
+  it('browses a sample Navide Marketplace without notices', async () => {
+    const { bridge, notices } = bridgeWith()
+    const list = await bridge.plugins.marketplaceSearch(undefined, 'downloads', {})
+    expect(list.items.length).toBeGreaterThan(0)
+    expect(list.items.every((item: { namespace: string }) => item.namespace === 'devweb-sample')).toBe(true)
+    const first = list.items[0]
+    const detail = await bridge.plugins.marketplaceDetail({ namespace: first.namespace, name: first.name })
+    expect(detail.identity).toBe(first.identity)
+    expect(detail.versions.length).toBeGreaterThan(0)
+    await expect(bridge.plugins.marketplaceIcon({})).resolves.toBeNull()
+    expect(notices).toEqual([])
+  })
+
   it('is never mistaken for a promise', () => {
     const { bridge } = bridgeWith()
     expect(bridge.then).toBeUndefined()

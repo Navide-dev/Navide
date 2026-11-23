@@ -52,6 +52,7 @@ import httpx
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed, InvalidStatus
 
+from . import proxy
 from .adapter_runtime import ReceiveLoop, error_text, send_request
 from .base import (
     STALL_WATCHDOG_S,
@@ -266,7 +267,8 @@ class FeishuAdapter:
 
     def _http(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0))
+            self._client = httpx.AsyncClient(base_url=self._base, timeout=httpx.Timeout(20.0, connect=10.0),
+                                             **proxy.client_options())
         return self._client
 
     async def start(self, emit: Emit) -> None:
@@ -312,7 +314,7 @@ class FeishuAdapter:
         await self._access_token(force=True)
         url, service_id = await self._endpoint()
         try:
-            async with ws_connect(url, max_size=None, ping_interval=None) as ws:
+            async with ws_connect(url, max_size=None, ping_interval=None, proxy=await proxy.ws_proxy(url)) as ws:
                 self._loop.mark_ready(await self._bot_name())
                 pinger = asyncio.create_task(self._ping(ws, service_id))
                 try:

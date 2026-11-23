@@ -674,6 +674,33 @@ async def test_delivery_failure_posts_notice(env: Env) -> None:
     await _until(lambda: any("pane-closed" in t for t in env.tg.texts()))
 
 
+async def test_delivery_failure_names_the_pane_and_offers_a_resend(env: Env) -> None:
+    """inject-failed 2026-11-15: the warning did not say which pane, and the text was gone."""
+    env.m._seams.pane_directory = lambda: [{"pane_id": "pane-1", "name": "Appletoken指揮"}]
+    await env.inbound("please do the thing")
+    env.fake.verdicts["k1"] = {"status": "failed", "reason": "inject-timeout"}
+    notice = "⚠️ 訊息沒有送進分格「Appletoken指揮」（inject-timeout）"
+    await _until(lambda: notice in env.tg.texts())
+    [(label, data)] = env.tg.buttons[notice]
+    assert label == "🔁 重送" and data.startswith("nv7:")
+
+    await env.inbound("", callback=data)
+    assert [d[1] for d in env.fake.delivered] == ["please do the thing", "please do the thing"]
+    # One press, one resend: the same button again is expired, not a third copy.
+    await env.inbound("", callback=data)
+    assert len(env.fake.delivered) == 2
+    assert env.tg.texts()[-1] == mgr_mod.MSG_RESEND_EXPIRED
+
+
+async def test_a_resend_button_only_works_in_its_own_chat(env: Env) -> None:
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "failed", "reason": "inject-failed"}
+    await _until(lambda: any(t.startswith("⚠️ 訊息沒有送進分格") for t in env.tg.texts()))
+    [(_, data)] = next(b for t, b in env.tg.buttons.items() if t.startswith("⚠️ 訊息沒有送進分格"))
+    await env.inbound("", callback=data, chat="-200")
+    assert len(env.fake.delivered) == 1
+
+
 async def test_held_gone_posts_notice(env: Env, monkeypatch) -> None:
     monkeypatch.setattr(mgr_mod, "HOLD_FAILURE_AFTER_S", 0.0)
     await env.inbound("go")
@@ -1497,8 +1524,10 @@ async def test_failed_relay_send_leaves_no_answerable_id(env: Env) -> None:
 class _Gate:
     def __init__(self) -> None:
         self.release = asyncio.Event()
+        self.entered = asyncio.Event()
 
     async def block(self, *args, **kwargs):
+        self.entered.set()
         await self.release.wait()
         return {"ok": True, "sent": True, "msg_key": "kx", "pane_id": "pane-1"}
 
@@ -1528,11 +1557,15 @@ async def test_stuck_seam_does_not_block_other_chats(env: Env, stuck: str) -> No
         first = "stop"
     else:
         first = "slow"
-    t0 = time.monotonic()
-    await env.inbound(first, wait=False)  # returns at once: the receive loop stays free
-    assert time.monotonic() - t0 < 0.2
-    await env.inbound("side ping", chat="-200", thread="", wait=False)
-    await _until(lambda: "side ping" in seen, timeout=1.0)
+    # Proved by order, not by the wall clock: handle_inbound persists the row on the db
+    # thread before it returns, which a loaded Windows runner can stretch past any small
+    # budget. What matters is that it returns while the seam is still held, and that the
+    # other chat is delivered before the gate opens. The timeouts only turn a hang into a
+    # failure.
+    await asyncio.wait_for(env.inbound(first, wait=False), timeout=10)
+    await asyncio.wait_for(gate.entered.wait(), timeout=10)  # the first chat is now stuck
+    await asyncio.wait_for(env.inbound("side ping", chat="-200", thread="", wait=False), timeout=10)
+    await _until(lambda: "side ping" in seen, timeout=10)
     gate.release.set()
     await env.m.wait_idle()
 

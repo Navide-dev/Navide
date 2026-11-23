@@ -26,8 +26,8 @@ function body(source: string, name: string): string {
   throw new Error(`${name} not found`)
 }
 
-const zh = JSON.parse(read('packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'))
-const en = JSON.parse(read('packages/plugin-ui/src/foundation/i18n/locales/en-US.json'))
+const zh = JSON.parse(read('src/renderer/src/i18n/locales/zh-TW.json'))
+const en = JSON.parse(read('src/renderer/src/i18n/locales/en-US.json'))
 
 describe('closing a workspace asks before it takes the panes', () => {
   const fn = body(appSource, 'closeWorkspace')

@@ -60,13 +60,22 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    `xtajit64.dll`, not `IsWow64Process2`, which reports x64 emulation as native.
 4. **Dependency audit warnings** — the Windows-on-Arm pass of the Dependency
    audit job only warns. Read its output; the `cryptography` pin for win_arm64
-   is a known, accepted item until upstream ships newer wheels.
+   is a known, accepted item until upstream ships newer wheels. The main
+   pip-audit pass blocks on high and critical advisories (and on any advisory
+   it cannot rate) but only warns on low and moderate ones
+   (`scripts/pip-audit-severity-gate.py`): read those warnings too and decide
+   whether the release bumps the package.
 5. **What's New and CHANGELOG** — add the `whatsNew.ts` entry (below) and the
-   `CHANGELOG.md` section for the new version. `release.sh` bumps versions and
-   README download links but writes neither of these.
+   release notes under `CHANGELOG.md`'s `## [Unreleased]` heading. `release.sh`
+   bumps versions and README download links and renames that heading to
+   `## [X.Y.Z] — YYYY-MM-DD` (left alone when the dated heading is already
+   there; it stops when there is neither), but writes no notes of its own.
 6. **Signing status** — macOS signs and notarizes in CI; Windows is unsigned
    and shows SmartScreen's "Unknown publisher" prompt. Do not describe a Windows
-   build as signed anywhere until that changes.
+   build as signed anywhere until that changes. Windows signing, once a
+   certificate exists, is done locally after the CI run, never in CI:
+   `scripts/sign-windows-local.mjs` (docs/en-US/releases.md, "Windows code
+   signing (local)").
 7. **Is the production Marketplace Registry caught up with `main`?** — the
    Registry is deployed separately from the app, and a stale one refuses
    publishes the current code expects (in 0.2.31 it rejected `navide.plans`
@@ -89,19 +98,6 @@ stall (#102). Walk this list before `./release.sh`; nothing here is automated.
    with the user's go-ahead. To see what is live,
    `curl -s https://server.navide.dev/registry/api/extensions/navide/<name>`
    and read `latest_version` and `latest_targets`.
-8. **First-party plugin versions** — `plugins/official-plugin-fingerprints.json`
-   is the release baseline: each bundled plugin's version and content
-   fingerprint as of the last release tag. A plugin whose content differs from
-   it must carry a higher version than the baseline (one bump per release
-   cycle; a lower version is always refused), which
-   `tests/infrastructure/officialPluginFingerprints.test.ts` checks on every
-   PR. `release.sh` rewrites the file for the new tag
-   (`node scripts/official-plugin-fingerprints.mjs --write --baseline vX.Y.Z`)
-   and commits it with the version files; it stops if the rule does not hold.
-   Never rewrite the file outside a release. The first baseline is `v0.2.34`:
-   Git, Mini-IDE and Plans are recorded at 0.2.34, the App version they shipped
-   stamped with, and Browser, bundled from 0.2.35, at its 0.1.0 manifest
-   version from that tag; their own versions start at 1.0.0.
 
 ### After the tag push
 
@@ -234,6 +230,73 @@ the `navide.dev` zone).
 - **Cost**: ~1.2 GB of S3 per release; CloudFront traffic has stayed inside the
   free tier. Nothing expires; old releases stay downloadable from the mirror
   as they do from GitHub.
+
+## Releasing navide.git on its own
+
+navide.git is developed in its own repository,
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git), and ships
+through the Navide Marketplace without waiting for an App release. An
+installed App picks the newer version up from the Marketplace (a verified
+Marketplace copy wins over the bundled one of the same or a lower version),
+so a Git fix reaches users without a new installer. The App installer carries
+the version `src/main/plugins/officialPluginVersions.ts` pins, downloaded and
+verified from the official Registry at build time.
+
+1. **Branch and tests.** Change navide-git on its own branch in its
+   repository; its CI runs the typecheck, the tests (the catalog checks
+   included) and the build, validate and package steps. It installs
+   `@navide/plugin-{contracts,sdk,ui}` from the tarballs a Navide GitHub
+   Release carries; a change it needs in those packages ships in Navide first.
+2. **Bridge contract.** Git's Git operations run in the Host over the
+   first-party bridge, frozen in `src/shared/gitBridgeContract.json` (Host);
+   the plugin keeps a copy of the version it is built against
+   (`src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`). A
+   Git-only release leaves both untouched. Adding a `git.*` request or event
+   is a minor contract version, removing or renaming one a major; it changes
+   the Host copy and its `FROZEN` digest in
+   `src/main/plugins/gitBridgeContract.test.ts` and needs a Host release
+   first: raise `engines.navide` in navide-git's `manifest.json` to that App
+   version so an older App never installs a Git that needs more than it
+   serves. The Host serves any plugin contract of the same major and a lower
+   or equal minor.patch (`PINNED_GIT_BRIDGE_VERSION`,
+   `tests/infrastructure/gitBridgeContract.test.ts`). The bridge stays
+   first-party only; there is no public `git` capability namespace.
+3. **Version.** Bump the patch (or minor) version once per release cycle in
+   navide-git's `manifest.json` and `package.json`, and add a CHANGELOG line
+   there. The Registry refuses a version already published, so a second
+   change needs a new version.
+4. **Publish, with the user's go-ahead.** On the release machine, where the
+   publisher key lives (never in CI or the repository), publish the vsix
+   navide-git's CI packed:
+   `NAVIDE_REGISTRY_URL=… NAVIDE_PUBLISHER_KEY=… NAVIDE_PLUGIN_TOKEN=…
+   scripts/publish-first-party-plugins.sh --package navide-git.vsix --id navide.git --target universal --version <version>`.
+5. **Check.** `curl -s https://server.navide.dev/registry/api/extensions/navide/git`
+   shows the new `latest_version`; an installed App offers the update.
+6. **Bundle it in the next App release.** Raise `navide.git` in
+   `src/main/plugins/officialPluginVersions.ts` (and
+   `PINNED_GIT_BRIDGE_VERSION` if it was built against a newer contract), and
+   update `tests/fixtures/navide-git/` (its manifest and target schema) and
+   `tests/infrastructure/externalPluginUiKeys.json` (the plugin-ui strings it
+   shows) from that version. `release.sh` stops before anything else when the
+   pinned version is not on the Registry or does not verify
+   (`node scripts/stage-official-plugin-artifacts.mjs --check-registry`).
+
+navide.mini-ide follows the same steps from
+[Navide-dev/navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide)
+(`--id navide.mini-ide`), without a bridge contract: it uses public
+capabilities only. Its pinned manifest lives in `tests/fixtures/navide-mini-ide/`
+and its plugin-ui strings under `navide-mini-ide` in
+`tests/infrastructure/externalPluginUiKeys.json`.
+
+navide.browser follows them from
+[Navide-dev/navide-browser](https://github.com/Navide-dev/navide-browser)
+with one package per target: its packaging workflow builds each target the
+App ships on its own runner, and the release machine lists them with
+`scripts/publish-first-party-plugins.sh --from-run <run id> --repo
+Navide-dev/navide-browser --id navide.browser --version <version> --yes`.
+Every target must be on the Registry before an App release: each platform's
+build stages its own. Its pinned manifest lives in
+`tests/fixtures/navide-browser/`.
 
 ## Git recovery switch
 

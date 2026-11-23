@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { leadSentence } from '../leadSentence'
-import en from '../../../../../packages/plugin-ui/src/foundation/i18n/locales/en-US.json'
-import zhTW from '../../../../../packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'
-import ja from '../../../../../packages/plugin-ui/src/foundation/i18n/locales/ja-JP.json'
+import en from '../../i18n/locales/en-US.json'
+import zhTW from '../../i18n/locales/zh-TW.json'
+import ja from '../../i18n/locales/ja-JP.json'
 
 const join = (parts: ReturnType<typeof leadSentence>) => parts.lead + parts.separator + parts.rest
 

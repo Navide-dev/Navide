@@ -63,8 +63,10 @@ describe('the first-party manifests', () => {
   // read since 0.2.9; 0.2.35 for Plans, the App its 1.1 line first shipped
   // with), with no upper bound, so 0.3.0 keeps them.
   const appVersion = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).version as string
+  // The first-party plugins are built in their own repositories: the pinned
+  // versions' manifests are kept in tests/fixtures/<dir>.
   const readManifest = (dir: string) =>
-    JSON.parse(readFileSync(join(process.cwd(), 'plugins', dir, 'manifest.json'), 'utf8')) as {
+    JSON.parse(readFileSync(join(process.cwd(), ['navide-git', 'navide-mini-ide', 'navide-plans'].includes(dir) ? 'tests/fixtures' : 'plugins', dir, 'manifest.json'), 'utf8')) as {
       id: string
       version: string
       engines?: { navide?: string }

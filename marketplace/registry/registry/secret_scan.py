@@ -10,7 +10,8 @@ from __future__ import annotations
 import re
 import zipfile
 from dataclasses import dataclass
-from io import BytesIO
+
+from .package import READ_CHUNK, PackageSource, entry_buffer, open_source
 
 MAX_SCANNED_BYTES_PER_FILE = 5 * 1024 * 1024
 MAX_SCANNED_BYTES_PER_BACKEND = 512 * 1024 * 1024
@@ -67,33 +68,48 @@ def _is_binary(data: bytes) -> bool:
     return b"\x00" in data[:8192]
 
 
-def scan_bytes(path: str, data: bytes) -> list[SecretFinding]:
+def _count_newlines(data, end: int) -> int:
+    """`data.count(b"\\n", 0, end)` for a buffer without `count` (mmap),
+    counted a chunk at a time."""
+    if isinstance(data, bytes):
+        return data.count(b"\n", 0, end)
+    return sum(data[start : min(start + READ_CHUNK, end)].count(b"\n") for start in range(0, end, READ_CHUNK))
+
+
+def scan_bytes(path: str, data) -> list[SecretFinding]:
+    """`data` is bytes or a read-only mapped entry (package.entry_buffer)."""
     findings: list[SecretFinding] = []
     for rule, pattern in RULES:
         for match in pattern.finditer(data):
-            line = data.count(b"\n", 0, match.start()) + 1
+            line = _count_newlines(data, match.start()) + 1
             findings.append(SecretFinding(path=path, line=line, rule=rule))
     return findings
 
 
-def scan_package(data: bytes, *, backend_prefix: str | None = None) -> ScanReport:
+def scan_package(data: PackageSource, *, backend_prefix: str | None = None) -> ScanReport:
     """Scan every non-binary member of a validated package archive, plus every
     member under `backend_prefix` in full whether binary or not."""
     findings: list[SecretFinding] = []
     scanned = 0
     truncated = False
-    with zipfile.ZipFile(BytesIO(data)) as archive:
+    with zipfile.ZipFile(open_source(data)) as archive:
         for info in archive.infolist():
             if info.is_dir():
                 continue
             backend = backend_prefix is not None and info.filename.startswith(backend_prefix)
-            limit = MAX_SCANNED_BYTES_PER_BACKEND if backend else MAX_SCANNED_BYTES_PER_FILE
+            if backend:
+                # Scanned whole, so mapped from a spool file, not read onto the heap.
+                with entry_buffer(archive, info, MAX_SCANNED_BYTES_PER_BACKEND) as (content, cut):
+                    truncated = truncated or cut
+                    scanned += 1
+                    findings.extend(scan_bytes(info.filename, content))
+                continue
             with archive.open(info) as stream:
-                content = stream.read(limit + 1)
-            if len(content) > limit:
+                content = stream.read(MAX_SCANNED_BYTES_PER_FILE + 1)
+            if len(content) > MAX_SCANNED_BYTES_PER_FILE:
                 truncated = True
-                content = content[:limit]
-            if not backend and _is_binary(content):
+                content = content[:MAX_SCANNED_BYTES_PER_FILE]
+            if _is_binary(content):
                 continue
             scanned += 1
             findings.extend(scan_bytes(info.filename, content))

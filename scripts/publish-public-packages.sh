@@ -20,7 +20,16 @@
 #   - each tarball holds dist/index.js, package.json, README.md and LICENSE
 #     (the repository LICENSE is copied in for the pack and removed after),
 #     and no src/ tree;
+#   - no tarball holds a test, snapshot, fixture or private file (*.test.*,
+#     __tests__/, __snapshots__/, test-fixtures/, .env*, *.pem, *.key, .npmrc);
 #   - no packed package.json carries a workspace: or link: specifier.
+#
+# Each tarball's file list is written next to it as <tarball>.files.txt.
+#
+# The manifests set publishConfig.provenance, which only a supported CI runner
+# can satisfy. A local --publish therefore passes --provenance=false; the
+# provenance-signed path is the GitHub Actions draft in
+# .github/workflow-drafts/publish-public-packages.yml (npm trusted publishing).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,7 +44,7 @@ while [[ $# -gt 0 ]]; do
     --skip-build) SKIP_BUILD=1 ;;
     --publish) PUBLISH=1 ;;
     --tag) TAG="${2:?--tag needs a dist-tag}"; shift ;;
-    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -94,6 +103,13 @@ for pkg in "${PACKAGES[@]}"; do
     echo "$tarball contains source files; check the package's \"files\" field" >&2
     exit 1
   fi
+  forbidden="$(grep -E '(\.test\.[cm]?[jt]sx?$|/__tests__/|/__snapshots__/|/test-fixtures/|/\.env|\.pem$|\.key$|/\.npmrc$)' <<<"$listing" || true)"
+  if [[ -n "$forbidden" ]]; then
+    echo "$tarball contains test, fixture or private files; check the package's \"files\" field:" >&2
+    echo "$forbidden" >&2
+    exit 1
+  fi
+  sed 's#^package/##' <<<"$listing" | sort >"$path.files.txt"
   if tar xOzf "$path" package/package.json | grep -Eq '"(workspace|link):'; then
     echo "$tarball's package.json carries a workspace: or link: specifier" >&2
     exit 1
@@ -116,7 +132,7 @@ if [[ "$PUBLISH" -eq 1 ]]; then
     fi
   done
   for path in "${TARBALLS[@]}"; do
-    npm publish "$path" --access public --tag "$TAG"
+    npm publish "$path" --access public --tag "$TAG" --provenance=false
   done
   echo "Published @navide/{plugin-contracts,plugin-sdk,plugin-ui}@$VERSION ($TAG)."
 else

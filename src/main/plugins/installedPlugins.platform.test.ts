@@ -71,7 +71,7 @@ describe('backend entry executability by platform', () => {
       // The production manifest as the build emits it on every platform.
       writeFileSync(
         join(root, 'manifest.json'),
-        readFileSync(join(process.cwd(), 'plugins/navide-plans/manifest.json'), 'utf8')
+        readFileSync(join(process.cwd(), 'tests/fixtures/navide-plans/manifest.json'), 'utf8')
       )
       for (const view of ['left', 'window']) {
         mkdirSync(join(root, 'frontend', view), { recursive: true })

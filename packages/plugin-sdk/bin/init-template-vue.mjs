@@ -11,6 +11,9 @@ const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 // (shared/pluginAgentTools.ts AGENT_TOOL_NAME_PATTERN).
 const TOOL_PREFIX = /^[a-z][a-z0-9]{1,15}$/
 const MIN_NAVIDE = '>=0.2.39'
+// The public packages are not on npm; first-party plugins install these pinned
+// GitHub Release tarballs too (sha256 in that release's notes).
+const PLUGIN_PACKAGES_RELEASE = 'https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0'
 
 export function vueTemplateNames(id) {
   if (!PLUGIN_ID.test(id)) throw new Error(`plugin id '${id}' must be <namespace>.<name> in lowercase letters, digits and hyphens`)
@@ -83,8 +86,8 @@ export function vueTemplateFiles(id, name) {
         typecheck: 'vue-tsc --noEmit -p tsconfig.json',
       },
       dependencies: {
-        '@navide/plugin-contracts': '^1.0.0',
-        '@navide/plugin-sdk': '^1.0.0',
+        '@navide/plugin-contracts': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-contracts-1.0.0.tgz`,
+        '@navide/plugin-sdk': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-sdk-1.0.0.tgz`,
         vue: '^3.5.43',
       },
       devDependencies: {

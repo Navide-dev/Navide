@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import { filterChannelEntries, highlightChannelMatch } from '../../lib/channelSearch'
@@ -31,11 +31,23 @@ export interface ChannelNavItem {
 export type ChannelNavSort = 'recent' | 'name'
 export type ChannelNavGrouping = 'none' | 'workspace'
 
+/** A button on a group's header line, such as Telegram's "Create a New Bot". */
+export interface ChannelNavGroupAction {
+  badge: string
+  label: string
+  disabled: boolean
+  /** Shown under the header while the action is disabled; '' for none. */
+  note: string
+  /** The bots it can run through: one runs at once, several open a menu first. */
+  choices: { key: string; label: string }[]
+}
+
 /** The bots of one platform; `label` is '' while there is only one platform to tell apart. */
 export interface ChannelNavGroup {
   id: string
   label: string
   items: ChannelNavItem[]
+  action?: ChannelNavGroupAction
 }
 
 /**
@@ -54,6 +66,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [key: string]
   add: []
+  /** The group's action, through the bot picked from its choices. */
+  action: [group: string, key: string]
 }>()
 
 const sort = defineModel<ChannelNavSort>('sort', { default: 'recent' })
@@ -113,6 +127,40 @@ function onSearchKey(e: KeyboardEvent): void {
 
 defineExpose({ focusSearch })
 
+// The group whose action menu is open (several bots to choose from).
+const actionMenu = ref<string | null>(null)
+
+// Like a bot's ⋯ menu, it closes on a pick, a click elsewhere, or Esc.
+function closeActionMenu(e: Event): void {
+  if (e instanceof KeyboardEvent && e.key !== 'Escape') return
+  if (e instanceof MouseEvent && (e.target as Element | null)?.closest?.('.ch-nav-action-wrap')) return
+  actionMenu.value = null
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', closeActionMenu)
+  document.addEventListener('keydown', closeActionMenu)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', closeActionMenu)
+  document.removeEventListener('keydown', closeActionMenu)
+})
+
+function runAction(group: ChannelNavGroup): void {
+  const choices = group.action?.choices ?? []
+  if (choices.length === 1) {
+    actionMenu.value = null
+    emit('action', group.id, choices[0].key)
+  } else if (choices.length > 1) {
+    actionMenu.value = actionMenu.value === group.id ? null : group.id
+  }
+}
+
+function pickAction(group: ChannelNavGroup, key: string): void {
+  actionMenu.value = null
+  emit('action', group.id, key)
+}
+
 // The page can open on a row far down a long list: the picked row stays in sight.
 const list = ref<HTMLElement | null>(null)
 watch(() => props.active, async (key) => {
@@ -162,7 +210,35 @@ watch(() => props.active, async (key) => {
     </div>
     <div v-if="shown.length" ref="list" class="ch-nav-list">
       <template v-for="group in shown" :key="group.id">
-        <div v-if="group.label" class="ch-nav-group" data-testid="channel-nav-group">{{ group.label }}</div>
+        <div v-if="group.label || group.action" class="ch-nav-group" data-testid="channel-nav-group">
+          <span class="ch-nav-group-label">{{ group.label }}</span>
+          <span v-if="group.action" class="ch-nav-action-wrap">
+            <button
+              type="button"
+              class="ch-nav-action"
+              :disabled="group.action.disabled"
+              :aria-haspopup="group.action.choices.length > 1 ? 'menu' : undefined"
+              :aria-expanded="group.action.choices.length > 1 ? actionMenu === group.id : undefined"
+              data-testid="channel-nav-group-action"
+              @click="runAction(group)"
+            ><span class="ch-nav-action-badge" aria-hidden="true">{{ group.action.badge }}</span>＋ {{ group.action.label }}</button>
+            <span v-if="actionMenu === group.id && !group.action.disabled" class="ch-nav-action-menu" role="menu" data-testid="channel-nav-group-action-menu">
+              <button
+                v-for="choice in group.action.choices"
+                :key="choice.key"
+                type="button"
+                role="menuitem"
+                data-testid="channel-nav-group-action-choice"
+                @click="pickAction(group, choice.key)"
+              >{{ choice.label }}</button>
+            </span>
+          </span>
+        </div>
+        <p
+          v-if="group.action?.disabled && group.action.note"
+          class="ch-nav-action-note"
+          data-testid="channel-nav-group-action-note"
+        >{{ group.action.note }}</p>
         <button
           v-for="item in group.items"
           :key="item.key"
@@ -229,6 +305,74 @@ watch(() => props.active, async (key) => {
   color: var(--text-secondary);
 }
 .ch-nav-group:first-child { padding-top: 6px; }
+.ch-nav-group:has(.ch-nav-action-wrap) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ch-nav-action-wrap { position: relative; flex-shrink: 0; }
+.ch-nav-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  background: transparent;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+}
+.ch-nav-action:hover:not(:disabled) { background: var(--accent-subtle); }
+.ch-nav-action:disabled { opacity: 0.55; cursor: default; }
+.ch-nav-action-badge {
+  padding: 0 4px;
+  border: 1px solid var(--accent-fg);
+  border-radius: 4px;
+  color: var(--accent-fg);
+  font-size: 0.85em;
+  font-weight: 700;
+}
+.ch-nav-action-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay, var(--bg-base));
+  box-shadow: var(--shadow-popover);
+}
+.ch-nav-action-menu button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  cursor: pointer;
+}
+.ch-nav-action-menu button:hover { background: var(--accent-subtle); }
+.ch-nav-action-note {
+  margin: 0;
+  padding: 0 8px 4px;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}
 .ch-nav-item {
   display: flex;
   /* The list scrolls; a row squeezed below its content would overlap the next. */

@@ -5,12 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import mmap
 import posixpath
 import stat
+import tempfile
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
+from typing import BinaryIO
 
 from .manifest import (
     ManifestLike,
@@ -28,6 +33,69 @@ from .path_policy import (
 MANIFEST_NAME = "manifest.json"
 MAX_ENTRY_SIZE = 50 * 1024 * 1024
 MAX_ARCHIVE_SIZE = 200 * 1024 * 1024
+READ_CHUNK = 1024 * 1024
+_EOCD_SEARCH = (1 << 16) + 22
+"""The tail zipfile searches for the end-of-central-directory record (the
+maximum comment plus the record), so the last EOCD marker is always in it."""
+
+PackageSource = bytes | BinaryIO
+"""A package as bytes, or as a seekable binary file (an upload spooled to
+disk), which is read in chunks instead of being loaded whole."""
+
+
+def open_source(source: PackageSource) -> BinaryIO:
+    """A seekable binary stream over `source`, positioned at its start."""
+    if isinstance(source, (bytes, bytearray)):
+        return BytesIO(source)
+    source.seek(0)
+    return source
+
+
+def source_digest(source: PackageSource) -> str:
+    """sha256 hex digest of the whole package, read in chunks."""
+    if isinstance(source, (bytes, bytearray)):
+        return hashlib.sha256(source).hexdigest()
+    digest = hashlib.sha256()
+    fp = open_source(source)
+    while chunk := fp.read(READ_CHUNK):
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_size(source: PackageSource) -> int:
+    if isinstance(source, (bytes, bytearray)):
+        return len(source)
+    return open_source(source).seek(0, 2)
+
+
+@contextmanager
+def entry_buffer(
+    archive: zipfile.ZipFile, info: zipfile.ZipInfo, limit: int
+) -> Iterator[tuple[bytes | mmap.mmap, bool]]:
+    """The first `limit` bytes of one archive entry, and whether it was longer.
+
+    The entry is decompressed in chunks into an unnamed temporary file and
+    mapped read-only, so a large executable is never held on the heap; the
+    file is gone when the block exits (or the process dies). The buffer
+    supports what the scanners use: len, slicing, indexing, find, struct and
+    re. It does not support `in` or `count` (use find / count_newlines).
+    """
+    with tempfile.TemporaryFile() as spool:
+        copied = 0
+        with archive.open(info) as stream:
+            while copied <= limit:
+                chunk = stream.read(min(READ_CHUNK, limit + 1 - copied))
+                if not chunk:
+                    break
+                spool.write(chunk)
+                copied += len(chunk)
+        size = min(copied, limit)
+        if size == 0:
+            yield b"", copied > limit
+            return
+        spool.flush()
+        with mmap.mmap(spool.fileno(), size, access=mmap.ACCESS_READ) as view:
+            yield view, copied > limit
 
 # These files are written by the Host after installation and must never be
 # supplied by a package. Store the names in the same portable collision-key
@@ -145,11 +213,12 @@ def _archive_entry_is_executable(info: zipfile.ZipInfo) -> bool:
     return stat.S_IFMT(mode) in (0, stat.S_IFREG) and bool(mode & 0o111)
 
 
-def _starts_with_executable_shebang(data: bytes) -> bool:
-    return data.startswith(b"#!") or data.startswith(b"\xef\xbb\xbf#!")
+def _starts_with_executable_shebang(data: bytes | mmap.mmap) -> bool:
+    return data[:2] == b"#!" or data[:5] == b"\xef\xbb\xbf#!"
 
 
 def _has_zip64_end_of_central_directory(data: bytes) -> bool:
+    """`data` is the archive's tail (see `_EOCD_SEARCH`) or the whole archive."""
     marker = b"PK\x05\x06"
     offset = data.rfind(marker)
     if offset < 0 or len(data) - offset < 22:
@@ -166,7 +235,7 @@ def _has_zip64_end_of_central_directory(data: bytes) -> bool:
     )
 
 
-def _check_archive_layout(data: bytes, infos: list[zipfile.ZipInfo]) -> None:
+def _check_archive_layout(fp: BinaryIO, size: int, infos: list[zipfile.ZipInfo]) -> None:
     """Refuse archives the Host reader would parse differently.
 
     The Host (src/main/plugins/pluginPackage.ts) walks the central directory by
@@ -176,26 +245,36 @@ def _check_archive_layout(data: bytes, infos: list[zipfile.ZipInfo]) -> None:
     counted entries. zipfile compares a local header's name with the central
     one only for entries it reads, so every local name is checked here.
     """
-    eocd = data.rfind(b"PK\x05\x06")
-    entry_count = int.from_bytes(data[eocd + 10 : eocd + 12], "little")
-    central_directory_size = int.from_bytes(data[eocd + 12 : eocd + 16], "little")
-    central_directory_offset = int.from_bytes(data[eocd + 16 : eocd + 20], "little")
+    tail_start = max(size - _EOCD_SEARCH, 0)
+    tail = _read_at(fp, tail_start, size - tail_start)
+    relative = tail.rfind(b"PK\x05\x06")
+    eocd = tail_start + relative
+    entry_count = int.from_bytes(tail[relative + 10 : relative + 12], "little")
+    central_directory_size = int.from_bytes(tail[relative + 12 : relative + 16], "little")
+    central_directory_offset = int.from_bytes(tail[relative + 16 : relative + 20], "little")
     if central_directory_offset + central_directory_size != eocd or entry_count != len(infos):
         raise PackageError(
             "central directory does not end at the end-of-central-directory record"
         )
     for info in infos:
         offset = info.header_offset
-        name_length = int.from_bytes(data[offset + 26 : offset + 28], "little")
-        local_name = data[offset + 30 : offset + 30 + name_length]
+        header = _read_at(fp, offset, 30)
+        name_length = int.from_bytes(header[26:28], "little")
+        local_name = _read_at(fp, offset + 30, name_length)
         encoding = "utf-8" if info.flag_bits & 0x800 else "cp437"
         if (
-            data[offset : offset + 4] != b"PK\x03\x04"
+            header[:4] != b"PK\x03\x04"
             or local_name != info.orig_filename.encode(encoding)
         ):
             raise PackageError(
                 f"local header name does not match central directory: {info.filename}"
             )
+
+
+def _read_at(fp: BinaryIO, offset: int, length: int) -> bytes:
+    """`length` bytes at `offset`, fewer past the end (like a bytes slice)."""
+    fp.seek(offset)
+    return fp.read(length)
 
 
 @dataclass(frozen=True)
@@ -214,6 +293,7 @@ class LoadedPackage:
     """sha256 hex digest of the raw package bytes."""
     assets: list[AssetRef] = field(default_factory=list)
     raw: bytes = b""
+    """The package bytes when read from bytes; empty when read from a file."""
 
 
 def _validate_artifact_target(manifest: ManifestLike, target: str) -> None:
@@ -226,7 +306,7 @@ def _validate_artifact_target(manifest: ManifestLike, target: str) -> None:
         raise PackageError("frontend-only package target must be universal")
 
 
-def _backend_matches_target(data: bytes, target: str) -> bool:
+def _backend_matches_target(data: bytes | mmap.mmap, target: str) -> bool:
     platform, architecture = target.split("-", 1)
     if platform == "linux":
         if len(data) < 20 or data[:4] != b"\x7fELF" or data[5] not in (1, 2):
@@ -269,21 +349,27 @@ def backend_entry_for_target(entry: str, target: str | None) -> str:
     return f"{entry}.exe"
 
 
-def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
+def read_package(source: PackageSource, *, target: str | None = None) -> LoadedPackage:
     """Parse and validate a `.vsix`-style archive.
 
     Rejects malformed archives with a clear PackageError. `target` is the
     Registry target the package is published for; it only decides which file
     the manifest's backend entry names (see `backend_entry_for_target`).
+    `source` may be a seekable file: every entry is then read in chunks and
+    only the manifest is kept, so memory does not grow with the package.
     """
-    if not zipfile.is_zipfile(BytesIO(data)):
+    fp = open_source(source)
+    size = source_size(fp)
+    if not zipfile.is_zipfile(fp):
         raise PackageError("package is not a valid ZIP archive")
-    if _has_zip64_end_of_central_directory(data):
+    tail_start = max(size - _EOCD_SEARCH, 0)
+    if _has_zip64_end_of_central_directory(_read_at(fp, tail_start, size - tail_start)):
         raise PackageError("ZIP64 archives are not supported")
 
-    with zipfile.ZipFile(BytesIO(data)) as zf:
+    fp.seek(0)
+    with zipfile.ZipFile(fp) as zf:
         infos = zf.infolist()
-        _check_archive_layout(data, infos)
+        _check_archive_layout(fp, size, infos)
         total_size = 0
         for info in infos:
             if info.file_size > MAX_ENTRY_SIZE:
@@ -299,25 +385,38 @@ def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
         if MANIFEST_NAME not in regular_names:
             raise PackageError(f"archive is missing {MANIFEST_NAME} at its root")
 
-        entry_bytes: dict[str, bytes] = {}
+        # Every entry is decompressed in full (sizes and CRCs are checked), but
+        # only the manifest's bytes are kept; the backend executable is mapped
+        # from a spool file when its header is checked below.
+        entry_sizes: dict[str, int] = {}
+        manifest_bytes = b""
         actual_total_size = 0
         for info, path, kind in validated_entries:
             if kind != "regular":
                 continue
+            keep = path == MANIFEST_NAME
+            kept: list[bytes] = []
+            content_size = 0
             try:
-                content = zf.read(info)
+                with zf.open(info) as stream:
+                    while chunk := stream.read(READ_CHUNK):
+                        content_size += len(chunk)
+                        if content_size > MAX_ENTRY_SIZE:
+                            raise PackageError(
+                                f"archive entry exceeds the 50 MiB size limit: {path}"
+                            )
+                        if keep:
+                            kept.append(chunk)
             except (KeyError, RuntimeError, zipfile.BadZipFile) as exc:
                 raise PackageError(f"cannot read archive entry: {path}") from exc
-            if len(content) > MAX_ENTRY_SIZE:
-                raise PackageError(f"archive entry exceeds the 50 MiB size limit: {path}")
-            actual_total_size += len(content)
+            actual_total_size += content_size
             if actual_total_size > MAX_ARCHIVE_SIZE:
                 raise PackageError("archive expanded contents exceed the 200 MiB size limit")
-            if len(content) != info.file_size:
+            if content_size != info.file_size:
                 raise PackageError(f"archive entry size does not match metadata: {path}")
-            entry_bytes[path] = content
-
-        manifest_bytes = entry_bytes[MANIFEST_NAME]
+            entry_sizes[path] = content_size
+            if keep:
+                manifest_bytes = b"".join(kept)
 
         try:
             manifest_text = manifest_bytes.decode("utf-8")
@@ -373,8 +472,7 @@ def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
                     for info, path, kind in validated_entries
                     if path == backend_path and kind == "regular"
                 )
-                backend_data = entry_bytes[backend_path]
-                if not backend_data:
+                if entry_sizes[backend_path] == 0:
                     raise PackageError(f"backend entry is empty: {backend_path}")
                 # A Windows target has no exec bit to set; there, as on the Host,
                 # the `.exe` extension stands in for it.
@@ -387,15 +485,16 @@ def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
                     raise PackageError(
                         f"backend entry is not marked executable: {backend_path}"
                     )
-                if _starts_with_executable_shebang(backend_data):
-                    raise PackageError(
-                        "backend entry must be a packaged executable, "
-                        f"not a raw script: {backend_path}"
-                    )
-                if target is not None and not _backend_matches_target(backend_data, target):
-                    raise PackageError(
-                        f"backend entry does not match declared target {target}: {backend_path}"
-                    )
+                with entry_buffer(zf, backend_info, MAX_ENTRY_SIZE) as (backend_data, _):
+                    if _starts_with_executable_shebang(backend_data):
+                        raise PackageError(
+                            "backend entry must be a packaged executable, "
+                            f"not a raw script: {backend_path}"
+                        )
+                    if target is not None and not _backend_matches_target(backend_data, target):
+                        raise PackageError(
+                            f"backend entry does not match declared target {target}: {backend_path}"
+                        )
         elif manifest.icon and entry_types.get(manifest.icon) != "regular":
             raise PackageError(
                 f"manifest.icon '{manifest.icon}' is not present in the archive"
@@ -409,17 +508,16 @@ def read_package(data: bytes, *, target: str | None = None) -> LoadedPackage:
             assets.append(
                 AssetRef(
                     path=path,
-                    size=len(entry_bytes[path]),
+                    size=entry_sizes[path],
                     content_type=content_type,
                 )
             )
 
-    digest = hashlib.sha256(data).hexdigest()
     return LoadedPackage(
         manifest=manifest,
-        digest=digest,
+        digest=source_digest(fp),
         assets=sorted(assets, key=lambda a: a.path),
-        raw=data,
+        raw=source if isinstance(source, bytes) else b"",
     )
 
 

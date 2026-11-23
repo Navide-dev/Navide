@@ -18,7 +18,7 @@ const LOCALES = ['en-US', 'zh-TW', 'ja-JP'].map((code) => ({
   code,
   messages: JSON.parse(
     readFileSync(
-      resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${code}.json`),
+      resolve(process.cwd(), `src/renderer/src/i18n/locales/${code}.json`),
       'utf8',
     ),
   ) as Record<string, unknown>,

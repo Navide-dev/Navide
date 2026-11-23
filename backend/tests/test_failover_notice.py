@@ -20,7 +20,18 @@ class Profiles:
         return {"defaultNames": {"claude": "Home"}}
 
     def get(self, profile_id: str) -> dict[str, Any] | None:
-        return {"p-b": {"name": "Work"}}.get(profile_id)
+        return {"p-b": {"name": "Work"}, "p-5": {"name": "Account 5"}}.get(profile_id)
+
+
+class Vault:
+    """The display identity of each slot, as credential_vault.identity reads it."""
+
+    def __init__(self) -> None:
+        self.emails: dict[str, str] = {}
+
+    def identity(self, agent_key: str, slot_id: str | None = None) -> dict[str, Any]:
+        email = self.emails.get(slot_id or "")
+        return {"email": email, "signedIn": True} if email else {"email": None, "signedIn": False}
 
 
 class Manager:
@@ -28,6 +39,10 @@ class Manager:
         self.calls: list[dict[str, Any]] = []
 
     async def notify_failover_switch(self, **kw: Any) -> int:
+        self.calls.append(kw)
+        return 1
+
+    async def notify_failover_stuck(self, **kw: Any) -> int:
         self.calls.append(kw)
         return 1
 
@@ -40,9 +55,12 @@ def wired(tmp_path, monkeypatch):
     db = Database(tmp_path / "navide.db")
     log = AccountSwitchLog(db)
     manager = Manager()
+    vault = Vault()
     monkeypatch.setattr(app, "account_switch_log", log, raising=False)
     monkeypatch.setattr(app, "cli_profiles_store", Profiles(), raising=False)
+    monkeypatch.setattr(app, "credential_vault", vault, raising=False)
     monkeypatch.setattr(channels, "get_manager", lambda: manager)
+    manager.vault = vault
     yield log, manager
     db.close()
 
@@ -64,7 +82,27 @@ async def test_an_automatic_switch_is_recorded_and_told(wired) -> None:
     assert (row["to_profile_id"], row["to_name"]) == ("p-b", "Work")
     assert row["reason"] == "quota ran out on Home"
     assert manager.calls == [{"agent_key": "claude", "pane_ids": ["pane-1"], "from_id": "__default__",
-                              "from_label": "Home", "to_id": "p-b", "to_label": "Work", "needs_login": False}]
+                              "from_label": "Home", "from_builtin": False, "to_id": "p-b", "to_label": "Work",
+                              "to_builtin": False, "needs_login": False}]
+
+
+async def test_the_chat_names_accounts_as_the_desktop_switcher_does(wired, monkeypatch) -> None:
+    # 2026-11-21: the notice said "from Default to Account 5". The chat now gets the header
+    # chip's name (alias, else the email's local part, else the given name) and is told
+    # when the built-in Default has none; the audit row keeps the given names.
+    from agent_team_backend import app
+
+    log, manager = wired
+    monkeypatch.setattr(app, "cli_profiles_store", SimpleNamespace(
+        list=lambda: {"defaultNames": {}}, get=Profiles().get), raising=False)
+    manager.vault.emails["p-5"] = "second.user" + "@example.com"
+    await failover_notice.on_commit(_event(toSlotId="p-5"))
+    [call] = manager.calls
+    assert (call["from_label"], call["from_builtin"]) == ("Default", True)
+    assert (call["to_label"], call["to_builtin"]) == ("second.user", False)
+    [row] = log.list_recent()
+    assert (row["from_name"], row["to_name"]) == ("Default", "Account 5")
+    assert "@" not in repr(manager.calls)
 
 
 async def test_a_switch_the_user_started_is_left_out(wired) -> None:
@@ -90,10 +128,25 @@ async def test_no_channels_still_records(wired, monkeypatch) -> None:
     assert len(log.list_recent()) == 1
 
 
+async def test_a_stopped_continuation_is_told_to_the_chats(wired) -> None:
+    # 2026-11-21: incident 8b0adfc46290 sat in notify-stopped for 20 hours unseen.
+    import time
+
+    _, manager = wired
+    expires = quota_failover._now_iso(time.time() + 3 * 3600 + 30)
+    await failover_notice.on_stuck({
+        "incidentId": "i1", "agentKey": "claude", "reason": "credential-override",
+        "stoppedForSec": 900, "expiresAt": expires, "final": False, "paneIds": ["pane-1"],
+    })
+    assert manager.calls == [{"agent_key": "claude", "pane_ids": ["pane-1"], "reason": "credential-override",
+                              "minutes": 15, "expires_in": "3h00m", "final": False}]
+
+
 def _tx(**kw: Any) -> SimpleNamespace:
     tx = SimpleNamespace(id="tx1", agent_key="claude", from_slot_id="__default__", to_slot_id="p-b",
                          automatic=True, state="committed",
-                         panes={"pane-2": {"paneId": "pane-2"}}, hot_switched_panes=[{"paneId": "pane-1"}])
+                         panes={"pane-2": {"paneId": "pane-2"}}, hot_switched_panes=[{"paneId": "pane-1"}],
+                         overridden_panes=[])
     for k, v in kw.items():
         setattr(tx, k, v)
     return tx
@@ -122,7 +175,7 @@ async def test_commit_listeners_get_the_event_and_cannot_fail_the_switch() -> No
             remove()
     assert got == [{"transactionId": "tx1", "agentKey": "claude", "fromSlotId": "__default__",
                     "toSlotId": "p-b", "automatic": True, "state": "committed", "needsLogin": False,
-                    "paneIds": ["pane-1", "pane-2"]}]
+                    "paneIds": ["pane-1", "pane-2"], "overriddenPaneIds": []}]
     assert quota_failover._commit_listeners == []
 
 

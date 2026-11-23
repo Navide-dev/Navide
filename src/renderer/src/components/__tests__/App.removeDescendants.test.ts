@@ -11,11 +11,11 @@ import { withDescendants } from '../../lib/paneLineage'
 // exercised through the pure helper the menu item calls.
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const enLocale = readFileSync(
-  resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'),
+  resolve(process.cwd(), 'src/renderer/src/i18n/locales/en-US.json'),
   'utf8'
 )
 const zhLocale = readFileSync(
-  resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'),
+  resolve(process.cwd(), 'src/renderer/src/i18n/locales/zh-TW.json'),
   'utf8'
 )
 

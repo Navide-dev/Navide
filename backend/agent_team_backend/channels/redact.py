@@ -62,3 +62,12 @@ def add_secret(secret: str) -> None:
 def redact_text(text: str) -> str:
     """``text`` with every registered secret (and bot-token URL segment) masked."""
     return _filter.redact(text)
+
+
+_EMAIL_RE = re.compile(r"(?<![\w.%+-])([A-Za-z0-9])[A-Za-z0-9._%+-]*@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})")
+
+
+def mask_emails(text: str) -> str:
+    """``text`` with each email address cut to its first character and its
+    domain (``r***@example.com``), for text pushed to a chat."""
+    return _EMAIL_RE.sub(r"\1***@\2", text)

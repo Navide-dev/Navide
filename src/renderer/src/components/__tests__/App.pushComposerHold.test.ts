@@ -70,7 +70,7 @@ describe('pushUnclearAt — the record', () => {
   it('has a localized hold reason in both shipped locales', () => {
     for (const locale of ['en-US', 'zh-TW']) {
       const json = JSON.parse(
-        readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
+        readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`), 'utf8')
       ) as { msg: Record<string, string> }
       expect(json.msg['hold-composer']).toBeTruthy()
       expect(json.msg['reason-push-stuck']).toBeTruthy()

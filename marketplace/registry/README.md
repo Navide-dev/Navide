@@ -273,9 +273,8 @@ seam later without changing the Client wire contract.
 > `login`, `whoami`, `logout`, `publish`. See
 > [`docs/en-US/marketplace-publishing.md`](../../docs/en-US/marketplace-publishing.md).
 > This Python CLI prints a deprecation notice and stays for
-> `scripts/publish-first-party-plugins.sh` and the `plugin-packages.yml` CI
-> pack job: the SDK packages a backend only for its own host target, while
-> `pack --target` here packs every target on one Linux runner. Both CLIs share
+> `scripts/publish-first-party-plugins.sh`, which signs and publishes the
+> packages the first-party plugins' own repositories pack. Both CLIs share
 > `~/.config/navide-plugin/credentials.json` and produce signatures this
 > Registry verifies the same way (`tests/test_sdk_cli_compat.py`).
 
@@ -333,14 +332,20 @@ unchanged, and the `Host` header picks the role (`registry/host_routing.py`):
 |---|---|---|---|
 | Storefront, e.g. `https://marketplace.navide.dev` | `/`, `/extensions/{ns}/{name}` and its `/report`, `/removed`, package assets, rating and report forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (allow); pages carry `<link rel="canonical">` | console pages → the console, same path | none |
 | Developer console, e.g. `https://developers.navide.dev` | `/publish`, `/publisher*`, `/developer/apply`, `/cli/authorize`, `/admin/*` (Testplace included), their forms, `/login`, `/auth/*`, `/logout`, `/static/*`, `/robots.txt` (disallow) | storefront pages → the storefront, same path; `/` → `/publisher` | `noindex, nofollow` |
-| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | every website page (the list above, plus `/login`) → `REGISTRY_LEGACY_REDIRECT_TO`, except `/cli/authorize` → the console with its query (older CLIs open it to sign in) | `noindex, nofollow` |
+| Legacy, `REGISTRY_LEGACY_HOSTS` (e.g. `server.navide.dev`), under `REGISTRY_ROOT_PATH` | the API, downloads, package assets, `/auth/*`, `/api/health`, every POST, `/robots.txt` | console pages (`/login`, `/publish`, `/publisher*`, `/developer*`, `/cli/authorize`, `/admin/*`) → the same path on the console with its query (older Apps and CLIs open them); storefront pages → `REGISTRY_LEGACY_REDIRECT_TO` | `noindex, nofollow` |
 | Any other host (health checks by IP, the container healthcheck) | everything, as with routing off | none | `noindex, nofollow` |
 
 Neither the storefront nor the console serves `/api/*` (404 there). Each of the
 two signs in on its own host: its callback is `<origin>/auth/callback` and its
 cookies are host-only, so both callbacks must be in navide-auth's
 `REGISTRY_RETURN_URLS`; `REGISTRY_AUTH_RETURN_URL` stays the legacy callback so
-a sign-in begun there before the move still finishes. The legacy
+a sign-in begun there before the move still finishes. With
+`REGISTRY_AUTH_UPSTREAM` set, the sign-in page itself stays on that host too:
+`/login` sends the browser to `<origin>/navide-auth/registry/sso`, and the
+registry relays that path and its form post (and nothing else under
+`/navide-auth`) to navide-auth, forwarding only navide-auth's own sign-in
+cookie and the load balancer's X-Forwarded-For entry, and passing back only a
+redirect to the same host's `/auth/callback`. The legacy
 `/robots.txt` allows crawling by default so search engines see the redirects
 and the `noindex`; set `REGISTRY_LEGACY_ROBOTS_DISALLOW=true` once the old URLs
 have left the index.
@@ -407,50 +412,28 @@ Then, from the repository root:
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh
+scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-plans \
+  --id navide.plans --version <version> [--target "linux-x64 linux-arm64"] [--yes]
 ```
 
-The script builds, packs, signs and publishes `navide.git` and
-`navide.mini-ide` as `universal`, and `navide.plans` and `navide.browser` for
-the host target (for example `darwin-arm64`), reusing the `navide-plugin` CLI.
-`--skip-build` reuses `dist-plugins/`, `--only git|plans|mini-ide|browser`
-publishes one. Plans and Browser carry a PyInstaller backend, so each other
-target must be built on a machine of that platform and architecture (or by
-`plugin-packages.yml` / `browser-plugin-package.yml` and published with
-`--from-run`).
-
-Running the script with the same version on each platform adds that
-platform's artifact to the version (see
-[Per-target artifacts](#per-target-artifacts)); re-running on one platform
-returns `409` for the target already published.
+The first-party plugins are built in their own repositories
+(Navide-dev/navide-git, navide-mini-ide, navide-browser, navide-plans), whose
+CI packs them; the script only signs and publishes. `navide.git` and
+`navide.mini-ide` are frontend-only and published once as `universal` with
+`--package <vsix> --id <plugin id> --target universal --version <version>`.
 
 ### Publishing platform-specific first-party plugins
 
-`navide.plans` carries a PyInstaller backend, so every target needs its own
-build. `.github/workflows/plugin-packages.yml` (manual `workflow_dispatch`,
-input `ref`) builds it on a runner of each target the app ships
-(`darwin-arm64`, `linux-x64`, `linux-arm64`, `win32-x64`, `win32-arm64`),
-checks the backend's architecture, and uploads
-`navide.plans-<version>-<target>.vsix` plus a `.sha256` (kept 7 days). The
-workflow has no secrets: signing and publishing stay on the maintainer's Mac.
-
-```bash
-gh workflow run plugin-packages.yml -f ref=<commit or tag> [-f artifact_version=<x.y.z>]
-gh run list --workflow plugin-packages.yml --limit 1   # note the run id
-
-NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
-NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
-  --target "linux-x64 linux-arm64" --yes
-```
-
-The packages carry the `ref`'s root `package.json` version unless
-`artifact_version` is given; then that version is stamped on them instead, so
-a plugin release does not have to wait for an App version. Build the local
-packages with the same version: `NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z>
-scripts/publish-first-party-plugins.sh` (the plugin builds read it), and pass it
-as `--version` to `--from-run`.
+`navide.plans` and `navide.browser` carry a PyInstaller backend, so every
+target needs its own build. Their repositories' packaging workflow builds
+each target the app ships (`darwin-arm64`, `linux-x64`, `linux-arm64`,
+`win32-x64`, `win32-arm64`) on a runner of that target and uploads
+`<id>-<version>-<target>.vsix` plus a `.sha256`. The workflows have no
+secrets: signing and publishing stay on the maintainer's Mac, with
+`--from-run <run id> --repo Navide-dev/navide-<name> --id <plugin id>`.
+Publishing the same version for another target adds that target's artifact
+to the version (see [Per-target artifacts](#per-target-artifacts));
+re-publishing a target returns `409`.
 
 Without `--yes` the script downloads the packages (`gh run download`), checks
 each sha256 and the manifest id/version, and prints what it would publish.
@@ -540,6 +523,22 @@ approved by default.
   issues an `nva_` token that names the Cloud account only. It can read and
   submit the account's developer application and list its versions; it never
   publishes. `/api/cli/token` answers `{token, scope, namespace, expires_at}`.
+- **App sign-in through Navide Cloud**: `POST /api/cli/cloud-exchange`
+  takes `{assertion, code_verifier, scope, namespace, label}`, where
+  `assertion` is a short-lived (≤ 60 s) Ed25519 assertion Navide-Server signs
+  for the signed-in member (`nvsa1.<kid>.<payload_b64>.<sig_b64>`, at most
+  4096 bytes), bound to the App's PKCE challenge. It answers exactly like
+  `/api/cli/token` and applies the same publish checks as `/cli/authorize`
+  (`404` unknown namespace, `403 QUALIFICATION_REQUIRED`). Failures are `401`
+  `ASSERTION_INVALID`, `ASSERTION_EXPIRED` (30 s clock skew allowed) or
+  `ASSERTION_REPLAYED` (each `jti` is single-use, kept in
+  `used_cloud_assertion`); repeated failures from one address get `429
+  RATE_LIMITED` for a while. Without `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` the
+  route answers `404` and the App falls back to the browser sign-in. The
+  exchange is audited as `cloud-assertion.exchange` (member, scope,
+  namespace, jti, kid; never the assertion). `GET /api/developer/me/namespaces`
+  (account token) lists the namespaces `/cli/authorize` would offer, as
+  `{namespaces: [...]}`.
 - **Application**: `GET|POST /api/developer/me/application` (account or
   publisher token) or the website form `/developer/apply`. Real-name fields;
   `field_sources` marks each field `user` or `agent-draft`. The GET answer
@@ -616,6 +615,7 @@ approved by default.
 |---|---|---|
 | `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://forum.navide.dev/navide-auth`. |
 | `REGISTRY_AUTH_SECRET` / `_FILE` | _(unset)_ | This registry's navide-auth client secret (≥ 32 chars; equals navide-auth's `REGISTRY_CONNECT_SECRET`, never the Discourse secret). |
+| `REGISTRY_AUTH_UPSTREAM` | _(unset)_ | navide-auth's address as this container reaches it, e.g. `http://172.17.0.1:18790`. Set, the storefront and the console serve the sign-in page on their own host (needs host routing, and `REGISTRY_AUTH_URL` ending in `/navide-auth`). Unset, the browser goes to `REGISTRY_AUTH_URL`. |
 | `REGISTRY_AUTH_RETURN_URL` | _(unset)_ | Exact callback, e.g. `https://server.navide.dev/registry/auth/callback`; must be in navide-auth's `REGISTRY_RETURN_URLS`. |
 | `REGISTRY_SESSION_SECRET` / `_FILE` | _(unset)_ | Signs the session and login-state cookies (≥ 32 chars, different from the auth secret). |
 | `REGISTRY_ADMIN_MEMBER_IDS` | _(empty)_ | Comma-separated Navide member ids allowed into the review queue and blocklist UI. |
@@ -625,6 +625,7 @@ approved by default.
 | `REGISTRY_LEGACY_HOSTS` | _(empty)_ | Comma-separated hosts that keep the API under `REGISTRY_ROOT_PATH`, e.g. `server.navide.dev`; the first one is the API address the website shows. |
 | `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
 | `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
+| `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` | _(unset)_ | Path to Navide-Server's assertion public keys, `{"keys": [{"kid": "20261114", "public_key": "<Ed25519 SPKI PEM>"}]}`; list two during a rotation. Unset or missing turns `/api/cli/cloud-exchange` off (`404`); a malformed file, a bad `kid` (`[A-Za-z0-9_-]{1,64}`) or a non-Ed25519 key stops startup. Not secret, but kept out of Git. |
 
 ## Seams left for later Phase 3 todos
 

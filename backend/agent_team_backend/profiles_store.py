@@ -35,6 +35,8 @@ log = logging.getLogger("agent_team_backend.cli_profiles")
 PROFILES_FILE = "cli-profiles.json"
 _KV_KEY = "cli_profiles"
 PROFILES_SCHEMA_VERSION = 1
+# The built-in Default account's slot id (credential_vault.DEFAULT_SLOT_ID).
+DEFAULT_SLOT_ID = "__default__"
 # antigravity is excluded on purpose: its OAuth token lives in a fixed-name
 # macOS Keychain entry, so config-home isolation cannot separate accounts.
 def _supported_agent_keys() -> tuple[str, ...]:
@@ -165,6 +167,10 @@ def _empty_doc() -> dict[str, Any]:
         # on its own config dir is chosen here without swapping anything.
         # Absent = new panes follow ``defaults``.
         "paneDefaults": {},
+        # The order the user ranked each agent's accounts in, slot ids with
+        # the built-in Default as "__default__". Automatic switching tries
+        # accounts in this order; absent = the quota-based ranking.
+        "slotOrder": {},
     }
 
 
@@ -236,6 +242,14 @@ class CliProfilesStore:
                 value = pane_defaults.get(key)
                 if isinstance(value, str) and value:
                     doc["paneDefaults"][key] = value
+        slot_order = data.get("slotOrder")
+        if isinstance(slot_order, dict):
+            for key in SUPPORTED_AGENT_KEYS:
+                value = slot_order.get(key)
+                if isinstance(value, list):
+                    ids = list(dict.fromkeys(str(v) for v in value if isinstance(v, str) and v))
+                    if ids:
+                        doc["slotOrder"][key] = ids
         return doc
 
     def _import_legacy(self, cur: Any, data: Any) -> None:
@@ -282,6 +296,7 @@ class CliProfilesStore:
             "defaults": doc["defaults"],
             "defaultNames": doc["defaultNames"],
             "paneDefaults": doc["paneDefaults"],
+            "slotOrder": doc["slotOrder"],
         }
 
     def get(self, profile_id: str) -> dict[str, Any] | None:
@@ -425,6 +440,9 @@ class CliProfilesStore:
             for key, value in list(doc["paneDefaults"].items()):
                 if value == profile_id:
                     doc["paneDefaults"].pop(key)
+            for key, ids in list(doc["slotOrder"].items()):
+                if profile_id in ids:
+                    doc["slotOrder"][key] = [i for i in ids if i != profile_id]
             self._write(doc)
         home = self.home_path(profile)
         if home.exists():
@@ -486,6 +504,30 @@ class CliProfilesStore:
                 doc["paneDefaults"].pop(agent_key, None)
             self._write(doc)
             return doc["paneDefaults"]
+
+    def set_slot_order(self, agent_key: str, slot_ids: list[str]) -> dict[str, list[str]]:
+        """Rank ``agent_key``'s accounts for automatic switching. Every id
+        must be the built-in Default (``__default__``) or a profile of that
+        agent, listed once; an empty list clears the order. Returns every
+        agent's order."""
+        self._validate_agent_key(agent_key)
+        with self._lock:
+            doc = self._read()
+            known = {DEFAULT_SLOT_ID} | {
+                str(p.get("id")) for p in doc["profiles"] if p.get("agentKey") == agent_key
+            }
+            ids = [str(i) for i in slot_ids]
+            if len(set(ids)) != len(ids):
+                raise ValueError("account order lists an account twice")
+            unknown = [i for i in ids if i not in known]
+            if unknown:
+                raise ValueError(f"account order names unknown accounts: {', '.join(unknown)}")
+            if ids:
+                doc["slotOrder"][agent_key] = ids
+            else:
+                doc["slotOrder"].pop(agent_key, None)
+            self._write(doc)
+            return doc["slotOrder"]
 
     def home_path(self, profile: dict[str, Any]) -> Path:
         return Path(

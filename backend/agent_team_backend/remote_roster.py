@@ -125,7 +125,22 @@ class RemotePane:
             # waited for, while one window reconnecting is over in seconds.
             "host_online": self.host_online,
             "status": self.status,
+            # Which segment is down, so a report can say so (2026-11-22).
+            **({"offline_reason": self.offline_reason} if self.offline else {}),
         }
+
+    @property
+    def offline_reason(self) -> str:
+        """"device-offline": that machine has no connection to the server;
+        "window-disconnected": it has, the window holding the pane has not;
+        "session-ended": the CLI behind the pane is gone. "" when reachable."""
+        if not self.host_online:
+            return "device-offline"
+        if self.status == "disconnected":
+            return "window-disconnected"
+        if self.status in STATUS_UNREACHABLE:
+            return "session-ended"
+        return ""
 
 
 # sessionId -> pane. The server's own key, so a row that is updated replaces

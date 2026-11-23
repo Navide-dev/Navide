@@ -203,6 +203,17 @@ describe('useTerminal — scrollback handoff', () => {
     scope.stop()
   })
 
+  it('carries a remote container target into terminal.create, and nothing for a local pane', async () => {
+    const remote = { host: 'devbox', container: 'app', network: { mode: 'host' }, cli: 'claude' }
+    const first = await spawnPane({ agentKey: 'remote', remote })
+    expect(first.mock.sent.find((s) => s.type === 'terminal.create')!.payload.remote).toEqual(remote)
+    expect(first.mock.sent.find((s) => s.type === 'terminal.create')!.payload.agent_key).toBe('remote')
+    first.scope.stop()
+    const second = await spawnPane({ agentKey: 'claude' })
+    expect(second.mock.sent.find((s) => s.type === 'terminal.create')!.payload).not.toHaveProperty('remote')
+    second.scope.stop()
+  })
+
   it('a fresh spawn without a handoff replays nothing — the ordinary rebuild is unchanged', async () => {
     localStorage.setItem('terminal-scroll:cli-session', 'nv1\nSTORED')
     const { scope } = await spawnPane({ resumeKey: 'cli-session', restoreMode: 'fresh', isResume: true })

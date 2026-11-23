@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, share_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, shipped_cmds, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
@@ -67,10 +67,23 @@ WAKE_WORDS = {"/wake"}
 # "wake" among them, never posts the message; it has no buttons either. So there the bare word
 # wakes too, and is what the hint names.
 MATTERMOST_WAKE_WORD = "wake"
+# A binding outlives its pane (store.park): the chat can start a new conversation in the same
+# CLI and workspace when the old one cannot be resumed, or unlink the chat for good, asked
+# once more first. The keep button only answers; it has no typed form.
+FRESH_CALLBACK = "nv4:wake-new"
+FRESH_WORDS = {"/wake_new"}
+UNLINK_CALLBACK = "nv4:unlink"
+UNLINK_WORDS = {"/unlink"}
+UNLINK_CONFIRM_CALLBACK = "nv4:unlink-yes"
+UNLINK_CONFIRM_WORDS = {"/unlink_confirm"}
+UNLINK_KEEP_CALLBACK = "nv4:unlink-keep"
+# Typed bare on Mattermost, as MATTERMOST_WAKE_WORD is.
+_MATTERMOST_BARE = {WAKE_CALLBACK, FRESH_CALLBACK, UNLINK_CALLBACK, UNLINK_CONFIRM_CALLBACK}
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
                       WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model",
-                      account_menu.OPEN_CALLBACK: "/account"}
+                      account_menu.OPEN_CALLBACK: "/account", FRESH_CALLBACK: "/wake_new",
+                      UNLINK_CALLBACK: "/unlink", UNLINK_CONFIRM_CALLBACK: "/unlink_confirm"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -114,6 +127,7 @@ VERDICT_WATCH_MAX_S = 3600.0
 STATUS_POLL_S = 1.0
 DEBOUNCE_S = 0.5  # lines from one sender to one location within this window become one message
 DEBOUNCE_MAX_S = 3.0
+JOB_STALL_WARN_S = 60.0  # an inbound job running longer than this is logged: the chat's next ones wait
 LONG_REPLY_MAX_CHUNKS = 3  # past this, a reply is a preview plus the whole text as a file
 TELEGRAM_DIRECT_KINDS = ("private", "direct")  # the adapter's chat type; what _remember_chat stores
 REPLY_QUOTE_MAX_CHARS = 500  # a native reply's quoted message, cut before it reaches the pane
@@ -134,7 +148,7 @@ MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
 MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
 RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
 # A pane that is not online but can be woken onto its own conversation.
-WAKE_BUTTONS = [("▶️ 喚醒", WAKE_CALLBACK)]
+WAKE_BUTTONS = [("▶️ 喚醒", WAKE_CALLBACK), ("✖️ 取消連線", UNLINK_CALLBACK)]
 # /menu and a bare /start point to the three commands that replaced the quick menu.
 MENU_MOVED_BUTTONS = [("💬 Prompts", PROMPTS_CALLBACK), ("🧩 Skills", SKILLS_CALLBACK), ("🔌 MCP", MCP_CALLBACK)]
 # Where a platform has no buttons, the reply names the commands they stand for.
@@ -149,6 +163,8 @@ MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pa
 MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址或代碼，不能連接到聊天室"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
+MSG_NOT_DELIVERED = "⚠️ 訊息沒有送進分格「{name}」（{reason}）"
+MSG_RESEND_EXPIRED = "⚠️ 這個重送按鈕已失效，請重新傳送訊息"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_READING_REPLY = "✅ 完成，正在送出回覆…"
@@ -186,11 +202,17 @@ LINK_TARGETS = ("direct", "group")
 # Platforms whose "direct" code travels only in a DM deep link (a separate "group"
 # code exists): seeing one in a group means it leaked, so it links nothing there.
 DM_ONLY_LINK_PLATFORMS = frozenset({"telegram"})
-QUICK_ADD_TIMEOUT_S = 10.0  # how long a quick add waits for the platform to accept the credential
+# How long a quick add waits for the platform to accept the credential: a first connection
+# may need DNS, a fallback from a dead IPv6 route, TLS and a retry (Telegram's getMe is
+# bounded at 10 s a try and retried once on a network failure).
+QUICK_ADD_TIMEOUT_S = 25.0
 QUICK_ADD_POLL_S = 0.1
-# A whole quick add, the channels lock included: under the window's 45 s (QUICK_ADD_TIMEOUT_MS)
+# Once the credential is proven, how long a quick add waits for the first poll to say whether
+# another program holds the bot (an adapter that reports ``polled``); then it succeeds anyway.
+QUICK_ADD_CONFLICT_CHECK_S = 5.0
+# A whole quick add, the channels lock included: under the window's 60 s (QUICK_ADD_TIMEOUT_MS)
 # with room for the undo of a failure (a Keychain delete, up to 10 s) and the round trips.
-QUICK_ADD_DEADLINE_S = 30.0
+QUICK_ADD_DEADLINE_S = 45.0
 # Telegram Managed Bots (Bot API 9.6): how long a t.me/newbot link waits for its bot.
 MANAGED_REQUEST_TTL_S = 600.0
 MANAGED_DEFAULT_NAME = "Navide bot"
@@ -290,6 +312,9 @@ class Seams:
     # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
     # `started` is False when it was refused before anything was opened
     wake: Callable[[str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
+    # (pane_id, workspace_path, agent, name) -> a new conversation in that CLI and workspace,
+    # for a binding whose own conversation cannot be resumed: {ok, pane_id} or {ok: False, code}.
+    wake_fresh: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
     # The text the pane's own log holds for its last turn since a wall-clock time ("" when
     # it holds none): a direct read, for a run whose log events never came.
     turn_text: Callable[[str, float], Awaitable[str]] = lambda *_a: _no_turn_text()
@@ -517,6 +542,7 @@ class ChannelManager:
         # pane id -> (its wait task, the message that asked, pane name, model shown, lang)
         self._model_waits: dict[str, tuple[asyncio.Task[Any], InboundMessage, str, str, str]] = {}
         self.share_buttons = share_cmds.RevokeButtons(clock=clock)
+        self.resend_buttons = resend.ResendButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
         # One serial worker per location: order kept within a chat, chats never block each other.
@@ -590,14 +616,28 @@ class ChannelManager:
             worker.task = self._spawn(self._run_worker(location_key, worker))
 
     async def _run_worker(self, location_key: str, worker: _Worker) -> None:
+        loop = asyncio.get_running_loop()
+        chat = inbound.chat_hash(location_key)
         while worker.jobs:
             job = worker.jobs.popleft()
+            started = time.monotonic()
+            # Logged while it runs, not only after: a job that never ends must still show.
+            stall = loop.call_later(JOB_STALL_WARN_S, lambda: log.warning(
+                "channels: inbound job for chat=%s still running after %.0fs; %d job(s) waiting behind it",
+                chat, time.monotonic() - started, len(worker.jobs)))
             try:
                 await job()
             except asyncio.CancelledError:
+                log.info("channels: inbound worker for chat=%s cancelled; %d job(s) not run to the end "
+                         "(kept messages replay on the next start)", chat, len(worker.jobs) + 1)
                 raise
             except Exception:  # noqa: BLE001 — one bad message must not stall the chat
                 log.exception("channels: inbound job for %s failed", location_key)
+            finally:
+                stall.cancel()
+            elapsed = time.monotonic() - started
+            if elapsed >= JOB_STALL_WARN_S:
+                log.warning("channels: inbound job for chat=%s finished after %.0fs", chat, elapsed)
         # Idle: retire. No await between the empty check above and this removal,
         # so a job enqueued from here on starts a fresh worker.
         if self._workers.get(location_key) is worker:
@@ -900,8 +940,10 @@ class ChannelManager:
         """Add a new bot in one step: ``configure`` it, wait until the platform accepted
         its credential, name it after its identity when unnamed, and with ``link_target``
         hand back a link invite (as ``link_create``). Any failure removes everything this
-        call stored; ``reason`` is "rejected" (credential refused), "timeout" or "invalid"
-        (refused before connecting). The whole call ends within QUICK_ADD_DEADLINE_S."""
+        call stored; ``reason`` is "rejected" (credential refused), "network" (the platform
+        could not be reached), "timeout" or "invalid" (refused before connecting). A success
+        may carry ``warning`` "conflict": another program polls the same bot. The whole call
+        ends within QUICK_ADD_DEADLINE_S."""
         _check_platform(platform)
         _check_account(account)
         try:
@@ -932,7 +974,7 @@ class ChannelManager:
                 await self._discard_bot(platform, account)
                 return {"ok": False, "reason": "invalid", "error": "the bot did not start"}
             failure = await self._await_first_login(bot, adapter)
-            if failure is not None:
+            if failure is not None and "reason" in failure:
                 await self._discard_bot(platform, account)
                 return {"ok": False, **failure}
         except BaseException:
@@ -950,24 +992,34 @@ class ChannelManager:
         name = str(((self.store.accounts().get(bot) or {}).get("config") or {}).get("name") or "")
         link = self.link_create(platform, link_target, account) if link_target else {}
         return {"ok": True, "platform": platform, "account": account, "name": name, "identity": identity,
-                "link": {k: v for k, v in link.items() if k != "ok"} if link.get("ok") else None}
+                "link": {k: v for k, v in link.items() if k != "ok"} if link.get("ok") else None,
+                **(failure or {})}
 
     async def _await_first_login(self, bot: BotKey, adapter: ChannelAdapter) -> dict[str, str] | None:
         """None once ``adapter`` reached ready, or reported an identity when it says that
-        proves the credential (or never reports progress at all); otherwise why it did
-        not within QUICK_ADD_TIMEOUT_S."""
+        proves the credential (or never reports progress at all), and {"warning": "conflict"}
+        when its first poll then found another program holding the bot; otherwise why it did
+        not within QUICK_ADD_TIMEOUT_S ("network" when the adapter heard nothing back)."""
         status = adapter.status
         identity_proves = bool(getattr(adapter, "identity_confirms_credential", False))
         # An adapter that never left "stopped" has no login signal to wait for.
         if status.lifecycle == "stopped":
             return None
+        loop = asyncio.get_running_loop()
 
         async def settled() -> dict[str, str] | None:
+            proven_at: float | None = None
             while True:
                 if status.lifecycle == "blocked":
                     return {"reason": "rejected", "error": status.last_error or "credential rejected"}
                 if status.lifecycle == "ready" or (identity_proves and status.identity):
-                    return None
+                    if getattr(adapter, "conflict", False):
+                        return {"warning": "conflict"}
+                    if getattr(adapter, "polled", True):
+                        return None
+                    proven_at = proven_at if proven_at is not None else loop.time()
+                    if loop.time() - proven_at >= QUICK_ADD_CONFLICT_CHECK_S:
+                        return None
                 if self._adapters.get(bot) is not adapter:
                     return {"reason": "invalid", "error": "the bot was stopped while connecting"}
                 await asyncio.sleep(QUICK_ADD_POLL_S)
@@ -975,8 +1027,11 @@ class ChannelManager:
         try:
             return await asyncio.wait_for(settled(), QUICK_ADD_TIMEOUT_S)
         except asyncio.TimeoutError:
+            if status.lifecycle == "ready" or (identity_proves and status.identity):
+                return None  # proven, only the first poll was still out
             detail = f": {status.last_error}" if status.last_error else ""
-            return {"reason": "timeout", "error": f"no answer from {bot[0]} within {QUICK_ADD_TIMEOUT_S:g}s{detail}"}
+            reason = "network" if getattr(adapter, "unreachable", False) else "timeout"
+            return {"reason": reason, "error": f"no answer from {bot[0]} within {QUICK_ADD_TIMEOUT_S:g}s{detail}"}
 
     def _undo_quick_add(self, platform: str, account: str) -> None:
         """Discard a half-added bot in the background, never waited for: the lock the undo
@@ -1393,10 +1448,89 @@ class ChannelManager:
             adapter = self._adapters.get((removed.platform, removed.account))
             if adapter is not None:
                 name = pane_name or removed.title or pane_id
-                text = (MSG_UNBOUND_CLOSED if reason == "closed" else MSG_UNBOUND).format(name=name)
+                if reason == "unlinked":
+                    text = wake.text(prompt_skills.language(await self._ui_settings()), "unlinked", name=name)
+                else:
+                    text = (MSG_UNBOUND_CLOSED if reason == "closed" else MSG_UNBOUND).format(name=name)
                 loc = removed.location()
                 self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text))
         return {"ok": True, "removed": removed is not None}
+
+    async def park(self, pane_id: str, *, pane_name: str = "", workspace_path: str = "", session_id: str = "",
+                   agent: str = "") -> dict[str, Any]:
+        """A pane really closed: keep its binding, dormant, for the chat to wake it back (or
+        start a new conversation) until someone unlinks it. Its chat is told, with the
+        buttons. A child topic the mirror opened for a sub-pane goes, as before."""
+        bound = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
+        if bound is None:
+            return {"ok": True, "parked": False}
+        if bound.auto:
+            return {**await self.unbind(pane_id, reason="closed", pane_name=pane_name), "parked": False}
+        parked = await run_in_db_thread(self.store.park, pane_id, workspace_path=workspace_path,
+                                        session_id=session_id, agent=agent)
+        self._drop_pending(pane_id)
+        self._drop_held(pane_id)
+        if parked is None:
+            return {"ok": True, "parked": False}
+        await self.mirror.release_children(pane_id)
+        await self._changed()
+        adapter = self._adapters.get((parked.platform, parked.account))
+        if adapter is not None:
+            lang = prompt_skills.language(await self._ui_settings())
+            text = wake.text(lang, "parked", name=pane_name or parked.title or pane_id)
+            loc = parked.location()
+            buttons = _offer_buttons(lang, parked)
+            if not adapter.capabilities.buttons:
+                text += _typed_hint(buttons, wake.text(lang, "typed_hint", commands="{commands}"), parked.platform)
+                buttons = []
+            self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text, buttons or None))
+        return {"ok": True, "parked": True, "binding": parked.public()}
+
+    async def wake_from_app(self, pane_id: str, *, fresh: bool = False) -> dict[str, Any]:
+        """The window's wake of a dormant (or offline) binding, from the channel overview: the
+        same seams as the chat's, without the chat's limits (the user is at the computer).
+        The chat is told when it worked; a refusal carries the chat's wording."""
+        binding = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
+        if binding is None:
+            return {"ok": False, "error": "no such binding"}
+        lang = prompt_skills.language(await self._ui_settings())
+        if self._seams.resolve_pane(pane_id) and self._seams.pane_live(self._seams.resolve_pane(pane_id)):
+            return {"ok": True, "pane_id": self._seams.resolve_pane(pane_id), "message": wake.text(lang, "already_online")}
+        if fresh or not binding.session_id:
+            result = await self._seams.wake_fresh(pane_id, binding.workspace_path, binding.agent,
+                                                  self._binding_name(binding))
+        else:
+            result = await self._seams.wake(pane_id, binding.workspace_path, binding.session_id)
+        if not result.get("ok"):
+            # The window's channels call reads `error` as the text to show, `reason` as the code.
+            return {"ok": False, "reason": str(result.get("code") or ""), "error": wake.outcome_text(lang, result)}
+        new_pane_id = str(result.get("pane_id") or pane_id)
+        if new_pane_id != pane_id:
+            await run_in_db_thread(self.store.rename_pane, pane_id, new_pane_id)
+        else:
+            await run_in_db_thread(self.store.activate, pane_id)
+        await self._changed()
+        adapter = self._adapters.get((binding.platform, binding.account))
+        if adapter is not None:
+            loc = binding.location()
+            text = wake.text(lang, "woke_app", name=self._binding_name(binding))
+            self._enqueue(loc.key(), lambda: self._notice(adapter, loc, text))
+        return {"ok": True, "pane_id": new_pane_id}
+
+    async def _unlink_from_chat(self, msg: InboundMessage, binding: Binding, *, confirmed: bool) -> None:
+        """/unlink asks once more; /unlink_confirm (its button) unbinds, and unbind tells the chat."""
+        lang = prompt_skills.language(await self._ui_settings())
+        if not confirmed:
+            await self._reply(msg, wake.text(lang, "unlink_ask", name=self._binding_name(binding)),
+                              buttons=[(wake.text(lang, "unlink_yes"), UNLINK_CONFIRM_CALLBACK),
+                                       (wake.text(lang, "unlink_keep"), UNLINK_KEEP_CALLBACK)],
+                              typed_hint=wake.text(lang, "typed_hint", commands="{commands}"))
+            return
+        await self.unbind(binding.pane_id, reason="unlinked", pane_name=self._binding_name(binding))
+
+    @staticmethod
+    def _binding_name(binding: Binding) -> str:
+        return binding.title.removeprefix("↳ ") or binding.pane_id
 
     async def rebind(self, from_pane_id: str, to_pane_id: str) -> dict[str, Any]:
         """Move a binding to the pane that replaced ``from_pane_id`` (rebuild)."""
@@ -1981,6 +2115,7 @@ class ChannelManager:
         code = parse_link_code(msg.text) if msg.text and not msg.callback_data else ""
         invite = self.invites.consume(msg.platform, code, msg.account) if code else None
         if invite is not None:
+            self._not_to_pane(msg, "an invite code")
             self._enqueue(msg.location_key(), lambda: self._link_chat(msg, invite.code, invite.target))
             return
         if not msg.is_direct and not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
@@ -2084,10 +2219,16 @@ class ChannelManager:
 
             self._enqueue(loc.key(), tell)
 
+    def _not_to_pane(self, msg: InboundMessage, why: str) -> None:
+        """Log a message that ends here without going to a pane: its log trail never just stops."""
+        log.info("channels: %s message %s: not sent to a pane: %s", _loc_log(msg), msg.message_id, why)
+
     async def _process_inbound(self, msg: InboundMessage) -> None:
         if not self.store.global_enabled() or (msg.platform, msg.account) not in self._adapters:
+            self._not_to_pane(msg, "channels off or its bot not running")
             return
         if not self.gate.is_allowed(msg.platform, msg.sender_id, msg.account):
+            self._not_to_pane(msg, "sender not allowed (pairing reply)")
             await self._pairing_reply(msg)  # only DMs get this far
             return
         if self._remember_chat(msg):
@@ -2098,72 +2239,111 @@ class ChannelManager:
             if answer is None and not msg.callback_data:
                 answer = self._bare_answer(msg)
             if answer is not None:
+                self._not_to_pane(msg, f"an answer to prompt {answer.request_id}")
                 await self._handle_relay_answer(msg, answer)
                 return
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
+            self._not_to_pane(msg, "a quick menu button")
             await self._quick_press(msg)
             return
         if model_menu.parse_callback(msg.callback_data) is not None:
+            self._not_to_pane(msg, "a model menu button")
             await self._model_press(msg)
             return
         if account_menu.parse_callback(msg.callback_data) is not None:
+            self._not_to_pane(msg, "an account menu button")
             await self._account_press(msg)
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
+            self._not_to_pane(msg, "a share button")
             return
+        if msg.callback_data.startswith(resend.CALLBACK_PREFIX):
+            text = self.resend_buttons.press(resend.parse_callback(msg.callback_data) or "", msg.location_key())
+            if text is None:
+                await self._reply(msg, MSG_RESEND_EXPIRED)
+                return
+            # On through every check below, as if the text had been typed again.
+            msg = dataclasses.replace(msg, text=text, callback_data="", attachments=[],
+                                      reply_to_text="", reply_to_sender_id="", reply_to_self=False)
         wake_pressed = msg.callback_data == WAKE_CALLBACK
+        if msg.callback_data == UNLINK_KEEP_CALLBACK:
+            self._not_to_pane(msg, "an unlink kept")
+            await self._reply(msg, wake.text(prompt_skills.language(await self._ui_settings()), "unlink_kept"))
+            return
         if msg.callback_data in _CALLBACK_COMMANDS:
             # Then on through the binding checks below, as if the command had been typed.
             msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
         if msg.callback_data and not msg.text:
+            self._not_to_pane(msg, "a button that is not ours")
             return  # a button press with the relay off, or not ours
         pick = quick_menu.menu_pick(msg.text, self._identity(msg))
         if pick is not None:
+            self._not_to_pane(msg, "a /menu pick")
             await self._quick_pick(msg, pick)
             return
         pick = quick_menu.mcp_pick(msg.text, self._identity(msg))
         if pick is not None:
+            self._not_to_pane(msg, "an /mcp pick")
             await self._quick_pick(msg, pick, mcp=True)
             return
         # Only where /prompts and /skills answer with numbered lines: elsewhere "/skills 2"
         # stays text for the pane, as before (the CLI may have a /skills of its own).
         scoped = quick_menu.scoped_pick(msg.text, self._identity(msg)) if not self._menu_buttons(msg) else None
         if scoped is not None:
+            self._not_to_pane(msg, "a /prompts or /skills pick")
             await self._quick_pick(msg, scoped[1], scope=scoped[0])
             return
         scope = quick_menu.menu_scope(msg.text, self._identity(msg))
         if scope is not None:
+            self._not_to_pane(msg, "a menu command")
             await self._quick_menu(msg, scope)
             return
         if relay.is_pending_command(msg.text, self._identity(msg)):
+            self._not_to_pane(msg, "/pending")
             await self._list_pending(msg)
             return
         share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
         if share_cmd is not None and await self._share_command(msg, *share_cmd):
+            self._not_to_pane(msg, "a share command")
             return
         plugin_cmd = plugin_cmds.parse_command(msg.text, self._identity(msg))
         if plugin_cmd is not None and await self._plugin_command(msg, *plugin_cmd):
+            self._not_to_pane(msg, "a plugin command")
+            return
+        shipped_arg = shipped_cmds.parse_command(msg.text, self._identity(msg))
+        if shipped_arg is not None and await self._shipped_command(msg, shipped_arg):
             return
         binding = self._binding_for(msg)
         if binding is None:
             # One bot answers for its unbound chats and topics, as it always has; with
             # several, a bot in a group the user drives through another stays quiet.
             if self._sole_bot(msg.platform):
+                self._not_to_pane(msg, "chat not bound")
                 await self._reply(msg, MSG_NOT_BOUND)
             else:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
+        if msg.unsupported_kind:
+            self._not_to_pane(msg, f"unsupported content ({msg.unsupported_kind}); the chat is told")
+            lang = prompt_skills.language(await self._ui_settings())
+            await self._reply(msg, inbound.text(lang, "unsupported", kind=msg.unsupported_kind))
+            return
+        word = _command_word(quick_menu.strip_mention(msg.text, self._identity(msg)))
+        if word in _words(msg.platform, UNLINK_WORDS | UNLINK_CONFIRM_WORDS):
+            self._not_to_pane(msg, "an unlink")
+            await self._unlink_from_chat(msg, binding, confirmed=word in _words(msg.platform, UNLINK_CONFIRM_WORDS))
+            return
         # A typed /wake (offered where there are no buttons) is answered like the button, never
-        # sent to the CLI as a prompt.
-        wake_asked = wake_pressed or _command_word(
-            quick_menu.strip_mention(msg.text, self._identity(msg))) in _wake_words(msg.platform)
+        # sent to the CLI as a prompt; so is /wake_new.
+        wake_asked = wake_pressed or word in _wake_words(msg.platform) or word in _words(msg.platform, FRESH_WORDS)
         pane_id = await self._resolve_after_startup(binding.pane_id)
         if pane_id and wake_asked and not self._seams.pane_live(pane_id):
             # Registered but not running (a restore placeholder, or its window just closed):
             # a wake opens it rather than answering that it is online.
             pane_id = ""
         if not pane_id:
+            self._not_to_pane(msg, "pane offline (kept for a wake, or the chat told)")
             await self._offline(msg, binding)  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
@@ -2179,27 +2359,34 @@ class ChannelManager:
             # A new message follows unless this was a wake: it keeps its place in the queue.
             await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_asked else 1)
             if wake_asked:
+                self._not_to_pane(msg, "a wake")
                 return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
         if _is_stop_word(command):
+            self._not_to_pane(msg, "a stop")
             await self._interrupt(msg, pane_id, buttons=RESUME_BUTTONS)
             return
         if _command_word(command) in CANCEL_WORDS:
+            self._not_to_pane(msg, "a cancel")
             await self._cancel_queued(msg)
             return
         if _command_word(command) in RESUME_WORDS:
+            self._not_to_pane(msg, "a resume")
             await self._resume(msg, pane_id)
             return
         model_cmd = model_menu.parse_command(command)
         if model_cmd is not None:
+            self._not_to_pane(msg, "a model command")
             await self._model_command(msg, binding, pane_id, model_cmd)
             return
         account_cmd = account_menu.parse_command(command)
         if account_cmd is not False:
+            self._not_to_pane(msg, "an account command")
             await self._account_command(msg, binding, pane_id, account_cmd)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
+            self._not_to_pane(msg, "handled by the mirror (/status, /stop, or routed to a child pane)")
             return
         await self._debounced_deliver(msg, binding, pane_id)
 
@@ -2212,10 +2399,12 @@ class ChannelManager:
             return
         workspace_path = str(target.get("workspace_path") or "")
         session_id = str(target.get("session_id") or "")
+        agent = str(target.get("agent") or "")
         if not workspace_path or not session_id:
             return  # nothing known yet (a pane before its first turn): keep what is stored
-        if (workspace_path, session_id) != (binding.workspace_path, binding.session_id):
-            await run_in_db_thread(self.store.set_wake_target, pane_id, workspace_path, session_id)
+        if (workspace_path, session_id) != (binding.workspace_path, binding.session_id) \
+                or (agent and agent != binding.agent):
+            await run_in_db_thread(self.store.set_wake_target, pane_id, workspace_path, session_id, agent)
 
     async def _offline(self, msg: InboundMessage, binding: Binding) -> None:
         """A message for a bound pane that is not online.
@@ -2224,20 +2413,29 @@ class ChannelManager:
         existed, not seen online since) is only told, as before. Otherwise the chat can wake
         the pane onto its own conversation, and what it sent is kept for that wake."""
         lang = prompt_skills.language(await self._ui_settings())
-        if not binding.workspace_path or not binding.session_id:
-            await self._reply(msg, wake.text(lang, "offline"))
+        hint = wake.text(lang, "typed_hint", commands="{commands}")
+        offer = _offer_buttons(lang, binding)
+        if offer == unlink_buttons(lang):
+            # Nothing to wake: no workspace known (a binding made before waking existed, not
+            # seen online since), or no conversation and no CLI to start a new one in.
+            await self._reply(msg, wake.text(lang, "offline"), buttons=offer, typed_hint=hint)
             return
         if not self._seams.windows_open():
-            await self._reply(msg, wake.text(lang, "no_window"))
+            await self._reply(msg, wake.text(lang, "no_window"), buttons=unlink_buttons(lang), typed_hint=hint)
             return
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
-        if _command_word(command) in _wake_words(msg.platform):
-            await self._wake(msg, binding, lang)
-            return
         word = _command_word(command)
+        fresh = word in _words(msg.platform, FRESH_WORDS)
+        if fresh or word in _wake_words(msg.platform):
+            if not fresh and not binding.session_id:
+                # No conversation to resume: only a new one can be started.
+                await self._reply(msg, wake.text(lang, "fresh_only", name=self._binding_name(binding)),
+                                  buttons=offer, typed_hint=hint)
+                return
+            await self._wake(msg, binding, lang, fresh=fresh)
+            return
         if _is_stop_word(command) or word in CANCEL_WORDS or word in RESUME_WORDS:
-            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=wake_buttons(lang),
-                              typed_hint=wake.text(lang, "typed_hint", commands="{commands}"))
+            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=offer, typed_hint=hint)
             return
         key = binding.location().key()
         kept = await self._live_kept(msg, key, lang)
@@ -2248,10 +2446,11 @@ class ChannelManager:
                                              items=_previews(dropped)))
         self._set_kept(key, kept)
         await self._reply(msg, wake.text(lang, "offline_wake", max=wake.STASH_MAX,
-                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=wake_buttons(lang),
-                          typed_hint=wake.text(lang, "typed_hint", commands="{commands}"))
+                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=offer, typed_hint=hint)
 
-    async def _wake(self, msg: InboundMessage, binding: Binding, lang: str) -> None:
+    async def _wake(self, msg: InboundMessage, binding: Binding, lang: str, *, fresh: bool = False) -> None:
+        """Wake the binding's pane back onto its conversation, or (``fresh``) open a new
+        conversation in the same CLI and workspace, and drive that pane from the chat."""
         key = binding.location().key()
         refusal = self._wake_limits.refusal(key, lang)
         if refusal:
@@ -2262,23 +2461,44 @@ class ChannelManager:
         try:
             await self._reply(msg, wake.text(lang, "waking"))
             try:
-                result = await self._seams.wake(binding.pane_id, binding.workspace_path, binding.session_id)
+                result = (await self._seams.wake_fresh(binding.pane_id, binding.workspace_path, binding.agent,
+                                                       self._binding_name(binding)) if fresh else
+                          await self._seams.wake(binding.pane_id, binding.workspace_path, binding.session_id))
             except Exception as exc:  # noqa: BLE001 — answered as a failed wake
                 log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
                 result = {"ok": False, "code": "error", "started": True}
         finally:
             self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)),
                                   succeeded=bool(result.get("ok")))
+        hint = wake.text(lang, "typed_hint", commands="{commands}")
+        open_pane = str(result.get("open_pane_id") or "")
+        if result.get("code") == "session-open-elsewhere" and open_pane \
+                and not any(b.pane_id == open_pane for b in self.store.bindings()):
+            # The conversation is already open in another pane no chat drives: follow it there.
+            await run_in_db_thread(self.store.rename_pane, binding.pane_id, open_pane)
+            await self._changed()
+            await self._reply(msg, wake.text(lang, "moved_to_open", name=str(result.get("open_pane_name") or open_pane)))
+            await self._deliver_kept(msg, self._binding_for(msg) or binding, open_pane, lang, reserve=0)
+            return
         if not result.get("ok"):
-            await self._reply(msg, wake.outcome_text(lang, result))
+            code = str(result.get("code") or "")
+            buttons = (fresh_buttons(lang) if code in wake.UNRESUMABLE_REASONS and binding.agent and not fresh
+                       else unlink_buttons(lang) if code in wake.DEAD_END_CODES or fresh
+                       else _offer_buttons(lang, binding))
+            await self._reply(msg, wake.outcome_text(lang, result), buttons=buttons, typed_hint=hint)
             return
         pane_id = str(result.get("pane_id") or binding.pane_id)
         if pane_id != binding.pane_id:
             await run_in_db_thread(self.store.rename_pane, binding.pane_id, pane_id)
             await self._changed()
+        elif binding.dormant:
+            await run_in_db_thread(self.store.activate, pane_id)
+            await self._changed()
         current = self._binding_for(msg) or binding
         kept = await self._live_kept(msg, key, lang)
-        await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        woke = "woke_fresh" if fresh else "woke"
+        await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept and not fresh
+                          else wake.text(lang, woke))
         if result.get("paid"):
             await self._reply(msg, wake.text(lang, "woke_paid"))
         await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
@@ -2460,6 +2680,7 @@ class ChannelManager:
                 return False  # a question is answered by typing
         choice, rest = relay.parse_bare(msg.text)
         if choice and not rest:
+            self._not_to_pane(msg, "a bare answer while the pane waits on a prompt; the chat is told")
             # A bare yes / 2 that answered nothing here is not kept: sent in later, it would
             # answer whatever prompt is on the screen by then.
             if live:
@@ -2467,6 +2688,7 @@ class ChannelManager:
             else:
                 await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
             return True
+        log.info("channels: %s -> pane %s: kept: the pane waits on a prompt", _loc_log(msg), pane_id)
         await self._hold(msg, binding, pane_id, live[0] if live else None, since)
         return True
 
@@ -3093,6 +3315,7 @@ class ChannelManager:
         files = await self._fetch_attachments(msg, pane_id)
         text = "\n".join(part for part in (msg.text, *files) if part)
         if msg.attachments and not text:
+            log.info("channels: %s -> pane %s: not delivered: every file refused", _loc_log(msg), pane_id)
             return False  # every file was refused, and the chat was told why
         body = _with_reply_quote(dataclasses.replace(msg, text=text), self._quote_trusted(msg),
                                  self.mirror.reports.get(msg))
@@ -3125,7 +3348,7 @@ class ChannelManager:
             pending.status_id = await self._reply(msg, MSG_RECEIVED_BUSY, buttons=BUSY_BUTTONS)
         queued.add(msg_key)
         self._queued_loc[msg_key] = msg.location_key()
-        self._spawn(self._watch_delivery(pane_id, msg_key, pending))
+        self._spawn(self._watch_delivery(pane_id, msg_key, pending, resend=(msg.location_key(), text)))
         return True
 
     async def _cli_login_expired(self, pane_id: str) -> bool:
@@ -3684,7 +3907,7 @@ class ChannelManager:
         """Switch to ``target`` once: the menu is closed first, so a second press is expired.
         The window re-checks that the active account is still the one the menu showed."""
         lang = menu.lang
-        to_label = next((r.label for r in menu.rows if r.id == target), target)
+        to_label = menu.label_of(target)
         self.accounts.close(menu)
         await self._account_settle(msg, menu, account_menu.text(lang, "switching", to=to_label))
 
@@ -3702,9 +3925,11 @@ class ChannelManager:
         """What the chat is told about a switch's answer, or about a queued one's end."""
         lang = menu.lang
         status = str(result.get("status") or "")
-        to_shown = account_menu.mask_email(str(result.get("to") or to_label))
+        # The menu's names, as its buttons showed them: the window's from/to are the
+        # agent-facing names ("Account 5"), which tell the person nothing.
+        to_shown = account_menu.mask_email(to_label or str(result.get("to") or ""))
         if status in ("switched", "switched-signed-out"):
-            from_label = account_menu.mask_email(str(result.get("from") or menu.current_label()))
+            from_label = account_menu.mask_email(menu.current_label() or str(result.get("from") or ""))
             lines = [account_menu.text(lang, "ok", to=to_shown, **{"from": from_label}) if status == "switched"
                      else account_menu.text(lang, "ok_signed_out", to=to_shown)]
             if menu.fixed_count:
@@ -3954,6 +4179,19 @@ class ChannelManager:
             await self._reply(msg, redact.redact_text(quick_menu.text(lang, "plugins_stop_failed", id=arg, error=error)))
         return True
 
+    async def _shipped_command(self, msg: InboundMessage, arg: str) -> bool:
+        """``/shipped [window]``: the bound pane's workspace Shipped Log, answered here
+        without waking the pane. Only a bound chat, like ``/plugins``; False leaves the
+        message to the usual pipeline."""
+        binding = self._binding_for(msg)
+        if binding is None:
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        workspace = binding.workspace_path or self._seams.pane_workspace(
+            self._seams.resolve_pane(binding.pane_id) or binding.pane_id)
+        await self._reply(msg, await shipped_cmds.answer(workspace, arg, lang))
+        return True
+
     async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
         if not links:
             await self._reply(msg, quick_menu.text(lang, "shares_empty"))
@@ -4072,6 +4310,23 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
 
+    async def notify_shipped_digest(self, text: str) -> int:
+        """The daily Shipped Log digest (already masked by the plugin), to every
+        bound direct chat once. Returns how many chats it reached."""
+        seen: set[str] = set()
+        sent = 0
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+                sent += 1
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: a shipped-log digest to %s failed: %s", b.platform, exc)
+        return sent
+
     async def notify_account_needs_login(self, account: str) -> None:
         """Every bound direct chat once, in the user's language: the claude
         account just switched in cannot sign in (account_switch_verify)."""
@@ -4088,17 +4343,45 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
 
+    async def notify_mcp_never_connected(self, pane: str) -> None:
+        """Every bound direct chat once, in the user's language: a pane's CLI
+        has been up for minutes and never reached Navide's tool server."""
+        await self._notify_mcp_connection("mcp_never_connected", pane)
+
+    async def notify_mcp_disconnected(self, pane: str) -> None:
+        """The same, for a pane's CLI that was connected and gave up after
+        losing the connection."""
+        await self._notify_mcp_connection("mcp_disconnected", pane)
+
+    async def _notify_mcp_connection(self, key: str, pane: str) -> None:
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, key, pane=pane)
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            key = b.location().key()
+            if key in seen or self._chat_kind(b) != "direct":
+                continue
+            seen.add(key)
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an MCP connection notice to %s failed: %s", b.platform, exc)
+
     async def notify_failover_switch(self, *, agent_key: str, pane_ids: list[str], from_id: str,
                                      from_label: str, to_id: str, to_label: str,
-                                     needs_login: bool = False) -> int:
+                                     needs_login: bool = False, from_builtin: bool = False,
+                                     to_builtin: bool = False) -> int:
         """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
         chat whose pane runs that CLI or was moved by the switch. Where the chat has
         buttons, a claude switch carries "switch back": a one-row /account menu, so the
         press goes the /account way (owner and chat checked, the active account
         re-checked by the window, written to account_switch_log). Returns the chats told."""
         lang = prompt_skills.language(await self._ui_settings())
-        shown_from = account_menu.mask_email(from_label or from_id)
-        shown_to = account_menu.mask_email(to_label or to_id)
+        from_row = account_menu.AccountRow(id=from_id, label=account_menu.mask_email(from_label or from_id),
+                                           builtin=from_builtin)
+        to_row = account_menu.AccountRow(id=to_id, label=account_menu.mask_email(to_label or to_id),
+                                         builtin=to_builtin, active=True)
+        shown_from, shown_to = from_row.name(lang), to_row.name(lang)
         body = account_menu.text(lang, "failover_needs_login" if needs_login else "failover_done",
                                  to=shown_to, **{"from": shown_from})
         moved = set(pane_ids)
@@ -4122,12 +4405,40 @@ class ChannelManager:
                 menu = self.accounts.create(
                     location_key=loc.key(), sender_id=loc.chat_id, lang=lang, agent_key=agent_key,
                     active_id=to_id,
-                    rows=[account_menu.AccountRow(id=from_id, label=shown_from),
-                          account_menu.AccountRow(id=to_id, label=shown_to, active=True)],
+                    rows=[from_row, to_row],
                 )
                 rows = self.accounts.render_single(menu, from_id, account_menu.text(lang, "switch_back", to=shown_from))
                 buttons = [row[0] for row in rows]
             if await self._notice(adapter, loc, redact.redact_text(body), buttons=buttons):
+                told += 1
+        return told
+
+    async def notify_failover_stuck(self, *, agent_key: str, pane_ids: list[str], reason: str,
+                                    minutes: int, expires_in: str, final: bool) -> int:
+        """A stopped automatic continuation nobody acted on (a reminder), or its
+        expiry (``final``): once per bound direct chat whose pane reported the
+        exhaustion or runs that CLI. Text only. Returns the chats told."""
+        lang = prompt_skills.language(await self._ui_settings())
+        agent = agent_key.capitalize()
+        body = (account_menu.text(lang, "failover_stuck_expired", agent=agent, reason=reason)
+                if final else
+                account_menu.text(lang, "failover_stuck", agent=agent, reason=reason,
+                                  minutes=minutes, expires=expires_in))
+        named = set(pane_ids)
+        told = 0
+        seen: set[str] = set()
+        for b in self.store.bindings():
+            loc = b.location()
+            if loc.key() in seen or self._chat_kind(b) != "direct":
+                continue
+            pane_id = self._seams.resolve_pane(b.pane_id)
+            if not pane_id or (pane_id not in named and self._seams.pane_agent(pane_id) != agent_key):
+                continue
+            seen.add(loc.key())
+            adapter = self._adapters.get((loc.platform, loc.account))
+            if adapter is None:
+                continue
+            if await self._notice(adapter, loc, redact.redact_text(body)):
                 told += 1
         return told
 
@@ -4165,7 +4476,10 @@ class ChannelManager:
         for loc in self._share_targets(str(link.get("paneId") or "")):
             await self._share_notice(loc, share_cmds.opened_text(lang, link, opens))
 
-    async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:
+    async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending,
+                              resend: tuple[str, str] | None = None) -> None:
+        """Follow one message into the pane. ``resend``: (location key, text) the failure
+        notice offers to send again."""
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
         started = self._clock()
         held_notice = False
@@ -4180,7 +4494,12 @@ class ChannelManager:
                     return
                 if status in ("failed", "cancelled"):
                     if adapter is not None and status == "failed":
-                        await self._notice(adapter, pending.loc, f"⚠️ 訊息沒有送進 pane（{verdict.get('reason') or 'failed'}）")
+                        # Named: a bot can drive several panes, and "the pane" alone does not
+                        # say which one dropped it (inject-failed 2026-11-15).
+                        text = MSG_NOT_DELIVERED.format(name=self._pane_name(pane_id),
+                                                        reason=verdict.get("reason") or "failed")
+                        buttons = [self.resend_buttons.button(*resend)] if resend and resend[1] else None
+                        await self._notice(adapter, pending.loc, text, buttons=buttons)
                     return
                 age = self._clock() - started
                 hold = (verdict.get("hold") or {}).get("key") or ""
@@ -4204,6 +4523,14 @@ class ChannelManager:
                 if not q:
                     self._queued.pop(pane_id, None)
             self._queued_loc.pop(msg_key, None)
+
+    def _pane_name(self, pane_id: str) -> str:
+        """The pane's name as Navide shows it, or its id when the directory does not know it."""
+        resolved = self._seams.resolve_pane(pane_id) or pane_id
+        for row in self._seams.pane_directory():
+            if str(row.get("pane_id")) in (pane_id, resolved) and row.get("name"):
+                return str(row["name"])
+        return pane_id
 
     def _arm(self, pane_id: str, pending: _Pending) -> None:
         """The message is in the pane: its next turn_complete is the reply.
@@ -4725,18 +5052,42 @@ def _typed_hint(buttons: list[tuple[str, str]], template: str = MSG_TYPED_HINT, 
 
 
 def _typed_command(data: str, platform: str) -> str:
-    if platform == "mattermost" and data == WAKE_CALLBACK:
-        return MATTERMOST_WAKE_WORD
+    if platform == "mattermost" and data in _MATTERMOST_BARE:
+        return _CALLBACK_COMMANDS[data].lstrip("/")
     return _CALLBACK_COMMANDS[data]
 
 
+def _words(platform: str, words: set[str]) -> set[str]:
+    """``words``, and on Mattermost their bare forms too."""
+    return words | {w.lstrip("/") for w in words} if platform == "mattermost" else words
+
+
 def _wake_words(platform: str) -> set[str]:
-    return WAKE_WORDS | {MATTERMOST_WAKE_WORD} if platform == "mattermost" else WAKE_WORDS
+    return _words(platform, WAKE_WORDS)
 
 
 def wake_buttons(lang: str) -> list[tuple[str, str]]:
     """WAKE_BUTTONS in the Navide language."""
-    return [(wake.text(lang, "button"), WAKE_CALLBACK)]
+    return [(wake.text(lang, "button"), WAKE_CALLBACK), (wake.text(lang, "unlink_button"), UNLINK_CALLBACK)]
+
+
+def fresh_buttons(lang: str) -> list[tuple[str, str]]:
+    """For a binding whose conversation cannot be resumed: a new one, or unlink."""
+    return [(wake.text(lang, "fresh_button"), FRESH_CALLBACK), (wake.text(lang, "unlink_button"), UNLINK_CALLBACK)]
+
+
+def unlink_buttons(lang: str) -> list[tuple[str, str]]:
+    return [(wake.text(lang, "unlink_button"), UNLINK_CALLBACK)]
+
+
+def _offer_buttons(lang: str, binding: Binding) -> list[tuple[str, str]]:
+    """What the chat of a pane that is not online can do: wake its conversation back, start a
+    new one where none is known, or (always) unlink."""
+    if binding.workspace_path and binding.session_id:
+        return wake_buttons(lang)
+    if binding.workspace_path and binding.agent:
+        return fresh_buttons(lang)
+    return unlink_buttons(lang)
 
 
 def _command_word(text: str) -> str:

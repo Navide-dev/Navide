@@ -69,6 +69,7 @@ import {
 } from '../composables/usePushChannelPrefs'
 import { setAcpEnabled, useAcpPrefs } from '../composables/useAcpPrefs'
 import { setArenaEnabled, useArenaPrefs } from '../composables/useArenaPrefs'
+import { setRemoteDevcontainerEnabled, useRemoteDevcontainerPrefs } from '../composables/useRemoteDevcontainerPrefs'
 import { cliAgentRowChips } from '../lib/cliAgentRow'
 import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { projectWorkbenchNeedsReview } from '../lib/projectWorkbench'
@@ -750,6 +751,11 @@ const arenaEnabledModel = computed<boolean>({
   get: () => arenaEnabled.value,
   set: (v) => setArenaEnabled(v),
 })
+const { remoteEnabled } = useRemoteDevcontainerPrefs()
+const remoteEnabledModel = computed<boolean>({
+  get: () => remoteEnabled.value,
+  set: (v) => setRemoteDevcontainerEnabled(v),
+})
 const pushChannelRows = computed(() =>
   CLI_AGENT_SPECS.filter((s) => s.pushChannel)
 )
@@ -1128,7 +1134,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.general-experimental.title'),
     group: t('settings.nav.group.general'),
     summary: t('settings.search.item.general-experimental.summary'),
-    keywords: 'experimental features model arena compare models worktree 實驗功能 模型擂台 比較 模型',
+    keywords: 'experimental features model arena compare models worktree remote container ssh docker devcontainer 實驗功能 模型擂台 比較 模型 遠端 容器',
   },
   {
     id: 'general-p2p',
@@ -2380,6 +2386,7 @@ onMounted(() => {
   stopPluginUpdates = pluginUpdates.subscribe()
   refreshLaunchOverrides()
   if (['cliAgents', 'analyzer', 'mcp'].includes(activeTab.value)) void onboarding.refresh()
+  refreshCliSignInState(activeTab.value)
   void loadSettingsPaths()
   void loadDetectedEditors()
   void perms.refresh()
@@ -2824,7 +2831,16 @@ async function cdpSetEnabled(enabled: boolean): Promise<void> {
   } finally { cdpSaving.value = false }
 }
 
+/** Re-read the CLI account store for the pages that show sign-in state. A
+ *  sign-in the backend cannot see happen (Antigravity on macOS writes the
+ *  Keychain, not the token file it watches) broadcasts nothing, so without
+ *  this the card keeps saying "signed out" until Navide restarts. */
+function refreshCliSignInState(tab: Tab): void {
+  if (tab === 'cliAgents' || tab === 'accounts') void props.cliProfilesApi.refresh?.()
+}
+
 watch(activeTab, (tab) => {
+  refreshCliSignInState(tab)
   if (tab === 'mcp' && mServers.value.length === 0) mLoad()
   if (tab === 'mcp') { void eaLoad(); void cdpLoad() }
   if (tab === 'appearance') void loadAutoRestore()
@@ -4381,6 +4397,16 @@ watch(activeTab, (tab) => {
               >
                 <template #control>
                   <ToggleSwitch v-model="arenaEnabledModel" data-testid="arena-experimental" :aria-label="$t('arena.settings.title')" />
+                </template>
+              </SettingRow>
+              <!-- Remote container panes: the ＋ menu entry and its setup
+                   dialog (composables/useRemoteDevcontainerPrefs.ts). -->
+              <SettingRow
+                :title="`${$t('remoteDevcontainer.experimental-title')} ${$t('arena.experimental')}`"
+                :description="$t('remoteDevcontainer.experimental-hint')"
+              >
+                <template #control>
+                  <ToggleSwitch v-model="remoteEnabledModel" data-testid="remote-devcontainer-experimental" :aria-label="$t('remoteDevcontainer.experimental-title')" />
                 </template>
               </SettingRow>
             </SettingsCard>

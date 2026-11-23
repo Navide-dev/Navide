@@ -105,6 +105,60 @@ notarization verify step** (`codesign` / `spctl` / `stapler`) instead of
 silently shipping an app that cannot update. Secrets are never required for
 local development and must never be committed.
 
+### Windows code signing (local)
+
+CI never holds a Windows signing credential: GitHub Secrets are a cloud
+service, and the signing key, PIN and vendor password stay on the release
+manager's Mac. The Windows jobs always build unsigned installers; they are
+signed afterwards with `scripts/sign-windows-local.mjs`, which works with any
+key [jsign](https://ebourg.github.io/jsign/) can reach — a YubiKey
+(`--storetype YUBIKEY`), a Certum card or SimplySign virtual card through its
+PKCS#11 library (`--storetype PKCS11 --keystore <pkcs11.cfg>`), a `.p12` file,
+and the rest of jsign's keystore types. Nothing in the script names a vendor.
+
+One-time setup:
+
+1. `brew install jsign osslsigncode`.
+2. Optionally store the token PIN in the macOS keychain, typing it at the
+   prompt: `security add-generic-password -s navide-windows-signing -a "$USER" -w`.
+   Without `--keychain-service` the script asks for it on the terminal.
+3. Set the repository variable `WINDOWS_SIGN_LOCALLY` to `true`. With it on,
+   the Release workflow skips its mirror and publish jobs, so a tagged release
+   stays a **draft** until its Windows installers are signed. Unset, the
+   workflow publishes unsigned Windows installers as before.
+
+Per release, once every platform job has uploaded to the draft:
+
+```bash
+# Dry run: downloads, signs, verifies and rewrites latest.yml locally only.
+node scripts/sign-windows-local.mjs --tag vX.Y.Z \
+  --storetype YUBIKEY --publisher '<certificate CN>' \
+  --tsaurl <vendor timestamp URL> --keychain-service navide-windows-signing
+# The same with --apply uploads to the draft and runs mirror.yml.
+node scripts/sign-windows-local.mjs --tag vX.Y.Z ... --apply
+gh release edit vX.Y.Z --draft=false --latest
+```
+
+For each installer the script checks it is the unsigned file `latest.yml`
+describes, signs it, verifies the signature and the signer's CN with
+`osslsigncode verify`, rebuilds its `.blockmap` with electron-builder's own
+blockmap code, and rewrites `sha512`/`size` in `latest.yml`, then re-checks the
+manifest against the signed bytes. `--apply` refuses a release that is not a
+draft, reads every uploaded file back from GitHub, then dispatches
+`mirror.yml` (`refresh_latest=true`) and waits for it, so `dl.navide.dev`
+serves the same bytes. `--run <id>` takes the installers from a workflow run's
+artifacts instead (a `workflow_dispatch` dry run), `--dir` from a local folder.
+
+The PIN or password is never an argument (the script rejects `--storepass`
+and the like), never written to disk and never logged: it reaches jsign only
+through the jsign process environment (`--storepass env:NAVIDE_SIGN_PIN`).
+
+Only the installers are signed. `Navide.exe` and the helpers inside them stay
+unsigned, which SmartScreen does not check. electron-updater still installs
+updates without checking the signature, because `publisherName` is not set.
+Set it only once every release is signed with the same certificate subject:
+from then on an update signed by anyone else, or not signed at all, is refused.
+
 ## Creating a release
 
 1. Finish and verify the intended changes. Update `CHANGELOG.md`, and add the
@@ -128,7 +182,9 @@ local development and must never be committed.
    `dl.navide.dev`, and the final **Publish the GitHub Release** job makes it
    public and Latest only after all of them passed. If any job fails, the
    release stays a draft; `RELEASING.md` ("After the tag push") covers
-   finishing or deleting it.
+   finishing or deleting it. With `WINDOWS_SIGN_LOCALLY` on, the draft waits
+   for you instead: sign the Windows installers locally, which also mirrors
+   the release, and publish it ([Windows code signing (local)](#windows-code-signing-local)).
 6. Install the release DMG on a test Mac and the installers on a test Windows
    and Linux machine. Publish a newer patch release and use the in-app flow to
    verify check, download, restart, and the resulting app version.

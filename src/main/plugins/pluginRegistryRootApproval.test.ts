@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { OFFICIAL_PUBLISHER_KEY_PEM } from './pluginVerify'
+import { OFFICIAL_REGISTRY_API_URL } from '../../shared/marketplaceDeveloper'
 import {
   loadOfficialRegistryRootKey,
   registryRootFingerprint,
@@ -134,6 +135,35 @@ describe('resolveMarketplaceRegistryRoot', () => {
       'https://server.navide.dev/Registry',
       'http://server.navide.dev/registry',
       'https://server.navide.dev.evil.test/registry',
+    ]) {
+      expect(() => resolve(url)).toThrow(/explicit root approval/)
+    }
+  })
+
+  it('keeps the Official Registry identity after the website moved to new hosts', () => {
+    // Installed plugins and their receipts were trusted under this exact URL
+    // and the packaged root key; the move must not change either.
+    expect(OFFICIAL_REGISTRY_API_URL).toBe('https://server.navide.dev/registry')
+    const resolve = (registryUrlOverride: string) =>
+      resolveMarketplaceRegistryRoot({
+        registryUrlOverride,
+        defaultRegistryUrl: OFFICIAL_REGISTRY_API_URL,
+        officialRegistryUrl: OFFICIAL_REGISTRY_API_URL,
+        officialRootPublicKey: official,
+      })
+    expect(resolve(OFFICIAL_REGISTRY_API_URL)).toMatchObject({
+      registryUrl: OFFICIAL_REGISTRY_API_URL,
+      rootPublicKey: official,
+      authority: 'official',
+      source: 'app',
+    })
+    // The storefront and the console serve no API and get no root key of
+    // their own: a Host pointed at them needs an explicit approval.
+    for (const url of [
+      'https://marketplace.navide.dev',
+      'https://marketplace.navide.dev/registry',
+      'https://developers.navide.dev',
+      'https://developers.navide.dev/registry',
     ]) {
       expect(() => resolve(url)).toThrow(/explicit root approval/)
     }

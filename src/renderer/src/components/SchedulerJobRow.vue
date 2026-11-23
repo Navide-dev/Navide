@@ -10,6 +10,7 @@ import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import type { SchedulerJobsApi } from '../composables/useSchedulerJobs'
 import { openEvolvePanel } from '../composables/useEvolve'
+import { openShippedLogPanel } from '../composables/useShippedLog'
 import type { Translate } from '../lib/cronDescribe'
 import { describeSchedule, type SchedulerJob } from '../lib/schedulerJobs'
 
@@ -31,10 +32,16 @@ const startsPipeline = computed(() => props.job.action.kind === 'pipeline_start'
 const expiry = computed(() => props.api.expiryLabel(props.job))
 const updatedBy = computed(() => props.api.updatedByLabel(props.job))
 const system = computed(() => props.api.isSystem(props.job))
+const name = computed(() => props.api.displayName(props.job))
 const failReason = computed(() => props.api.failReason(props.job))
 
+/** A system job is managed from the panel of the feature that owns it. */
+const shippedLog = computed(() => props.job.owner?.feature === 'shipped-log')
+
 function manage(): void {
-  openEvolvePanel(props.api.systemWorkspace(props.job))
+  const workspace = props.api.systemWorkspace(props.job)
+  if (shippedLog.value) openShippedLogPanel(workspace)
+  else openEvolvePanel(workspace)
 }
 </script>
 
@@ -44,7 +51,7 @@ function manage(): void {
       <span class="sj-dot" :class="light" data-test="light" />
       <template v-if="system">
         <span class="sj-lock" data-test="lock" aria-hidden="true">🔒</span>
-        <span class="sj-name sj-name-ro" v-truncate data-test="system-name" :title="t('scheduler.system.locked-title')">{{ job.name }}</span>
+        <span class="sj-name sj-name-ro" v-truncate data-test="system-name" :title="t(shippedLog ? 'scheduler.system.locked-title-shipped-log' : 'scheduler.system.locked-title')">{{ name }}</span>
         <span class="sj-tag sj-system" data-test="system-tag">{{ t('scheduler.system.tag') }}</span>
       </template>
       <button v-else class="sj-name" v-truncate :title="t('scheduler.edit')" @click="$emit('edit', job)">{{ job.name }}</button>

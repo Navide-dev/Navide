@@ -53,7 +53,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude 帳號（目前：{current}）\n按一下切換；每個分格下一次請求就會用新帳號",
         "title_group": "🔁 Claude 帳號（目前：{current}）\n群組聊天室不能切換，請私訊 bot 傳 /account",
         "fixed": "有 {count} 個分格固定在帳號自己的資料夾，切換後不會跟著換",
-        "signed_out": "未登入",
+        "signed_out": "尚未登入",
+        "default": "Default（內建）",
         "no_reading": "—",
         "cancel": "✖ 取消",
         "cancelled": "已取消切換帳號。",
@@ -76,6 +77,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 切換模型",
         "failover_done": "🔄 額度用完，已自動接續：Claude 從 {from} 換到 {to}。",
         "failover_needs_login": "⚠️ 額度用完，Claude 已自動換到 {to}，但這個帳號沒有可用的登入，請到 Navide 視窗登入。",
+        "failover_stuck": "⏸ {agent} 額度用完後的自動接續停住了（{reason}），已經 {minutes} 分鐘沒有處理。請到 Navide 視窗切換帳號；{expires} 後會自動結束這次接續。",
+        "failover_stuck_expired": "⌛ {agent} 停住的自動接續已到期結束（{reason}）。下次額度用完時會重新嘗試自動接續。",
         "switch_back": "↩ 改回 {to}",
     },
     "en-US": {
@@ -83,7 +86,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude accounts (now: {current})\nTap one to switch; every pane uses it from its next request",
         "title_group": "🔁 Claude accounts (now: {current})\nA group chat cannot switch; message the bot directly and send /account",
         "fixed": "{count} pane(s) are fixed to an account's own folder and stay put when you switch",
-        "signed_out": "signed out",
+        "signed_out": "Not signed in",
+        "default": "Default (built-in)",
         "no_reading": "—",
         "cancel": "✖ Cancel",
         "cancelled": "Account switch cancelled.",
@@ -106,6 +110,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Switch model",
         "failover_done": "🔄 Quota ran out, so Navide continued on another account: Claude switched from {from} to {to}.",
         "failover_needs_login": "⚠️ Quota ran out and Claude switched to {to}, but that account has no usable sign-in; sign in from the Navide window.",
+        "failover_stuck": "⏸ Automatic continuation for {agent} stopped after the quota ran out ({reason}) and has waited {minutes} min. Switch accounts in the Navide window; this run ends on its own in {expires}.",
+        "failover_stuck_expired": "⌛ The stopped continuation for {agent} expired ({reason}). The next time the quota runs out, Navide tries to continue automatically again.",
         "switch_back": "↩ Switch back to {to}",
     },
     "ja-JP": {
@@ -114,6 +120,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "title_group": "🔁 Claude アカウント（現在：{current}）\nグループでは切り替えできません。bot に直接 /account を送ってください",
         "fixed": "{count} 個のペインはアカウント専用フォルダに固定されており、切り替えても移りません",
         "signed_out": "未ログイン",
+        "default": "既定（組み込み）",
         "no_reading": "—",
         "cancel": "✖ キャンセル",
         "cancelled": "アカウントの切り替えをキャンセルしました。",
@@ -136,6 +143,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 モデル切替",
         "failover_done": "🔄 クォータが切れたため自動で継続しました：Claude を {from} から {to} に切り替えました。",
         "failover_needs_login": "⚠️ クォータが切れ、Claude は {to} に切り替わりましたが、このアカウントには使えるログインがありません。Navide のウィンドウでログインしてください。",
+        "failover_stuck": "⏸ {agent} のクォータ切れ後の自動継続が止まったまま {minutes} 分経過しました（{reason}）。Navide のウィンドウでアカウントを切り替えてください。{expires} 後にこの継続は自動で終了します。",
+        "failover_stuck_expired": "⌛ 止まっていた {agent} の自動継続は期限切れで終了しました（{reason}）。次にクォータが切れたときは、改めて自動継続を試みます。",
         "switch_back": "↩ {to} に戻す",
     },
     "zh-CN": {
@@ -143,7 +152,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude 账号（当前：{current}）\n点一下切换；每个分格下一次请求就会用新账号",
         "title_group": "🔁 Claude 账号（当前：{current}）\n群组聊天不能切换，请私聊 bot 发送 /account",
         "fixed": "有 {count} 个分格固定在账号自己的文件夹，切换后不会跟着换",
-        "signed_out": "未登录",
+        "signed_out": "尚未登录",
+        "default": "Default（内置）",
         "no_reading": "—",
         "cancel": "✖ 取消",
         "cancelled": "已取消切换账号。",
@@ -166,6 +176,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 切换模型",
         "failover_done": "🔄 额度用完，已自动接续：Claude 从 {from} 换到 {to}。",
         "failover_needs_login": "⚠️ 额度用完，Claude 已自动换到 {to}，但这个账号没有可用的登录，请到 Navide 窗口登录。",
+        "failover_stuck": "⏸ {agent} 额度用完后的自动接续停住了（{reason}），已经 {minutes} 分钟没有处理。请到 Navide 窗口切换账号；{expires} 后会自动结束这次接续。",
+        "failover_stuck_expired": "⌛ {agent} 停住的自动接续已到期结束（{reason}）。下次额度用完时会重新尝试自动接续。",
         "switch_back": "↩ 改回 {to}",
     },
     "ko-KR": {
@@ -174,6 +186,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "title_group": "🔁 Claude 계정 (현재: {current})\n그룹 채팅에서는 전환할 수 없어요. bot에게 직접 /account를 보내 주세요",
         "fixed": "{count}개 창은 계정 전용 폴더에 고정되어 있어 전환해도 그대로예요",
         "signed_out": "로그인 안 됨",
+        "default": "기본값(기본 제공)",
         "no_reading": "—",
         "cancel": "✖ 취소",
         "cancelled": "계정 전환을 취소했어요.",
@@ -196,6 +209,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 모델 전환",
         "failover_done": "🔄 할당량이 소진되어 자동으로 이어갑니다: Claude를 {from}에서 {to}(으)로 전환했습니다.",
         "failover_needs_login": "⚠️ 할당량이 소진되어 Claude가 {to}(으)로 전환됐지만 이 계정에 사용할 수 있는 로그인이 없습니다. Navide 창에서 로그인하세요.",
+        "failover_stuck": "⏸ {agent} 할당량 소진 후 자동 이어가기가 멈춘 지 {minutes}분이 지났습니다({reason}). Navide 창에서 계정을 전환하세요. {expires} 후 이번 이어가기는 자동으로 종료됩니다.",
+        "failover_stuck_expired": "⌛ 멈춰 있던 {agent} 자동 이어가기가 만료되어 종료됐습니다({reason}). 다음에 할당량이 소진되면 다시 자동으로 이어가기를 시도합니다.",
         "switch_back": "↩ {to}(으)로 되돌리기",
     },
     "es-ES": {
@@ -203,7 +218,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Cuentas de Claude (ahora: {current})\nToca una para cambiar; cada panel la usa desde su siguiente petición",
         "title_group": "🔁 Cuentas de Claude (ahora: {current})\nUn grupo no puede cambiar; escribe al bot en privado y envía /account",
         "fixed": "{count} panel(es) están fijados a la carpeta propia de una cuenta y no cambian",
-        "signed_out": "sin sesión",
+        "signed_out": "Sin sesión iniciada",
+        "default": "Predeterminada (integrada)",
         "no_reading": "—",
         "cancel": "✖ Cancelar",
         "cancelled": "Cambio de cuenta cancelado.",
@@ -226,6 +242,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Cambiar modelo",
         "failover_done": "🔄 Se agotó la cuota y Navide siguió con otra cuenta: Claude cambió de {from} a {to}.",
         "failover_needs_login": "⚠️ Se agotó la cuota y Claude cambió a {to}, pero esa cuenta no tiene un inicio de sesión válido; inicia sesión en la ventana de Navide.",
+        "failover_stuck": "⏸ La continuación automática de {agent} se detuvo al agotarse la cuota ({reason}) y lleva {minutes} min esperando. Cambia de cuenta en la ventana de Navide; este intento termina solo en {expires}.",
+        "failover_stuck_expired": "⌛ La continuación detenida de {agent} caducó ({reason}). La próxima vez que se agote la cuota, Navide volverá a intentar continuar automáticamente.",
         "switch_back": "↩ Volver a {to}",
     },
     "fr-FR": {
@@ -233,7 +251,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Comptes Claude (actuel : {current})\nTouchez-en un pour changer ; chaque panneau l’utilise dès sa prochaine requête",
         "title_group": "🔁 Comptes Claude (actuel : {current})\nUn groupe ne peut pas changer ; écrivez au bot en privé et envoyez /account",
         "fixed": "{count} panneau(x) fixé(s) au dossier propre d’un compte ne suivent pas le changement",
-        "signed_out": "déconnecté",
+        "signed_out": "Non connecté",
+        "default": "Par défaut (intégré)",
         "no_reading": "—",
         "cancel": "✖ Annuler",
         "cancelled": "Changement de compte annulé.",
@@ -256,6 +275,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Changer de modèle",
         "failover_done": "🔄 Quota épuisé, Navide a continué sur un autre compte : Claude est passé de {from} à {to}.",
         "failover_needs_login": "⚠️ Quota épuisé et Claude est passé à {to}, mais ce compte n'a pas de connexion utilisable ; connectez-vous depuis la fenêtre Navide.",
+        "failover_stuck": "⏸ La reprise automatique de {agent} s'est arrêtée après l'épuisement du quota ({reason}) et attend depuis {minutes} min. Changez de compte dans la fenêtre Navide ; cette tentative se termine seule dans {expires}.",
+        "failover_stuck_expired": "⌛ La reprise arrêtée de {agent} a expiré ({reason}). La prochaine fois que le quota sera épuisé, Navide réessaiera de reprendre automatiquement.",
         "switch_back": "↩ Revenir à {to}",
     },
     "de-DE": {
@@ -263,7 +284,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Claude-Konten (aktuell: {current})\nTippe eines an, um zu wechseln; jeder Bereich nutzt es ab seiner nächsten Anfrage",
         "title_group": "🔁 Claude-Konten (aktuell: {current})\nIn einer Gruppe kann nicht gewechselt werden; schreib dem Bot direkt und sende /account",
         "fixed": "{count} Bereich(e) sind an den eigenen Ordner eines Kontos gebunden und wechseln nicht mit",
-        "signed_out": "abgemeldet",
+        "signed_out": "Nicht angemeldet",
+        "default": "Standard (integriert)",
         "no_reading": "—",
         "cancel": "✖ Abbrechen",
         "cancelled": "Kontowechsel abgebrochen.",
@@ -286,6 +308,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Modell wechseln",
         "failover_done": "🔄 Kontingent aufgebraucht, Navide macht mit einem anderen Konto weiter: Claude wechselte von {from} zu {to}.",
         "failover_needs_login": "⚠️ Kontingent aufgebraucht und Claude wechselte zu {to}, aber dieses Konto hat keine gültige Anmeldung; melde dich im Navide-Fenster an.",
+        "failover_stuck": "⏸ Die automatische Fortsetzung für {agent} ist nach dem aufgebrauchten Kontingent stehen geblieben ({reason}) und wartet seit {minutes} Min. Wechsle das Konto im Navide-Fenster; dieser Versuch endet von selbst in {expires}.",
+        "failover_stuck_expired": "⌛ Die stehengebliebene Fortsetzung für {agent} ist abgelaufen ({reason}). Wenn das Kontingent das nächste Mal aufgebraucht ist, versucht Navide wieder automatisch fortzusetzen.",
         "switch_back": "↩ Zurück zu {to}",
     },
     "pt-BR": {
@@ -293,7 +317,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Contas do Claude (agora: {current})\nToque em uma para trocar; cada painel a usa a partir da próxima requisição",
         "title_group": "🔁 Contas do Claude (agora: {current})\nUm grupo não pode trocar; fale com o bot no privado e envie /account",
         "fixed": "{count} painel(is) estão fixos na pasta própria de uma conta e não trocam",
-        "signed_out": "sem login",
+        "signed_out": "Sem login",
+        "default": "Padrão (integrada)",
         "no_reading": "—",
         "cancel": "✖ Cancelar",
         "cancelled": "Troca de conta cancelada.",
@@ -316,6 +341,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Trocar modelo",
         "failover_done": "🔄 A cota acabou e o Navide continuou em outra conta: o Claude trocou de {from} para {to}.",
         "failover_needs_login": "⚠️ A cota acabou e o Claude trocou para {to}, mas essa conta não tem um login válido; entre pela janela do Navide.",
+        "failover_stuck": "⏸ A continuação automática do {agent} parou depois que a cota acabou ({reason}) e está esperando há {minutes} min. Troque de conta na janela do Navide; esta tentativa termina sozinha em {expires}.",
+        "failover_stuck_expired": "⌛ A continuação parada do {agent} expirou ({reason}). Na próxima vez que a cota acabar, o Navide tentará continuar automaticamente de novo.",
         "switch_back": "↩ Voltar para {to}",
     },
     "ru-RU": {
@@ -323,7 +350,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Аккаунты Claude (сейчас: {current})\nНажмите, чтобы переключить; каждая панель использует его со следующего запроса",
         "title_group": "🔁 Аккаунты Claude (сейчас: {current})\nВ группе переключать нельзя; напишите боту лично и отправьте /account",
         "fixed": "Панелей, закреплённых за папкой аккаунта: {count}; при переключении они не меняются",
-        "signed_out": "не выполнен вход",
+        "signed_out": "Вход не выполнен",
+        "default": "По умолчанию (встроенный)",
         "no_reading": "—",
         "cancel": "✖ Отмена",
         "cancelled": "Смена аккаунта отменена.",
@@ -346,6 +374,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Сменить модель",
         "failover_done": "🔄 Квота закончилась, Navide продолжил на другом аккаунте: Claude переключён с {from} на {to}.",
         "failover_needs_login": "⚠️ Квота закончилась, Claude переключён на {to}, но у этого аккаунта нет рабочего входа; войдите в окне Navide.",
+        "failover_stuck": "⏸ Автоматическое продолжение для {agent} остановилось после исчерпания квоты ({reason}) и ждёт уже {minutes} мин. Переключите аккаунт в окне Navide; эта попытка завершится сама через {expires}.",
+        "failover_stuck_expired": "⌛ Остановленное продолжение для {agent} истекло ({reason}). Когда квота закончится в следующий раз, Navide снова попробует продолжить автоматически.",
         "switch_back": "↩ Вернуть {to}",
     },
     "vi-VN": {
@@ -353,7 +383,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "title": "🔁 Tài khoản Claude (hiện tại: {current})\nBấm để đổi; mọi pane dùng nó từ yêu cầu kế tiếp",
         "title_group": "🔁 Tài khoản Claude (hiện tại: {current})\nNhóm không đổi được; hãy nhắn riêng cho bot và gửi /account",
         "fixed": "{count} pane được gắn vào thư mục riêng của một tài khoản và không đổi theo",
-        "signed_out": "chưa đăng nhập",
+        "signed_out": "Chưa đăng nhập",
+        "default": "Mặc định (tích hợp sẵn)",
         "no_reading": "—",
         "cancel": "✖ Hủy",
         "cancelled": "Đã hủy đổi tài khoản.",
@@ -376,6 +407,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "model_link": "🧠 Đổi mô hình",
         "failover_done": "🔄 Hết hạn mức, Navide đã tiếp tục bằng tài khoản khác: Claude đổi từ {from} sang {to}.",
         "failover_needs_login": "⚠️ Hết hạn mức và Claude đã đổi sang {to}, nhưng tài khoản này chưa có đăng nhập dùng được; hãy đăng nhập trong cửa sổ Navide.",
+        "failover_stuck": "⏸ Việc tự động tiếp tục cho {agent} đã dừng sau khi hết hạn mức ({reason}) và đã chờ {minutes} phút. Hãy đổi tài khoản trong cửa sổ Navide; lượt này sẽ tự kết thúc sau {expires}.",
+        "failover_stuck_expired": "⌛ Lượt tiếp tục bị dừng của {agent} đã hết hạn ({reason}). Lần tới khi hết hạn mức, Navide sẽ thử tự động tiếp tục lại.",
         "switch_back": "↩ Đổi lại {to}",
     },
 }
@@ -403,6 +436,11 @@ class AccountRow:
     stale: bool = False
     signed_out: bool = False
     active: bool = False
+    # The built-in Default with no alias or email: worded as the desktop switcher words it.
+    builtin: bool = False
+    # What a group chat shows (others read it): the alias or the given name, never an
+    # email's local part. None = the same as label; "" = the generic Default.
+    group_label: str | None = None
 
     @classmethod
     def from_window(cls, raw: dict[str, Any]) -> AccountRow:
@@ -412,17 +450,23 @@ class AccountRow:
             label=mask_email(str(raw.get("label") or raw.get("id") or "")),
             remaining=float(rem) if isinstance(rem, (int, float)) and not isinstance(rem, bool) else None,
             stale=raw.get("stale") is True, signed_out=raw.get("signedOut") is True,
-            active=raw.get("active") is True,
+            active=raw.get("active") is True, builtin=raw.get("builtin") is True,
+            group_label=mask_email(str(raw["groupLabel"])) if isinstance(raw.get("groupLabel"), str) else None,
         )
 
-    def shown(self, lang: str) -> str:
+    def name(self, lang: str, *, group: bool = False) -> str:
+        if group and self.group_label is not None:
+            return self.group_label or text(lang, "default")
+        return text(lang, "default") if self.builtin else self.label
+
+    def shown(self, lang: str, *, group: bool = False) -> str:
         if self.signed_out:
             figure = text(lang, "signed_out")
         elif self.remaining is None:
             figure = text(lang, "no_reading")
         else:
             figure = ("~" if self.stale else "") + f"{round(self.remaining)}%"
-        return f"{'✓ ' if self.active else ''}{_label(self.label)} · {figure}"
+        return f"{'✓ ' if self.active else ''}{_label(self.name(lang, group=group))} · {figure}"
 
 
 def parse_callback(data: str) -> str | None:
@@ -465,8 +509,12 @@ class Menu:
     message_id: str = ""
     tokens: list[str] = field(default_factory=list)
 
-    def current_label(self) -> str:
-        return next((r.label for r in self.rows if r.id == self.active_id), self.active_id)
+    def current_label(self, *, group: bool = False) -> str:
+        return self.label_of(self.active_id, group=group)
+
+    def label_of(self, account_id: str, *, group: bool = False) -> str:
+        """The name the menu shows for an account, or its id when the menu has no such row."""
+        return next((r.name(self.lang, group=group) for r in self.rows if r.id == account_id), account_id)
 
 
 @dataclass
@@ -521,11 +569,11 @@ class AccountMenus:
         """The menu's text. A group chat gets the numbered list and no way to switch; a
         chat without buttons gets the numbered list and how to switch by typing."""
         lang = menu.lang
-        lines = [text(lang, "title_group" if group else "title", current=_label(menu.current_label()))]
+        lines = [text(lang, "title_group" if group else "title", current=_label(menu.current_label(group=group)))]
         if menu.fixed_count:
             lines.append(text(lang, "fixed", count=menu.fixed_count))
         if group or numbered:
-            lines.extend(f"{i}. {r.shown(lang)}" for i, r in enumerate(menu.rows, 1))
+            lines.extend(f"{i}. {r.shown(lang, group=group)}" for i, r in enumerate(menu.rows, 1))
         if numbered and not group:
             lines.append(text(lang, "list_hint"))
         return "\n".join(lines)

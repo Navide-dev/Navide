@@ -16,6 +16,7 @@ import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDispla
 import type { SidebarMode } from '../lib/sidebarMode'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { evolveBadgeLabel, evolveBadgeState, isEvolveSystemPane, useEvolveBadges } from '../composables/useEvolve'
+import { openShippedLogPanel } from '../composables/useShippedLog'
 import { rollupTabStatus, runGroupStateLabelKey, tabRunStatePaneStatus } from '../lib/tabStatus'
 import {
   ALL_RAIL_ID,
@@ -81,6 +82,7 @@ import { modelRefusalMessage } from '../lib/agentSpawnGate'
 import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { ACP_MENU_ENTRIES, useAcpPrefs } from '../composables/useAcpPrefs'
 import { useArenaPrefs } from '../composables/useArenaPrefs'
+import { useRemoteDevcontainerPrefs } from '../composables/useRemoteDevcontainerPrefs'
 
 /** CLIs YOLO mode actually affects: the ones declaring a bypass flag. Derived,
  *  because the hand-written hint here listed three while eight qualified. */
@@ -1139,6 +1141,9 @@ const emit = defineEmits<{
   (e: 'spawn', payload: SpawnPayload): void
   /** Settings → CLI Agents → ACP (experimental) only: open an ACP pane. */
   (e: 'spawn-acp', payload: SpawnPayload): void
+  /** Settings → General → Remote container panes only: open the setup dialog. */
+  (e: 'spawn-remote', payload: { workspacePath: string; runGroupId?: string }): void
+  (e: 'spawn-ssh-remote'): void
   (e: 'spawn-resume', payload: ResumePayload): void
   (e: 'kill', paneId: string): void
   (e: 'kill-all'): void
@@ -2508,6 +2513,11 @@ function openEvolveFor(path: string): void {
   closeWsMenu()
   evolve.openPanel(path)
 }
+function openShippedLogFor(path: string): void {
+  closeWsMoreMenu()
+  closeWsMenu()
+  openShippedLogPanel(path)
+}
 
 /** Same floor as the right-click menu's: a window must keep one workspace, so
  *  the close rows only appear for a project that has somewhere to land. */
@@ -2710,13 +2720,12 @@ function wsMenuAction(kind: WorkspaceActionKind): void {
 const addMenuAnchor = ref<{ top: number; bottom: number; right: number; floor: number } | null>(null)
 /** Tallest the ＋ menu gets: the roster scroller's cap (`.ws-add-scroll`,
  *  546px: the rows plus the CLI and Agents headings) plus the fixed
- *  furniture around it — role picker, two dividers,
- *  the cloud-agents hint (up to five lines, ~72px), the Terminal and
+ *  furniture around it — role picker, two dividers, the Terminal and
  *  Manual-spawn buttons, and the menu's own padding. Only
  *  used to decide whether the menu opens downwards or flips up, so it has to
  *  track that CSS cap; leaving it at the old 300 would have let a menu open
  *  downwards into a gap it no longer fits in. */
-const ADD_MENU_MAX_H = 716
+const ADD_MENU_MAX_H = 644
 /** The ＋ menu's width, tracking `.ws-add-menu`'s CSS width. Wide enough for
  *  the longest "<label> — not installed" row (ru-RU's Kimi Code CLI row is
  *  ~276px of bold system-font text plus 36px of check mark and padding); at
@@ -2819,6 +2828,23 @@ async function spawnAcpFromMenu(row: { agentKey: string; adapterDep: string; lab
     workspacePath: workspace,
     runGroupId: group || undefined,
   })
+}
+
+// ── ＋ menu, remote container entry (Settings → General → Experimental) ─────
+const { remoteEnabled } = useRemoteDevcontainerPrefs()
+
+/** App.vue opens the setup dialog; the pane is spawned from there. */
+function openRemoteFromMenu(): void {
+  const workspace = addMenuWorkspace.value || workspacePath.value
+  const group = addMenuGroup.value
+  addMenuOpen.value = false
+  emit('spawn-remote', { workspacePath: workspace, runGroupId: group || undefined })
+}
+
+/** App.vue opens the SSH Remote dialog. */
+function openSshRemoteFromMenu(): void {
+  addMenuOpen.value = false
+  emit('spawn-ssh-remote')
 }
 
 function openAgentFromMenu(identityId: string): void {
@@ -4380,6 +4406,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <button class="ws-ctx-opt" @click="wsMenuAction('reveal')">{{ $t('action.open-in-finder') }}</button>
         <button class="ws-ctx-opt" @click="wsMenuAction('copy')">{{ $t('action.copy-path') }}</button>
         <button class="ws-ctx-opt" data-test="evolve-ctx" @click="openEvolveFor(wsMenu.path)">✦ {{ $t('evolve.menu.open') }}</button>
+        <button class="ws-ctx-opt" data-test="shipped-log-ctx" @click="openShippedLogFor(wsMenu.path)">🚀 {{ $t('shippedLog.menu.open') }}</button>
         <!-- Membership is exclusive, so this reads as a radio group: one tick,
              and "None" is a real choice rather than the absence of one. -->
         <template v-if="workspaceRails.length">
@@ -4452,6 +4479,10 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <span class="ws-more-ico">✦</span>
           <span>{{ $t('evolve.menu.open') }}</span>
           <span v-if="evolve.badges.value[wsMoreMenuPath]?.enabled" class="ws-evolve-on">● {{ $t('evolve.menu.enabled') }}</span>
+        </button>
+        <button class="ws-more-opt" data-test="shipped-log-menu" @click="openShippedLogFor(wsMoreMenuPath)">
+          <span class="ws-more-ico">🚀</span>
+          <span>{{ $t('shippedLog.menu.open') }}</span>
         </button>
 
         <!-- Everything below already existed, reachable only by right-clicking
@@ -4628,9 +4659,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             </button>
           </template>
         </div>
-        <!-- Cloud agents (Grok Bot, dots, …) have no CLI to run in a pane; they
-             ship as Navide plugins, so the menu points there. -->
-        <div class="ws-add-hint">{{ $t('label.cloud-agents-plugin-hint') }}</div>
+        <!-- Remote container pane (experimental): absent while the switch is off. -->
+        <button
+          v-if="remoteEnabled"
+          class="ws-add-opt ws-add-more ws-add-remote"
+          data-testid="add-menu-remote"
+          @click="openRemoteFromMenu"
+        >
+          <span class="ws-add-lb" v-truncate>{{ $t('remoteDevcontainer.menu-entry') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+        </button>
         <!-- Model arena (experimental): its own block, styled exactly like the
              CLI / Agents headings and entries; absent while the switch is off. -->
         <template v-if="arenaEnabled">
@@ -4657,6 +4694,15 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           class="ws-add-opt ws-add-more ws-add-term"
           @click="openTerminalFromMenu"
         >{{ $t('label.terminal') }}</button>
+        <!-- SSH Remote (experimental, same switch as remote container panes). -->
+        <button
+          v-if="remoteEnabled"
+          class="ws-add-opt ws-add-more ws-add-ssh"
+          data-testid="add-menu-ssh-remote"
+          @click="openSshRemoteFromMenu"
+        >
+          <span class="ws-add-lb" v-truncate>{{ $t('sshRemote.menu-entry') }} <span class="ws-add-exp">{{ $t('arena.experimental') }}</span></span>
+        </button>
         <button class="ws-add-opt ws-add-more ws-add-card" @click="openSpawnCardFromMenu">
           {{ $t('label.manual-spawn') }}…
         </button>

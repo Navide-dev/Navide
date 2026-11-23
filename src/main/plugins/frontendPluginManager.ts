@@ -20,6 +20,7 @@ import type {
 import type { PluginCommandEntry, PluginCommandRunResult, PluginCommandTarget, PluginSlotEntry } from '../../shared/pluginCommands'
 import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
+import { PROXY_RESOLVE_REQUEST, handleProxyResolveRequest } from '../channel-proxy'
 import { validateSupportedLocale, type SupportedLocale } from '../hostLocale'
 import { webPolicyDeniedMessage } from '../browserAgentStrings'
 import { composePluginFrameQuery } from './pluginContributionQuery'
@@ -769,15 +770,15 @@ interface GitContributionState {
 }
 
 interface GitAccountHandlers {
-  available(): boolean
+  available(): Promise<boolean>
   list(): Array<{ id: string; label: string; host: string; username: string; tokenLast4: string }>
-  add(input: { label: string; host: string; username: string; token: string }): { id: string; label: string; host: string; username: string; tokenLast4: string }
-  update(id: string, patch: Partial<{ label: string; host: string; username: string; token: string }>): void
+  add(input: { label: string; host: string; username: string; token: string }): Promise<{ id: string; label: string; host: string; username: string; tokenLast4: string }>
+  update(id: string, patch: Partial<{ label: string; host: string; username: string; token: string }>): Promise<void>
   remove(id: string): void
   bind(workspacePath: string, accountId: string): void
   unbind(workspacePath: string): void
   getBinding(workspacePath: string): string | null
-  getCredential(workspacePath: string): { username: string; token: string; expectedHost: string } | null
+  getCredential(workspacePath: string): Promise<{ username: string; token: string; expectedHost: string } | null>
 }
 
 interface GitCredentialOwner {
@@ -1092,6 +1093,8 @@ const GIT_HOST_FS_MUTATION_TYPES = new Set([
 
 /** How long a picker search waits for the plugin's own file query to finish. */
 const FILE_PICKER_SLOT_WAIT_MS = 5_000
+/** How long a capability call made before the backend first comes up waits for it. */
+const BACKEND_STARTUP_WAIT_MS = 60_000
 
 const PUBLIC_FS_WS_TYPES: Readonly<Record<string, string>> = {
   'fs.readFile': 'fs.read_file',
@@ -1732,6 +1735,11 @@ export class FrontendPluginManager {
   private ipcReady = false
   /** Backend WS url as last reported by main, or null when no backend is up. */
   private backendWsUrl: string | null = null
+  /** True once main has reported a backend url at least once. Before that
+   *  (app start, window restore) capability calls wait for the backend
+   *  instead of failing; after it, a stopped backend fails fast. */
+  private backendUrlEverKnown = false
+  private readonly backendUrlWaiters = new Set<() => void>()
   /** Main-process-only bearer used to authenticate this Host WS session. */
   private backendHostToken: string | null = null
   private hostSessionRegistered = false
@@ -2675,7 +2683,7 @@ export class FrontendPluginManager {
   }
 
   /** One secrets operation as the installed package's trust identity. */
-  private runPluginSecrets(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): unknown {
+  private runPluginSecrets(pluginId: string, operation: SecretsOperation, args: Record<string, unknown>): Promise<unknown> {
     const store = this.pluginSecretStore
     if (!store) throw new Error('plugin secrets are unavailable')
     let identity: string | null
@@ -2712,10 +2720,10 @@ export class FrontendPluginManager {
 
   /** An agent tool answer with the package's own secret values redacted.
    *  A chunked result is joined and parsed first; the core splits it again. */
-  private redactAgentToolSecrets(pluginId: string, response: HostAgentToolResponse): HostAgentToolResponse {
+  private async redactAgentToolSecrets(pluginId: string, response: HostAgentToolResponse): Promise<HostAgentToolResponse> {
     let values: string[]
     try {
-      values = this.pluginSecretStore?.values(pluginId) ?? []
+      values = (await this.pluginSecretStore?.values(pluginId)) ?? []
     } catch {
       values = []
     }
@@ -3274,14 +3282,14 @@ export class FrontendPluginManager {
    *  runtime binding's. */
   createThirdPartySecretsPort(): PackageSecretsPort {
     return {
-      run: (operation, args, context) => {
+      run: async (operation, args, context) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
         if (!this.thirdPartyAgentsGrantAllows('secrets', context)) {
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Secrets capability is denied.')
         }
         if (!this.pluginSecretStore) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Plugin secrets are unavailable.')
         try {
-          return this.runPluginSecrets(context.runtime.pluginId, operation, args) as JsonValue
+          return (await this.runPluginSecrets(context.runtime.pluginId, operation, args)) as JsonValue
         } catch (error) {
           if (error instanceof PluginSecretsLimitError) throw new PlansBridgeError('RESOURCE_LIMIT', error.message)
           throw new PlansBridgeError('INTERNAL_ERROR', 'Plugin secrets request failed.')
@@ -5186,7 +5194,7 @@ export class FrontendPluginManager {
       if (!requestedPath || !isAbsolute(String(payload.path))) {
         return buildError(reqId, 'BAD_REQUEST', 'worktree path must be an existing absolute path')
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
       try {
         const response = await client.send<{ worktrees?: unknown }>('git.worktrees', {
@@ -5242,7 +5250,7 @@ export class FrontendPluginManager {
         const accounts = handlers.list().map(({ id, label, host, username, tokenLast4 }) => ({
           id, label, host, username, tokenLast4,
         }))
-        return buildSuccess(reqId, { available: handlers.available(), accounts })
+        return buildSuccess(reqId, { available: await handlers.available(), accounts })
       }
       if (!plugin.workspacePath) {
         return buildError(reqId, 'WORKSPACE_SCOPE_VIOLATION', 'Git view is not workspace-bound')
@@ -5264,7 +5272,7 @@ export class FrontendPluginManager {
         ) {
           return buildError(reqId, 'BAD_REQUEST', 'Git account details are invalid')
         }
-        const { id, label, host, username, tokenLast4 } = handlers.add({
+        const { id, label, host, username, tokenLast4 } = await handlers.add({
           label: payload.label,
           host: payload.host,
           username: payload.username,
@@ -5349,7 +5357,7 @@ export class FrontendPluginManager {
       let credential: { username: string; token: string; expectedHost: string } | null = null
       if (this.gitAccountHandlers) {
         try {
-          credential = this.gitAccountHandlers.getCredential(resolve(workspacePath))
+          credential = await this.gitAccountHandlers.getCredential(resolve(workspacePath))
         } catch (error) {
           return buildError(
             reqId,
@@ -5399,7 +5407,7 @@ export class FrontendPluginManager {
       wsPayload.target_dir = cloneTarget
       delete wsPayload.target_grant
     }
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) {
       if (credentialOwner) this.releaseGitCredentialOwner(credentialOwner)
       return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
@@ -5453,7 +5461,7 @@ export class FrontendPluginManager {
   ): Promise<CapabilityResponse> {
     const adapter = this.miniIdeLegacyPreferences
     if (!adapter) return buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'mini-IDE preferences are unavailable')
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) return buildError(call.reqId, 'BACKEND_ERROR', 'backend not connected')
     try {
       if (wsType === 'ui.settings.get') {
@@ -5526,7 +5534,7 @@ export class FrontendPluginManager {
       if (plugin.capabilityContext?.runtimeBinding?.audience !== 'git-left' || !plugin.workspacePath) {
         return buildError(reqId, 'CAPABILITY_DENIED', 'legacy Git selection is unavailable')
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) return buildError(reqId, 'BACKEND_ERROR', 'backend not connected')
       try {
         const response = await client.send<{ project?: { ui_git_tab_repo?: unknown } | null }>(
@@ -5993,7 +6001,7 @@ export class FrontendPluginManager {
           'terminal session is not owned by this view'
         )
       }
-      const client = this.ensureBackend()
+      const client = this.ensureBackend() ?? await this.waitForFirstBackend()
       if (!client) {
         return buildError(call.reqId, 'BACKEND_ERROR', 'backend not connected')
       }
@@ -6739,13 +6747,18 @@ export class FrontendPluginManager {
   setBackendWsUrl(url: string | null): void {
     if (this.backendWsUrl !== url) this.editorAiCapability.closeAll()
     this.backendWsUrl = url
+    if (url) {
+      this.backendUrlEverKnown = true
+      for (const wake of [...this.backendUrlWaiters]) wake()
+    }
     const client = this.wsClient
     if (url) {
       if (!client) {
-        // Connect eagerly if a running plugin already needs the backend, so
-        // server-push events (git.changed) flow without waiting for the first
-        // capability call. Otherwise ensureBackend() connects lazily later.
-        if (this.anyPluginNeedsBackend()) this.ensureBackend()
+        // Connect now, plugin or not: the backend reaches the Host (channel
+        // proxy lookups, PDF rendering, agent tools) only through this
+        // session's host.register, and server-push events (git.changed) flow
+        // without waiting for a first capability call.
+        this.ensureBackend()
         return
       }
       if (client.isHealthyFor(url)) {
@@ -6772,8 +6785,7 @@ export class FrontendPluginManager {
   /** Rebuild the backend transport after the machine wakes. Not expressible as
    *  setBackendWsUrl: the url has not changed, so it would short-circuit on
    *  isHealthyFor — which reports healthy for a socket whose TCP connection
-   *  died during sleep. No-op when no plugin has needed the backend yet;
-   *  ensureBackend() still connects lazily on the first call. */
+   *  died during sleep. No-op before the first backend url is known. */
   reconnectAfterResume(): void {
     this.editorAiCapability.closeAll()
     this.wsClient?.reconnectNow('system resumed')
@@ -7016,7 +7028,7 @@ export class FrontendPluginManager {
         throw new Error('agent execution policy denied the operation')
       }
       // The plugin id is the Host binding's, never the request's.
-      return this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
+      return await this.runPluginSecrets(plan.runtime.pluginId, secretsOp, plan.args)
     }
 
     if (plan.address === 'agentNotify.send') {
@@ -9019,7 +9031,7 @@ export class FrontendPluginManager {
     beforeDispatch?: () => boolean,
     timeoutMs = 10_000,
   ): Promise<unknown> {
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) throw new Error('backend not connected')
     const response = await client.send(wsType, payload, timeoutMs, {
       ...(beforeDispatch ? { beforeDispatch } : {}),
@@ -9330,7 +9342,7 @@ export class FrontendPluginManager {
       }
     }
     if (plan.address === 'ui.shareChatTargets') type = 'channels.share_targets'
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) return { ok: false, code: 'BACKEND_UNAVAILABLE', message: 'backend not connected' }
     const response = await client.send(type, payload, 60_000, {
       beforeDispatch: () => this.publicPlanCanDispatch(plan, plugin),
@@ -9481,7 +9493,7 @@ export class FrontendPluginManager {
     ) {
       throw new Error(`AI CLI profile '${requestedStartProfileId}' is not available`)
     }
-    const client = this.ensureBackend()
+    const client = this.ensureBackend() ?? await this.waitForFirstBackend()
     if (!client) throw new Error('backend not connected')
     if (plan.address === 'aiCli.resumeSession') {
       const persistView = args.persistView === true
@@ -10131,15 +10143,6 @@ export class FrontendPluginManager {
     }
   }
 
-  /** True when any running plugin declares a non-empty `requires` (i.e. needs
-   *  the backend for calls and/or events; `ping`-only plugins don't). */
-  private anyPluginNeedsBackend(): boolean {
-    for (const plugin of this.running.values()) {
-      if (plugin.requires.length > 0) return true
-    }
-    return false
-  }
-
   /** Whether the app is quitting; index.ts owns the quit flags. */
   private appQuitting: () => boolean = () => false
 
@@ -10177,6 +10180,25 @@ export class FrontendPluginManager {
   /** Lazily create + connect the backend transport, subscribing to the
    *  server-push events the broker forwards. Returns null when no backend url
    *  is known yet. */
+  /** Fallback for capability calls whose ensureBackend() came back null: a
+   *  call made before main has reported the first backend url waits for it
+   *  (bounded) rather than failing with "backend not connected" — plugin
+   *  views restored at app start run before the backend is up. Once a
+   *  backend has been known, a stopped one still fails fast. */
+  private async waitForFirstBackend(): Promise<WsClient | null> {
+    if (this.backendUrlEverKnown) return null
+    await new Promise<void>((resolve) => {
+      const wake = (): void => {
+        clearTimeout(timer)
+        this.backendUrlWaiters.delete(wake)
+        resolve()
+      }
+      const timer = setTimeout(wake, BACKEND_STARTUP_WAIT_MS)
+      this.backendUrlWaiters.add(wake)
+    })
+    return this.ensureBackend()
+  }
+
   private ensureBackend(): WsClient | null {
     if (!this.backendWsUrl) return null
     if (!this.wsClient) {
@@ -10246,6 +10268,10 @@ export class FrontendPluginManager {
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
+      })
+      client.on(PROXY_RESOLVE_REQUEST, (payload) => {
+        // Same rule: only the live client answers.
+        if (this.wsClient === client) void handleProxyResolveRequest(client, payload)
       })
       client.connect(this.backendWsUrl)
     }
@@ -10536,7 +10562,7 @@ export class FrontendPluginManager {
           toolResponse = await this.executeAgentToolCall(toolRequest, progress)
           // A tool answer never carries the package's own secrets.
           const toolPluginId = parseAgentToolCallRequest(toolRequest)?.pluginId
-          if (toolPluginId) toolResponse = this.redactAgentToolSecrets(toolPluginId, toolResponse)
+          if (toolPluginId) toolResponse = await this.redactAgentToolSecrets(toolPluginId, toolResponse)
         } catch (error) {
           // Never forward an internal message (it can carry local paths).
           console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -10650,6 +10676,42 @@ export class FrontendPluginManager {
     const response = await client.send(PLUGIN_ACTIVITY_OVERVIEW_MESSAGE, { plugin_ids: pluginIds }, 15_000)
     if (!response.ok) throw new Error(response.error?.message ?? 'the backend did not answer the activity overview')
     return response.payload
+  }
+
+  /** 0.2.43 #2b: the Navide Cloud account the backend's server link is signed
+   *  in as (member id and name only), or null. Asked over this Host's
+   *  authenticated session; null too when that session is not ready. */
+  async requestCloudIdentity(): Promise<{ memberId: string; name: string } | null> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return null
+    const response = await client.send('host.cloud.identity', {}, 15_000)
+    const identity = response.ok ? (response.payload as { identity?: unknown } | undefined)?.identity : null
+    const record = identity && typeof identity === 'object' ? identity as Record<string, unknown> : null
+    if (!record || typeof record.memberId !== 'string' || !record.memberId) return null
+    return { memberId: record.memberId, name: typeof record.name === 'string' ? record.name : '' }
+  }
+
+  /** 0.2.43 #2b: a short-lived Registry assertion for the signed-in Cloud
+   *  account, bound to `challenge`. The backend keeps the Cloud token; only
+   *  the assertion crosses. Errors carry the server's code (AUTH_REQUIRED,
+   *  ASSERTION_DISABLED, ...) so the caller can fall back to the browser. */
+  async requestCloudRegistryAssertion(request: {
+    scope: 'account' | 'publish'
+    namespace: string | null
+    challenge: string
+  }): Promise<{ ok: true; assertion: string; memberId: string } | { ok: false; code: string; message: string }> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return { ok: false, code: 'HOST_NOT_READY', message: 'Navide Host session is not ready' }
+    const response = await client.send('host.cloud.registry_assertion', { ...request }, 20_000)
+    const payload = response.ok ? response.payload as { assertion?: unknown; memberId?: unknown } | undefined : undefined
+    if (typeof payload?.assertion === 'string' && typeof payload.memberId === 'string') {
+      return { ok: true, assertion: payload.assertion, memberId: payload.memberId }
+    }
+    return {
+      ok: false,
+      code: response.error?.code ?? 'ASSERTION_UNAVAILABLE',
+      message: response.error?.message ?? 'the backend issued no assertion',
+    }
   }
 
   /** Install the function that carries out an agent's plugins_disable /
@@ -15982,7 +16044,7 @@ function devServerOrigin(descriptor: PluginLaunchDescriptor): string | null {
  * during unpackaged dev lookup).
  * Registered at startup only under `AGENT_TEAM_PLUGIN_DEV=1`, mirroring
  * {@link devPlansPluginDescriptor}. The bundle is built separately
- * (plugins/navide-git/vite.config.ts) with the package-local capability
+ * (in Navide-dev/navide-git) with the package-local capability
  * backend, so it
  * is not served by the electron-vite dev server: `devUrl` is empty and it
  * always loadFiles. The packaged Manifest v2 permissions are the source of the

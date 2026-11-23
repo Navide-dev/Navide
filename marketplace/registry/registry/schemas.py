@@ -100,6 +100,11 @@ class ExtensionDetail(ExtensionSummary):
     versions: list[VersionInfo]
     has_changelog: bool = False
     """`latest_version` ships a root CHANGELOG.md (see the changelog route)."""
+    verified_domain: str | None = None
+    """The publisher's DNS-verified domain, as the website's detail page shows it."""
+    screenshots: list[str] = []
+    """Package-relative image paths of `latest_version` other than its icon,
+    served by the website's asset route (the website's screenshot strip)."""
 
 
 class ReadmeResponse(BaseModel):

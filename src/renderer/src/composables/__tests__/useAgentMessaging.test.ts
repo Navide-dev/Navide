@@ -18,6 +18,7 @@ import {
   MSG_SPAWN_FAILED_PREFIX,
   MSG_START,
   renderSpawnNotice,
+  INJECT_TIMEOUT_RETRY_LIMIT,
 } from '../../lib/agentMessaging'
 
 function flush(): Promise<void> {
@@ -239,6 +240,44 @@ describe('useAgentMessaging', () => {
       await flush()
       expect(msg.status).toBe('failed')
       expect(msg.reason?.key).toBe('inject-failed')
+    })
+
+    // 2026-11-15 10:16: a stalled backend timed the write out and the message
+    // was dropped as inject-failed with no second try.
+    it('re-queues a delivery that timed out, then fails it as inject-timeout', async () => {
+      const outcomes: Array<boolean | { timedOut: true }> = [{ timedOut: true }, true]
+      m.configureMessaging({
+        ...deps,
+        deliver: async (paneId, text) => {
+          delivered.push({ paneId, text })
+          return outcomes.shift() ?? true
+        },
+      })
+      const ok = m.sendMessage('claude-1', 'codex-1', 'retry me')
+      m.pump()
+      await flush()
+      expect(ok.status).toBe('queued')
+      m.pump()
+      await flush()
+      expect(ok.status).toBe('delivered')
+      expect(delivered).toHaveLength(2)
+
+      delivered = []
+      m.configureMessaging({
+        ...deps,
+        deliver: async (paneId, text) => {
+          delivered.push({ paneId, text })
+          return { timedOut: true }
+        },
+      })
+      const lost = m.sendMessage('claude-1', 'codex-1', 'never answered')
+      for (let i = 0; i < 5; i++) {
+        m.pump()
+        await flush()
+      }
+      expect(lost.status).toBe('failed')
+      expect(lost.reason?.key).toBe('inject-timeout')
+      expect(delivered.filter((d) => d.paneId === 'p2')).toHaveLength(INJECT_TIMEOUT_RETRY_LIMIT)
     })
 
     it('delivers FIFO per target, one at a time', async () => {

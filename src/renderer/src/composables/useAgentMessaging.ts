@@ -11,6 +11,7 @@ import {
   normalizeMessagingName,
   uniqueMessagingName,
   PUSH_UNCLEAR_LIMIT,
+  INJECT_TIMEOUT_RETRY_LIMIT,
 } from '../lib/agentMessaging'
 import { normalizeForMatch, TAIL_MATCH_LEN } from '../lib/injectEcho'
 
@@ -205,8 +206,18 @@ export interface PersistedMessageUpdate {
  * - `declined` — the channel did not take it and touched nothing. Safe to type
  *                the message in right away.
  * - `unclear`  — the channel may be holding the text. Re-queue, never type.
+ * - `lost`     — no answer came back, so the CLI may have taken it. Re-queue,
+ *                never type; the next pump asks again under the same push id
+ *                (see PUSH_LOST_WINDOW_MS).
  */
-export type PushOutcome = 'landed' | 'declined' | 'unclear'
+export type PushOutcome = 'landed' | 'declined' | 'unclear' | 'lost'
+
+/** How long after a push's first attempt the backend can still be asked how
+ *  it went. The backend keeps an outcome 120 s after the push settles, and a
+ *  push never settles before its first attempt starts; the margin covers a
+ *  pump that runs late. Past it, a push asked again might go out twice, so the
+ *  message is marked possibly delivered instead. */
+export const PUSH_LOST_WINDOW_MS = 100_000
 
 export interface RouteResult {
   ok: boolean
@@ -233,11 +244,13 @@ export interface MessagingDeps {
    *  queue, nothing spent. `{ failed }`: refused for good, with the reason the
    *  sender is told (a terminal command the backend will not type).
    *  `{ unconfirmed }`: typed and submitted, but the CLI has not shown it
-   *  received it — see UNCONFIRMED_REASON. */
+   *  received it — see UNCONFIRMED_REASON. `{ timedOut }`: the backend did
+   *  not answer the write in time; nothing is left in the box, so the queue
+   *  may try again (INJECT_TIMEOUT_RETRY_LIMIT). */
   /** `prefill`: a plain terminal message sent with cli_send submit: false —
    *  typed onto the command line without Enter, for the user to run. */
   deliver: (paneId: string, text: string, shouldAbort?: () => boolean, prefill?: boolean) =>
-    Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }>
+    Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true } | { timedOut: true }>
   /** True when the pane can accept an injection right now (idle + settled). */
   isPaneIdle: (paneId: string) => boolean
   /** Why isPaneIdle() said no, as an i18n key suffix under `msg.hold-*`. Must
@@ -262,7 +275,7 @@ export interface MessagingDeps {
   pushTarget?: (paneId: string) => { kind: string } | null
   /** Hand the envelope to that channel. See {@link PushOutcome} — anything but
    *  'landed' ends in the typed path, immediately or on a later tick. */
-  pushDeliver?: (paneId: string, text: string) => Promise<PushOutcome>
+  pushDeliver?: (paneId: string, text: string, pushId: string) => Promise<PushOutcome>
   /** Ask the backend registry to route a target this window does not own.
    *  Absent (or throwing) → cross-workspace addressing degrades to the previous
    *  local-only behaviour. */
@@ -522,6 +535,16 @@ const cancelRequested = new Set<number>()
  *  message id. Compared against {@link PUSH_UNCLEAR_LIMIT} in pumpPane();
  *  cleared when the message gets out or leaves the queue. */
 const pushUnclearCount = new Map<number, number>()
+/** Queued messages whose last push got no answer, by message id: the push id
+ *  to ask under again, the channel it went to, and when its first attempt
+ *  started. Cleared when an answer comes, or the message leaves the queue. */
+const pushLost = new Map<number, { pushId: string; kind: string; since: number }>()
+/** Numbers each push attempt, so every attempt but a re-ask has its own id. */
+let pushAttempts = 0
+/** How many deliveries of each queued message have timed out against a
+ *  backend that did not answer the write, by message id. Compared against
+ *  {@link INJECT_TIMEOUT_RETRY_LIMIT} in pumpPane(). */
+const injectTimeoutCount = new Map<number, number>()
 
 function configureMessaging(d: MessagingDeps): void {
   deps = d
@@ -666,6 +689,8 @@ function failMessage(id: number, reason: MessageReason): void {
   }
   envelopes.delete(id)
   pushUnclearCount.delete(id)
+  pushLost.delete(id)
+  injectTimeoutCount.delete(id)
 }
 
 /**
@@ -1454,7 +1479,22 @@ async function pumpPane(paneId: string): Promise<void> {
     const ok = await deliverOnce(paneId, msg, envelope, push, () => cancelRequested.has(id))
     const stuck = ok === 'unclear'
       && (pushUnclearCount.get(id) ?? 0) + 1 >= PUSH_UNCLEAR_LIMIT
-    if (typeof ok === 'object' && ok !== null && 'unconfirmed' in ok) {
+    if (typeof ok === 'object' && ok !== null && 'timedOut' in ok) {
+      // A stalled backend, not a pane that refused it: the chunks are tagged,
+      // so a late write and a retry cannot both land. Back to the head of the
+      // queue a bounded number of times, then the sender hears it timed out —
+      // not the generic inject-failed, which reads as the CLI ignoring it.
+      const timeouts = (injectTimeoutCount.get(id) ?? 0) + 1
+      if (timeouts >= INJECT_TIMEOUT_RETRY_LIMIT) {
+        ackReason = { key: 'inject-timeout' }
+        failMessage(id, ackReason)
+      } else {
+        injectTimeoutCount.set(id, timeouts)
+        requeued = true
+        msg.status = 'queued'
+        deps.persistUpdate?.([{ uid: msg.uid, status: 'queued' }])
+      }
+    } else if (typeof ok === 'object' && ok !== null && 'unconfirmed' in ok) {
       markUnconfirmed(msg)
       envelopes.delete(id)
       unconfirmedDeliveries.set(id, { paneId, msgKey: remoteInbound.get(id) })
@@ -1510,6 +1550,8 @@ async function pumpPane(paneId: string): Promise<void> {
       q.shift()
       prefills.delete(id)
       pushUnclearCount.delete(id)
+      pushLost.delete(id)
+      injectTimeoutCount.delete(id)
       ackInbound(id, ackOk, ackReason)
     }
   }
@@ -1536,11 +1578,29 @@ async function deliverOnce(
   envelope: string,
   push: { kind: string } | null,
   shouldAbort: () => boolean,
-): Promise<boolean | null | 'unclear' | { failed: MessageReason } | { unconfirmed: true }> {
+): Promise<boolean | null | 'unclear' | { failed: MessageReason } | { unconfirmed: true } | { timedOut: true }> {
   if (!deps) return false
-  if (push && deps.pushDeliver) {
-    msg.route = `push:${push.kind}`
-    const outcome = await deps.pushDeliver(paneId, envelope)
+  const lost = pushLost.get(msg.id)
+  if (lost && deps.now() - lost.since > PUSH_LOST_WINDOW_MS) {
+    // Too late to ask how it went, and pushing or typing it now could deliver
+    // it twice: it may well have gone in, so say so rather than resend it.
+    pushLost.delete(msg.id)
+    return { unconfirmed: true }
+  }
+  // A push whose answer was lost is asked about again whatever the channel
+  // says now: only the backend knows whether the CLI took it.
+  const via = lost ? { kind: lost.kind } : push
+  if (via && deps.pushDeliver) {
+    const pushId = lost?.pushId ?? `${msg.uid}#${++pushAttempts}`
+    const since = lost?.since ?? deps.now()
+    msg.route = `push:${via.kind}`
+    const outcome = await deps.pushDeliver(paneId, envelope, pushId)
+    if (outcome === 'lost') {
+      pushLost.set(msg.id, { pushId, kind: via.kind, since })
+      delete msg.route
+      return null
+    }
+    pushLost.delete(msg.id)
     if (outcome === 'landed') return true
     delete msg.route
     if (outcome === 'unclear') return 'unclear'
@@ -1844,6 +1904,8 @@ function unqueue(id: number): boolean {
   if (heldInFlight(loc)) return false
   loc.q.splice(loc.index, 1)
   pushUnclearCount.delete(id)
+  pushLost.delete(id)
+  injectTimeoutCount.delete(id)
   return true
 }
 
@@ -2101,6 +2163,9 @@ export function _resetMessagingForTest(): void {
   correlations.clear()
   readReserved.clear()
   pushUnclearCount.clear()
+  pushLost.clear()
+  pushAttempts = 0
+  injectTimeoutCount.clear()
   cancelRequested.clear()
 }
 

@@ -1,5 +1,9 @@
 """The packaged Plans backend reads its own plan files.
 
+These run the pinned, staged navide.plans backend the Host ships (through
+test_navide_plans_backend_wire's fixture); Navide-dev/navide-plans tests its
+sources, including the in-process scan-sharing cases.
+
 The Host hands the child only one thing: the Host-authorized plan root, through
 the authenticated ``filesystem.resolve_root`` bridge call. Every other read is
 the child's own ``open()``, so the path checks the Host's filesystem service
@@ -334,90 +338,6 @@ def test_large_plans_are_listed_and_paged_back_byte_identical(
         assert hashlib.sha256(joined).hexdigest() == hashlib.sha256(source).hexdigest()
         _assert_same_text("".join(pages), text)
     assert {operation for operation, _ in host.calls} == {"resolve_root"}
-
-
-def test_list_scans_of_different_views_never_share_a_result(tmp_path: Path) -> None:
-    """A view's plans.list never waits on, or takes, another view's scan."""
-    from tests.test_navide_plans_backend_wire import _load_backend
-
-    backend = _load_backend("plans_backend_view_isolation")
-    first = _workspace(tmp_path, "first")
-    second = _workspace(tmp_path, "second")
-    release_first = threading.Event()
-    first_started = threading.Event()
-
-    def scan(origin: dict[str, Any]) -> list[dict[str, Any]]:
-        if origin["instance"] == "instance-1":
-            first_started.set()
-            release_first.wait(timeout=3)
-        return [{"root": backend._plan_root(origin)}]
-
-    backend._list_plans = scan
-    results: dict[str, Any] = {}
-    leader = threading.Thread(
-        target=lambda: results.setdefault("first", backend._list_plans_single_flight(
-            {"kind": "call", "requestId": "a", "instance": "instance-1", "root": str(first)})),
-    )
-    leader.start()
-    assert first_started.wait(timeout=5)
-    try:
-        other = backend._list_plans_single_flight(
-            {"kind": "call", "requestId": "b", "instance": "instance-2", "root": str(second)})
-        # Answered while the first view's scan is still held: it never waited.
-        assert leader.is_alive()
-        assert other == [{"root": str(second)}]
-    finally:
-        release_first.set()
-        leader.join(timeout=10)
-    assert results["first"] == [{"root": str(first)}]
-
-
-def test_a_list_caller_the_host_refuses_never_shares_another_callers_scan(tmp_path: Path) -> None:
-    """Joining an in-flight scan needs the caller's own Host authorization."""
-    from tests.test_navide_plans_backend_wire import _load_backend
-
-    backend = _load_backend("plans_backend_follower_authorization")
-    mine = _workspace(tmp_path, "mine")
-    release_leader = threading.Event()
-    leader_started = threading.Event()
-
-    def bridge_call(origin: dict[str, Any], port: str, operation: str, arguments: Any) -> Any:
-        assert (port, operation) == ("filesystem", "resolve_root")
-        if origin["requestId"] == "agent":
-            raise backend.BridgeFailure("CAPABILITY_DENIED")
-        return {"root": str(mine)}
-
-    def scan(origin: dict[str, Any]) -> list[dict[str, Any]]:
-        leader_started.set()
-        release_leader.wait(timeout=10)
-        return [{"secret": "scanned for the user"}]
-
-    backend._bridge_call = bridge_call
-    backend._list_plans = scan
-    results: dict[str, Any] = {}
-    leader = threading.Thread(
-        target=lambda: results.setdefault("user", backend._list_plans_single_flight(
-            {"kind": "call", "requestId": "user", "instance": "instance-1"})),
-    )
-    leader.start()
-    assert leader_started.wait(timeout=5)
-    outcome: dict[str, Any] = {}
-
-    def follow() -> None:
-        try:
-            outcome["value"] = backend._list_plans_single_flight(
-                {"kind": "call", "requestId": "agent", "instance": "instance-1"})
-        except backend.BridgeFailure as error:
-            outcome["error"] = error.code
-
-    follower = threading.Thread(target=follow)
-    follower.start()
-    follower.join(timeout=2)
-    release_leader.set()
-    follower.join(timeout=10)
-    leader.join(timeout=10)
-    assert outcome == {"error": "CAPABILITY_DENIED"}
-    assert results["user"] == [{"secret": "scanned for the user"}]
 
 
 # ── G4–G6: writes stay inside the plan documents and are atomic ──────────────

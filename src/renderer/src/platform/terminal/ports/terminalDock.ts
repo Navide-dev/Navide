@@ -35,6 +35,30 @@ export interface TerminalSpawnOptions {
   /** A claude sign-in inside the pane's account's own config dir (the
    *  account is the pane's `metadata.profile_id`). */
   accountDirLogin?: boolean
+  /** A remote container pane (Settings → Experimental → Remote container
+   *  panes): the backend runs the CLI over ssh inside this container and
+   *  ignores `command`; or an SSH Remote terminal pane (`kind: 'ssh'`), whose
+   *  login shell runs on that host. Absent for every local pane. */
+  remote?: TerminalRemoteTarget | TerminalSshTarget
+}
+
+/** The `remote` object terminal.create takes: host and container names, how
+ *  the container reaches this machine's tool server, and the CLI run there
+ *  (the pane's own agent key is 'remote'). */
+export interface TerminalRemoteTarget {
+  host: string
+  container: string
+  network: { mode: 'host' } | { mode: 'bridge'; gateway: string }
+  cli: 'claude' | 'codex'
+}
+
+/** The `remote` object of an SSH Remote terminal pane. The key is a path only. */
+export interface TerminalSshTarget {
+  kind: 'ssh'
+  host: string
+  user: string
+  port: number
+  keyPath: string
 }
 
 export interface TerminalCreateRequest {
@@ -53,6 +77,7 @@ export interface TerminalCreateRequest {
   loginProfileId: string | null
   isLogin: boolean
   accountDirLogin?: boolean
+  remote?: TerminalRemoteTarget | TerminalSshTarget
   replacesTerminalId: string | null
 }
 
@@ -62,6 +87,8 @@ export interface TerminalCreateResult {
   startup_probe?: TerminalStartupProbe | null
   /** Why this machine could not wire the pane's MCP, one line each; absent when it could. */
   wiring_warnings?: string[]
+  /** Folders Navide itself handed the CLI (claude's --add-dir skills view). */
+  navide_dirs?: string[]
 }
 
 export interface TerminalOutputEvent {

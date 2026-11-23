@@ -87,3 +87,94 @@ async def test_a_hung_backend_writes_its_stacks_before_it_is_killed(tmp_path) ->
 def test_the_dump_wait_is_short() -> None:
     # It runs after the 15 s shutdown wait, which it must not stand in for.
     assert 1 <= backend_process._STACK_DUMP_WAIT_S <= 2
+
+
+@pytest.fixture
+def armed(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        backend_main.faulthandler, "dump_traceback_later",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    return calls
+
+
+def test_without_sigusr1_the_harness_variable_arms_a_timed_dump(
+    armed: list, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delattr(signal, "SIGUSR1", raising=False)
+    assert backend_main._arm_shutdown_dump({"NAVIDE_SHUTDOWN_DIAG": "1"}) is True
+    assert armed == [((backend_main._SHUTDOWN_DUMP_AFTER_S,), {"file": sys.stderr})]
+
+
+@pytest.mark.parametrize("environ", [{}, {"NAVIDE_SHUTDOWN_DIAG": "0"}])
+def test_a_real_launch_arms_no_timed_dump(
+    armed: list, monkeypatch: pytest.MonkeyPatch, environ: dict,
+) -> None:
+    monkeypatch.delattr(signal, "SIGUSR1", raising=False)
+    assert backend_main._arm_shutdown_dump(environ) is False
+    assert armed == []
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGUSR1"), reason="no SIGUSR1 on this platform")
+def test_with_sigusr1_the_signal_dump_is_used_instead(armed: list) -> None:
+    assert backend_main._arm_shutdown_dump({"NAVIDE_SHUTDOWN_DIAG": "1"}) is False
+    assert armed == []
+
+
+def test_the_shutdown_line_arms_the_dump(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    calls: list[None] = []
+    monkeypatch.setattr(backend_main, "_arm_shutdown_dump", lambda: calls.append(None))
+    server = type("_Server", (), {"should_exit": False})()
+    backend_main._watch_stdin_for_shutdown(server, io.StringIO(f"{backend_main.SHUTDOWN_LINE}\n"))
+    assert server.should_exit is True and calls == [None]
+
+
+def test_the_timed_dump_fires_inside_the_harness_wait() -> None:
+    # The harness waits 15 s for the exit, then kills; the dump must land first,
+    # and a backend that shuts down normally must be gone long before it.
+    assert 5 <= backend_main._SHUTDOWN_DUMP_AFTER_S <= 12
+
+
+async def test_a_hung_backend_without_sigusr1_writes_its_stacks(tmp_path) -> None:
+    # A Windows-shaped backend (no SIGUSR1) that gets the shutdown line and then
+    # never exits: the harness's signal dump is a no-op there, so this timed one
+    # is the only record of where it stopped. Isolated env: importing the
+    # backend's main module must not touch a real data dir.
+    from tests.cli_regression.support.isolation import isolated_environment
+
+    hung = (
+        "import io, signal, sys, time\n"
+        "if hasattr(signal, 'SIGUSR1'): del signal.SIGUSR1\n"
+        "from agent_team_backend import __main__ as m\n"
+        "m._SHUTDOWN_DUMP_AFTER_S = 0.5\n"
+        "server = type('S', (), {'should_exit': False})()\n"
+        "m._watch_stdin_for_shutdown(server, io.StringIO(m.SHUTDOWN_LINE + '\\n'))\n"
+        "print('shutdown requested', flush=True)\n"
+        "def stuck_in_startup():\n"
+        "    time.sleep(60)\n"
+        "stuck_in_startup()\n"
+    )
+    env = isolated_environment(tmp_path)
+    env["NAVIDE_SHUTDOWN_DIAG"] = "1"
+    env["PYTHONPATH"] = str(backend_process.Path(backend_process.__file__).resolve().parents[3])
+    log_path = tmp_path / "backend.log"
+    with log_path.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [sys.executable, "-c", hung], stdout=log, stderr=subprocess.STDOUT, env=env,
+            cwd=env["PYTHONPATH"],
+        )
+        try:
+            deadline = asyncio.get_running_loop().time() + 30
+            while "stuck_in_startup" not in log_path.read_text(encoding="utf-8"):
+                assert proc.poll() is None, log_path.read_text(encoding="utf-8")
+                assert asyncio.get_running_loop().time() < deadline, "no stack dump was written"
+                await asyncio.sleep(0.05)
+            assert proc.poll() is None  # the dump does not end it; the kill does
+        finally:
+            proc.kill()
+            proc.wait(5)
+    dump = log_path.read_text(encoding="utf-8")
+    assert "shutdown requested" in dump and "most recent call first" in dump

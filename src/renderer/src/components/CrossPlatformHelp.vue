@@ -164,6 +164,7 @@ const sampleTitle = computed(() => t('settings.help.crossPlatform.mock.controls.
 
       <!-- Where the buttons are, drawn rather than described. -->
       <MockFigure
+        shot="crossPlatform.controls"
         :caption="$t('settings.help.crossPlatform.mock.controls.caption')"
         :legend="controlsLegend"
       >

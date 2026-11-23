@@ -30,6 +30,7 @@ import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
+import { editorOpenParamsForAbsolutePath } from './plugins/editorNativeCapability'
 import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
 import { dockSurfaceProvided } from './dockSurfaceProvider'
 import {
@@ -51,6 +52,7 @@ import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginU
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { PluginTestplaceStore } from './plugins/pluginTestplaceStore'
 import { DeveloperAccount, setDeveloperAccount } from './plugins/developerAccount'
+import { publishConfirmDialog } from './plugins/developerPublishConfirm'
 import { DeveloperVault } from './plugins/developerVault'
 import { PluginSecretStore } from './plugins/pluginSecrets'
 import type { PluginSecretsNotice } from '../shared/pluginSecretsNotice'
@@ -120,7 +122,7 @@ import {
   writeBackendPluginActivationCatalog,
 } from './plugins/pluginBackendActivationCatalog'
 import { registerStorageIpc } from './storage-ipc'
-import { lockPageZoom } from './web-contents-zoom'
+import { interfaceScalePolicy, lockPageZoom } from './web-contents-zoom'
 import { createUiZoomStore, initialUiScaleFrom, type UiZoomStore } from './ui-zoom-store'
 import { installContextMenu, registerTerminalContextMenu } from './context-menu'
 import { inAppUpdateSupported, initUpdater } from './updater'
@@ -213,6 +215,7 @@ import {
   type GitAccountCrypto,
   type GitAccountInput
 } from './gitAccountsStore'
+import { safeStorageCrypto } from './safeStorageCrypto'
 import { applyLinuxKeyringPreflight } from './linuxKeyring'
 import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
@@ -329,6 +332,9 @@ let quittingWindowsPrepared = false
 // the prompt is not shown again — it is cleared on every path that keeps the
 // app running.
 let dockQuitInProgress = false
+// A quit nobody can cancel: SIGTERM, a logout or a shutdown. Plugins still get
+// a bounded chance to save, but their answer is only logged.
+let quitForced = false
 let quittingWindowsPreparation: Promise<boolean> | null = null
 // Set once teardownBackendAndQuit has stopped the backend and put up the
 // shutdown screen, so a quit cancelled after that can bring both back.
@@ -337,6 +343,7 @@ let quitTeardownRan = false
 const resetCancelledQuit = createQuitCancelReset({
   clearQuitFlags: () => {
     dockQuitInProgress = false
+    quitForced = false
     quittingWindowsPrepared = false
   },
   clearCleanExit: () => {
@@ -384,6 +391,8 @@ let quitPromptOpen = false
 // The window the open quit dialog is parented to, so a repeated quit request
 // can bring that dialog forward instead of opening a second one.
 let quitPromptWindow: BrowserWindow | undefined
+// Closes the open quit dialog when the quit no longer needs an answer (SIGTERM).
+let quitPromptAbort: AbortController | undefined
 // Multiple independent main windows (VS Code-style cmd+shift+N). `mainWindow`
 // tracks the most-recently-focused one so dialogs parent to it; `mainWindows`
 // holds them all for lifecycle code that must reach every main window.
@@ -596,13 +605,7 @@ function getGitAccountsStore(): GitAccountsStore {
     // Under basic_text Electron reports encryption unavailable unless plain-text
     // encryption is opted into explicitly.
     if (linuxKeyringDowngraded) safeStorage.setUsePlainTextEncryption(true)
-    const crypto: GitAccountCrypto = {
-      get available(): boolean {
-        return safeStorage.isEncryptionAvailable()
-      },
-      encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-      decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64'))
-    }
+    const crypto: GitAccountCrypto = safeStorageCrypto(safeStorage)
     gitAccountsStore = new GitAccountsStore(join(app.getPath('userData'), 'git-accounts.json'), crypto)
   }
   return gitAccountsStore
@@ -613,7 +616,7 @@ function getGitAccountsStore(): GitAccountsStore {
 // renderer-facing package receives only masked accounts or one authenticated
 // workspace-bound credential response.
 frontendPluginManager.setGitAccountHandlers({
-  available: () => getGitAccountsStore().available,
+  available: () => getGitAccountsStore().available(),
   list: () => getGitAccountsStore().list(),
   add: (input) => getGitAccountsStore().add(input),
   update: (id, patch) => getGitAccountsStore().update(id, patch),
@@ -630,6 +633,12 @@ frontendPluginManager.setGitAccountHandlers({
 const windowCloseCoordinator = createWindowCloseCoordinator({
   hasWindowCloseParticipants: (window) => frontendPluginManager.hasWindowCloseParticipants(window),
   notifyCloseRefused: (window, reason, cause) => {
+    // A forced quit that arrived while a user quit was being prepared: that
+    // preparation's refusal no longer decides anything, so no message box.
+    if (reason === 'quit' && quitForced) {
+      warnMain(`[main] forced quit: a plugin window did not prepare (${cause}); quitting anyway`)
+      return
+    }
     // A refusal is a normal outcome (a plugin keeps a draft), but silence would
     // look like a hang. Say what happened and where it comes from.
     const detail = cause === 'timeout'
@@ -647,6 +656,9 @@ const windowCloseCoordinator = createWindowCloseCoordinator({
     }
     void (window.isDestroyed() ? dialog.showMessageBox(options) : dialog.showMessageBox(window, options))
       .catch(() => undefined)
+  },
+  logForcedQuitIgnored: (_window, cause) => {
+    warnMain(`[main] forced quit: a plugin window did not prepare (${cause}); quitting anyway`)
   },
   prepareWindowClose: (window, reason) => frontendPluginManager.prepareWindowClose(window, reason),
   commitWindowClose: (id) => frontendPluginManager.commitWindowClose(id),
@@ -1024,15 +1036,14 @@ const pluginsRoot = (): string => join(app.getPath('userData'), 'plugins')
 // publisher key from the environment. Set before anything resolves either.
 // A2-5 (G5): entries of that file another program wrote are disclosed and
 // asked about again. Its HMAC key is wrapped by safeStorage, touched only once
-// the app is ready and only while Developer Mode is in use; before that, or
-// without secure storage, nothing is checked (disclosed).
+// the app is ready and only while Developer Mode is in use; before that (until
+// the store is prepared, before the developer folders load), or without
+// secure storage, nothing is checked (disclosed).
 const pluginDeveloperModeIntegrity: DeveloperModeIntegrity = {
-  get available(): boolean {
-    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-  },
-  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
+  ...safeStorageCrypto(
+    safeStorage,
+    () => app.isReady() && !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  ),
   onExternalChange: () => frontendPluginManager.recordDeveloperModeExternalChange(app.getVersion()),
 }
 const pluginDeveloperModeStore = new PluginDeveloperModeStore(pluginsRoot(), pluginDeveloperModeIntegrity)
@@ -1652,7 +1663,7 @@ const factoryBrowserDir = (): string => officialPluginArtifactPackageDir(
   currentPluginHostTarget(),
 )
 /** Load the bundled browser package. A build without it (no staged
- *  dist-plugins/navide-browser) is not an error: nothing is loaded. */
+ *  official-artifacts/navide.browser) is not an error: nothing is loaded. */
 function loadFactoryBrowserPackage():
   | { loaded: true; pluginId: string; packageVersion: string; activation: PluginActivationCatalogEntry }
   | { loaded: false; reason: string; absent?: true } {
@@ -2475,7 +2486,9 @@ void app.whenReady().then(() => pluginTrustRefresh.loadDeveloperFolders())
 // have done it; one that cannot be stays staged and the main window says why.
 // A package staged beside an active one is not applied for the user: the main
 // window says which version waits and which runs, and offers to apply it.
-void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
+// Once the app is ready: promotion preflights views in a BrowserWindow, and by
+// then the bundled copies are registered, so one is never taken for a first install.
+void app.whenReady().then(() => pluginTrustRefresh.activateStagedFirstInstalls()).then((failures) => {
   for (const failure of failures) {
     console.warn(`[main] plugin ${failure.pluginId} ${failure.version} installed without Restart was not activated: ${failure.reason}`)
     pluginStagedCandidateRelay.notify(failure)
@@ -2491,31 +2504,36 @@ void pluginTrustRefresh.activateStagedFirstInstalls().then((failures) => {
 // <userData>/plugin-secrets, keyed by plugin id, never synced, exported or
 // logged. Without real encryption every set/get answers SECRETS_UNAVAILABLE;
 // nothing is ever written in plain text. Not the CLI account credentials.
-const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), {
-  get available(): boolean {
-    return app.isReady() && !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-      (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-  },
-  encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-  decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
-})
+const pluginSecretStore = new PluginSecretStore(join(app.getPath('userData'), 'plugin-secrets'), safeStorageCrypto(
+  safeStorage,
+  () => app.isReady() && !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+))
 frontendPluginManager.setPluginSecretStore(pluginSecretStore)
 
 // Navide Marketplace developer (W3): sign-in, publish, yank and the developer
 // application. Tokens and the signing key are safeStorage ciphertext in their
 // own file, never the CLI account credentials; see developerVault.ts.
 const developerAccount = new DeveloperAccount({
-  vault: new DeveloperVault(join(app.getPath('userData'), 'marketplace-developer.json'), {
-    get available(): boolean {
-      // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
-      return !linuxKeyringDowngraded && safeStorage.isEncryptionAvailable() &&
-        (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text')
-    },
-    encrypt: (plain: string): string => safeStorage.encryptString(plain).toString('base64'),
-    decrypt: (enc: string): string => safeStorage.decryptString(Buffer.from(enc, 'base64')),
-  }),
+  vault: new DeveloperVault(join(app.getPath('userData'), 'marketplace-developer.json'), safeStorageCrypto(
+    safeStorage,
+    // A Linux basic_text store is not encryption: Navide keeps no developer secret in it.
+    () => !linuxKeyringDowngraded && (!isLinux() || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  )),
   registryUrl: () => resolveConfiguredMarketplace().registryUrl,
   openExternal: (url) => shell.openExternal(url),
+  // 0.2.43 #2b: reuse the Navide Cloud sign-in; the Cloud token stays in the backend.
+  cloud: {
+    identity: () => frontendPluginManager.requestCloudIdentity(),
+    assertion: (request) => frontendPluginManager.requestCloudRegistryAssertion(request),
+  },
+  confirmPublish: async (request) => {
+    const { options, namespaceFor } = publishConfirmDialog(request, currentUiLocale())
+    const parent = BrowserWindow.getFocusedWindow()
+    const { response } = await (parent && !parent.isDestroyed()
+      ? dialog.showMessageBox(parent, options)
+      : dialog.showMessageBox(options))
+    return namespaceFor(response)
+  },
 })
 setDeveloperAccount(developerAccount)
 const developerIpc = registerDeveloperIpc({
@@ -2688,13 +2706,16 @@ async function revalidateLocalInstalls(): Promise<void> {
 }
 // Update reminder: runs after each trust refresh settles, never inside it, so
 // a failed check cannot touch trust state or quarantine decisions. Detection
-// only — installing an update still goes through the consent dialogs.
+// only — installing an update still goes through the consent dialogs; the one
+// exception is a bundled first-party plugin's newer official version that
+// discloses exactly what the bundled copy does, staged for the next launch.
 const refreshInstalledPluginTrustAndUpdates = (): void => {
   void refreshTrustThenUpdates({
     refreshTrust: async () => {
       await refreshInstalledPluginTrust()
       await revalidateLocalInstalls()
     },
+    refreshBundled: () => pluginTrustRefresh.refreshBundledOfficial(),
     checkUpdates: () => pluginTrustRefresh.checkUpdates(),
     publish: (updates) => {
       for (const hostWindow of mainWindows) {
@@ -4917,7 +4938,7 @@ function isHtmlPlanDocPath(relPath: string): boolean {
 
 ipcMain.handle('window:openEditor', async (event, args: Record<string, string>) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
-  const params = args ?? {}
+  const params = editorOpenParamsForAbsolutePath(args ?? {})
   const workspacePath = params.workspace_path ?? ''
   const filepath = params.filepath ?? ''
   // With `file_ws` the path is relative to that root, not to the workspace —
@@ -5940,10 +5961,10 @@ ipcMain.handle('settings:cdp-debug-write', (event, config: CdpDebugConfig) => {
 // safeStorage (token encryption) is a main-process API; the renderer only sees
 // masked accounts and, at git-op time, the decrypted credential for the bound
 // account. Handlers never throw across the IPC boundary — always { ok, ... }.
-ipcMain.handle('git-accounts:available', (event) => {
+ipcMain.handle('git-accounts:available', async (event) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    return { ok: true, available: getGitAccountsStore().available }
+    return { ok: true, available: await getGitAccountsStore().available() }
   } catch (e) {
     return { ok: false, error: String(e) }
   }
@@ -5958,19 +5979,19 @@ ipcMain.handle('git-accounts:list', (event) => {
   }
 })
 
-ipcMain.handle('git-accounts:add', (event, input: GitAccountInput) => {
+ipcMain.handle('git-accounts:add', async (event, input: GitAccountInput) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    return { ok: true, account: getGitAccountsStore().add(input) }
+    return { ok: true, account: await getGitAccountsStore().add(input) }
   } catch (e) {
     return { ok: false, error: String(e) }
   }
 })
 
-ipcMain.handle('git-accounts:update', (event, id: string, patch: Partial<GitAccountInput>) => {
+ipcMain.handle('git-accounts:update', async (event, id: string, patch: Partial<GitAccountInput>) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
-    getGitAccountsStore().update(id, patch)
+    await getGitAccountsStore().update(id, patch)
     return { ok: true }
   } catch (e) {
     return { ok: false, error: String(e) }
@@ -6211,16 +6232,15 @@ app.on('web-contents-created', (_e, contents) => {
   // here is what lets one Settings change scale all windows at once — including
   // the plugin bundles, which have their own documents and no host preload.
   //
-  // A <webview> guest is laid out inside an already-scaled host document and
-  // shares its embedder's zoom, so scaling it again would compound. A native
-  // WebContentsView composites outside the DOM and does need its own factor.
+  // Which WebContents the store tracks, and why a <webview> guest is not:
+  // interfaceScalePolicy (web-contents-zoom.ts).
   const zoom = uiZoomStore()
-  const scalable = contents.getType() !== 'webview'
-  if (scalable) {
+  const scale = interfaceScalePolicy(contents.getType(), () => zoom.get())
+  if (scale.track) {
     zoom.track(contents)
     contents.once('destroyed', () => zoom.untrack(contents))
   }
-  lockPageZoom(contents, () => (scalable ? zoom.get() : 1))
+  lockPageZoom(contents, scale.factor, warnMain)
   // Electron has no default right-click menu; without this one, right-click is
   // inert everywhere and there is no fallback path for copy/paste.
   installContextMenu(contents)
@@ -6737,6 +6757,7 @@ app.on('quit', () => {
 // The "confirm before quit" dialog. Resolves true when the user chose Quit;
 // the "don't show again" checkbox is applied here so both callers agree.
 async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> {
+  const abort = new AbortController()
   const opts = {
     type: 'question' as const,
     title: QUIT_DIALOG_TITLE,
@@ -6747,17 +6768,21 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
     detail: quitConfirm.detail,
     checkboxLabel: quitConfirm.dontShowLabel,
     checkboxChecked: false,
+    signal: abort.signal,
   }
   quitPromptOpen = true
   quitPromptWindow = win
+  quitPromptAbort = abort
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
   } finally {
     quitPromptOpen = false
     quitPromptWindow = undefined
+    quitPromptAbort = undefined
   }
-  if (res.response === 1) return false
+  // Closed by SIGTERM: that quit is already under way, not this prompt's to start.
+  if (abort.signal.aborted || res.response === 1) return false
   if (res.checkboxChecked) {
     quitConfirm.enabled = false
     for (const w of BrowserWindow.getAllWindows()) {
@@ -6766,6 +6791,33 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
   }
   return true
 }
+
+// SIGTERM (a logout or shutdown, `kill`, a supervisor stopping the app) is a
+// request to end, not a question for the user: quit as if the prompt had said
+// Quit, closing a prompt that is already on screen. Left to before-quit, the
+// prompt held the quit open until something force-killed the app, and the next
+// launch took that for a crash. The rest of the quit runs as usual, so the exit
+// is marked clean and the backend is stopped rather than orphaned.
+//
+// Installed once the app is ready, not when this module loads: before ready
+// there is no prompt and no backend yet, so the default SIGTERM exit is right,
+// and an import of this module (the main-process tests) must not leave a
+// handler that calls app.quit() on the importing process when it is stopped.
+//
+// Plugins holding a draft get the same bounded chance to save as on Cmd+Q, but
+// cannot veto: a refusal, a busy plugin or a timeout is logged and the quit
+// goes on. The system shutting down (macOS, Linux) is the same kind of request.
+function forceQuit(): void {
+  quitConfirmed = true
+  quitForced = true
+  dockQuitInProgress = true
+  quitPromptAbort?.abort()
+  app.quit()
+}
+app.on('ready', () => {
+  process.on('SIGTERM', forceQuit)
+  powerMonitor.on('shutdown', forceQuit)
+})
 
 app.on('before-quit', async (e) => {
   // Confirmation gate — shared "confirm before close" setting, driven by renderer.
@@ -6796,11 +6848,17 @@ app.on('before-quit', async (e) => {
     const windows = BrowserWindow.getAllWindows()
     if (windows.some((window) => frontendPluginManager.hasWindowCloseParticipants(window))) {
       e.preventDefault()
-      quittingWindowsPreparation = windowCloseCoordinator.prepareForQuit(windows).finally(() => {
+      quittingWindowsPreparation = windowCloseCoordinator.prepareForQuit(windows, { forced: quitForced }).finally(() => {
         quittingWindowsPreparation = null
       })
       const prepared = await quittingWindowsPreparation
       if (!prepared) {
+        // A forced quit that landed while a user quit was being prepared: run
+        // the quit again, this time through the forced preparation.
+        if (quitForced) {
+          app.quit()
+          return
+        }
         // Vetoed: the app stays open, so closing a window ends its AI panels
         // again. quitConfirmed is left as it was, and the refusal has already
         // told the user why.

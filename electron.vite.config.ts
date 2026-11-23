@@ -29,6 +29,9 @@ writeFileSync(devTokenFile(), DEV_TOKEN)
 export default defineConfig({
   main: {
     build: {
+      // electron-vite 5+ externalizes dependencies by default; 3.x bundled
+      // them. Keep bundling so out/ stays as self-contained as before.
+      externalizeDeps: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
@@ -47,6 +50,8 @@ export default defineConfig({
   },
   preload: {
     build: {
+      // Sandboxed preloads cannot require from node_modules.
+      externalizeDeps: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/preload/index.ts'),

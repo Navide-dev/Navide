@@ -5,11 +5,15 @@ const cmd = 'git status --short'
 const tail = normalizeForMatch(cmd).slice(-TAIL_MATCH_LEN)
 
 describe('shellSubmitEvidence', () => {
-  it('submitEvidence reads a command that ran as unsubmitted — why shells need their own check', () => {
+  // An executed command line stays on screen. submitEvidence reads it as
+  // unsubmitted unless its baseline saw the typed line end the screen (the
+  // line-editor rule); the shell path keeps its own cursor check either way.
+  it('submitEvidence reads a command that ran as unsubmitted without the line-editor baseline', () => {
     const before = 'user@mac repo % git status --short'
     const after = 'user@mac repo % git status --short\n M a.txt\nuser@mac repo % '
+    expect(submitEvidence({ tailWasOnScreen: true, tail, screen: after, grownBy: 30 })).toBeNull()
     const baseline = submitBaseline({ screen: before, tail })
-    expect(submitEvidence({ tailWasOnScreen: true, tail, screen: after, grownBy: 30, baseline })).toBeNull()
+    expect(submitEvidence({ tailWasOnScreen: true, tail, screen: after, grownBy: 30, baseline })).toBe('tail-left')
   })
 
   it('the cursor on the next prompt is a submit', () => {

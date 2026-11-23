@@ -56,3 +56,65 @@ describe('plugin pages follow the theme for native controls', () => {
     }
   })
 })
+
+// The Marketplace page follows the Appearance setting through design tokens:
+// every token it reads must be defined under each built-in theme, or the
+// page silently falls back to unstyled colours on that theme.
+describe('Marketplace page tokens under every built-in theme', () => {
+  const THEMES = ['dark-github', 'dark-midnight', 'dark-forest', 'light', 'high-contrast']
+  const tokenDir = 'packages/plugin-ui/src/foundation/styles/tokens'
+  const allTokens = [
+    `${tokenDir}/base.css`,
+    `${tokenDir}/semantic.css`,
+    ...THEMES.filter((t) => t !== 'dark-github').map((t) => `${tokenDir}/themes/${t}.css`),
+  ]
+    .map(read)
+    .join('\n')
+
+  // Tokens read without a fallback by the Marketplace page's own styles.
+  const used = [
+    'src/renderer/src/components/MarketplacePane.vue',
+    'src/renderer/src/components/MarketplaceScreenshot.vue',
+  ].flatMap((file) => {
+    const source = read(file)
+    const style = source.slice(source.indexOf('<style'))
+    return [...style.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)].map((m) => m[1])
+  })
+  const tokensUsed = [...new Set(used)].sort()
+
+  afterEach(() => {
+    document.head.innerHTML = ''
+    delete document.documentElement.dataset.theme
+  })
+
+  function valueUnder(theme: string, token: string): string {
+    document.documentElement.dataset.theme = theme
+    return getComputedStyle(document.documentElement).getPropertyValue(token).trim()
+  }
+
+  it('reads tokens at all (the scan found the page styles)', () => {
+    expect(tokensUsed.length).toBeGreaterThan(20)
+    for (const key of ['--bg-subtle', '--accent-fg', '--risk-fg', '--trust-signed-fg', '--danger-bright', '--text-primary']) {
+      expect(tokensUsed).toContain(key)
+    }
+  })
+
+  for (const theme of THEMES) {
+    it(`defines every token the page reads under ${theme}`, () => {
+      const style = document.createElement('style')
+      style.textContent = allTokens
+      document.head.append(style)
+      const missing = tokensUsed.filter((token) => valueUnder(theme, token) === '')
+      expect(missing).toEqual([])
+    })
+  }
+
+  it('changes the page colours with the theme', () => {
+    const style = document.createElement('style')
+    style.textContent = allTokens
+    document.head.append(style)
+    for (const token of ['--bg-subtle', '--text-primary', '--accent-fg']) {
+      expect(valueUnder('light', token)).not.toBe(valueUnder('dark-github', token))
+    }
+  })
+})

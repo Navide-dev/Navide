@@ -293,7 +293,8 @@ def summarize_executable(path: str, data: bytes, deadline: Deadline = NO_DEADLIN
     else:
         facts = NativeFacts(path, "unknown", "unknown")
     for runtime, markers in EMBEDDED_RUNTIME_MARKERS:
-        if any(marker in data for marker in markers):
+        # find(), not `in`: a mapped entry (package.entry_buffer) has no subsequence `in`.
+        if any(data.find(marker) != -1 for marker in markers):
             facts.embedded_runtime = runtime
             break
     # Strings are classified as they are found and never kept.

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTerminal, type ClipboardFailureReason } from '@navide/terminal'
-import { agentProfileFor } from '@navide/plugin-shell'
+import { agentProfileFor, REMOTE_AGENT_KEY } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
 import type { TerminalDockPort } from '@navide/terminal'
 import type { useCliProfiles } from '../composables/useCliProfiles'
@@ -11,6 +11,7 @@ import type { MentionCandidate } from '@navide/terminal'
 import { PLAN_REF_MIME, isPlanDrag, parsePlanRefPayload, type PlanDragRef } from '../lib/planDrag'
 import { formatLoopTime } from '../lib/loopPrompt'
 import { PANE_STUCK_AFTER_MS } from '../lib/paneStuck'
+import { atClaudeInputPrompt, onCursorMenu } from '../lib/paneAnswerKeys'
 import type { StaleConfigPart } from '../lib/staleConfigPanes'
 import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
@@ -33,7 +34,16 @@ import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
 import AgentControlPanel from './agent/AgentControlPanel.vue'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
+import { sshTargetLabel, type SshRemoteTarget } from '../composables/useSshRemotePrefs'
+import { useSshReconnect } from '../composables/useSshReconnect'
 import { formatClock } from '../lib/schedulerJobs'
+import {
+  REMOTE_AGENT_LABELS,
+  isRemoteAgentKey,
+  isRemoteLoginDone,
+  markRemoteLoginDone,
+  type RemoteTarget,
+} from '../composables/useRemoteDevcontainerPrefs'
 
 interface Props {
   paneId: string
@@ -44,6 +54,9 @@ interface Props {
   subtitle?: string
   /** CLI vendor key (e.g. 'claude', 'codex') carried in the cli-context drag payload. */
   agentKey?: string
+  /** Whether the CLI was launched with its permission-bypass flag; null when
+   *  the vendor has none. 'off' shows a header chip, 'on' a status tooltip line. */
+  permissionBypass?: 'on' | 'off' | null
   /** Vendor conversation id, distinct from useTerminal's backend PTY id. */
   cliSessionId?: string
   sessionHomeId?: string
@@ -85,6 +98,12 @@ interface Props {
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
+  /** Runtime-only: the pane's CLI has been up for minutes without ever
+   *  reaching Navide's tool server (backend mcp_connect_watch). */
+  mcpNeverConnected?: boolean
+  /** Badge click: App.vue reconnects the pane (idle-only same-session rebuild).
+   *  A callback, not an emit — the emits list is past what vue-tsc infers. */
+  reconnectMcp?: () => void
   /** The agent CLI's non-zero exit code, shown as a badge while the pane is
    *  exited; null for a clean exit or a pane that never exited. */
   exitCode?: number | null
@@ -152,6 +171,23 @@ interface Props {
    *  CLI-only chips (loop, login, quota, account) are left out. Undefined for
    *  every CLI pane, which renders exactly as before. */
   agent?: AgentPaneInfo
+  /** Set for a remote container pane (Settings → Experimental → Remote
+   *  container panes): its CLI runs over ssh inside this container. The header
+   *  names the target, the account controls give way to a disabled chip, and
+   *  an exited CLI gets a reconnect banner. Undefined for every local pane,
+   *  which renders exactly as before. */
+  remote?: RemoteTarget
+  /** Banner "Reconnect": App.vue respawns this pane against the same
+   *  container. Callbacks, not emits, for the reason given at openCliUpdate. */
+  remoteReconnect?: () => void
+  /** Banner "Close pane": App.vue's ordinary close path. */
+  remoteClosePane?: () => void
+  /** Set for an SSH Remote terminal pane: its shell runs on this host. */
+  sshRemote?: SshRemoteTarget
+  /** That pane's last exit code; 255 means ssh lost the link. */
+  sshExitCode?: number | null
+  /** Checks the host and respawns the pane: null on success, else the reason. */
+  sshReconnect?: () => Promise<string | null>
 }
 
 const props = defineProps<Props>()
@@ -286,7 +322,9 @@ const terminal = useTerminal(props.paneId, props.terminalPort, {
   onClipboardFailure,
   onOpenFileFailure,
   onPtyLostWhileDisconnected: () => emit('pty-lost'),
-  agentProfileFor,
+  // A remote pane's key is 'remote'; its PTY carries the TUI of the CLI run
+  // in the container, so paste, Shift+Enter and snapshots follow that CLI.
+  agentProfileFor: (key) => agentProfileFor(key === REMOTE_AGENT_KEY && props.remote ? props.remote.cli : key),
 })
 // Reattached terminals can keep the backend's old pane id. Actions must use
 // that same backend-owned identity, just like the resource usage projection.
@@ -387,6 +425,108 @@ const showContinueButton = computed<boolean>(
     displayStatus.value === 'idle' &&
     (terminal.lastUserKeyAt?.value ?? 0) === 0
 )
+
+// ── Remote container pane ────────────────────────────────────────────────────
+const remoteCliLabel = computed<string>(() => {
+  const key = props.remote?.cli ?? ''
+  return isRemoteAgentKey(key) ? REMOTE_AGENT_LABELS[key] : key
+})
+
+// The sign-in card: the container has its own CLI login, which Navide never
+// copies there. Shown by itself on the first open of each host + container +
+// CLI until dismissed, and reopened from the remote badge. For claude, opening
+// it types `/login` into the prompt once the CLI is at it — never Enter: the
+// user submits it.
+const loginCardOpen = ref(false)
+const loginStepsOpen = ref(false)
+let loginPrefillPending = false
+
+function tryLoginPrefill(): void {
+  if (!loginPrefillPending || terminal.liveStatus?.value !== 'idle') return
+  // Typed only at the input prompt. A fresh container opens on Claude Code's
+  // first-run setup (text style, sign-in method), which also reads as idle:
+  // typed there, /login lands on the menu and Enter picks a theme. That setup
+  // signs in by itself, so a menu drops the prefill and the card's steps say
+  // to follow the setup; any other screen (still drawing) keeps waiting.
+  const screen = terminal.readVisibleScreen?.() ?? ''
+  if (!atClaudeInputPrompt(screen)) {
+    if (onCursorMenu(screen)) loginPrefillPending = false
+    return
+  }
+  if (terminal.pasteText('/login')) loginPrefillPending = false
+}
+
+function openLoginCard(withSteps: boolean): void {
+  loginCardOpen.value = true
+  loginStepsOpen.value = withSteps
+  loginPrefillPending = props.remote?.cli === 'claude'
+  tryLoginPrefill()
+}
+
+function dismissLoginCard(): void {
+  loginCardOpen.value = false
+  loginPrefillPending = false
+  if (props.remote) markRemoteLoginDone(props.remote.host, props.remote.container, props.remote.cli)
+}
+
+watch(() => terminal.liveStatus?.value, tryLoginPrefill)
+// A set-up container goes idle before Claude Code has drawn its prompt and
+// then only repaints, so idle never changes again: output arriving while the
+// prefill waits re-checks the screen once xterm has drawn it.
+let loginPrefillRecheck: ReturnType<typeof setTimeout> | null = null
+watch(() => terminal.lastRawActivityAt?.value, () => {
+  if (!loginPrefillPending || loginPrefillRecheck) return
+  loginPrefillRecheck = setTimeout(() => { loginPrefillRecheck = null; tryLoginPrefill() }, 250)
+})
+onBeforeUnmount(() => { if (loginPrefillRecheck) clearTimeout(loginPrefillRecheck) })
+
+if (props.remote && !isRemoteLoginDone(props.remote.host, props.remote.container, props.remote.cli)) {
+  openLoginCard(false)
+}
+
+// Disconnect banner: a remote CLI that ended is usually a dropped ssh link, so
+// the pane offers to reconnect to the same container. Local panes are not
+// affected — their exit stays the exit badge it always was.
+const remoteDownAt = ref<number | null>(null)
+const remoteNow = ref(Date.now())
+let remoteTick: ReturnType<typeof setInterval> | null = null
+
+watch(
+  () => !!props.remote && (displayStatus.value === 'exited' || displayStatus.value === 'error'),
+  (down) => {
+    if (remoteTick) clearInterval(remoteTick)
+    remoteTick = null
+    remoteDownAt.value = down ? Date.now() : null
+    remoteNow.value = Date.now()
+    if (down) remoteTick = setInterval(() => { remoteNow.value = Date.now() }, 1000)
+  },
+  { immediate: true },
+)
+onBeforeUnmount(() => { if (remoteTick) clearInterval(remoteTick) })
+
+const remoteDownSeconds = computed<number>(() =>
+  remoteDownAt.value == null ? 0 : Math.max(0, Math.floor((remoteNow.value - remoteDownAt.value) / 1000))
+)
+
+// SSH Remote terminal pane: a banner once its ssh ends, reconnecting on its
+// own when ssh lost the link (useSshReconnect).
+const sshDown = computed(() => !!props.sshRemote && (displayStatus.value === 'exited' || displayStatus.value === 'error'))
+const sshNow = ref(Date.now())
+let sshTick: ReturnType<typeof setInterval> | null = null
+watch(sshDown, (down) => {
+  if (sshTick) clearInterval(sshTick)
+  sshTick = down ? setInterval(() => { sshNow.value = Date.now() }, 1000) : null
+}, { immediate: true })
+onBeforeUnmount(() => { if (sshTick) clearInterval(sshTick) })
+const ssh = useSshReconnect({
+  down: () => sshDown.value,
+  exitCode: () => props.sshExitCode,
+  reconnect: () => props.sshReconnect?.() ?? Promise.resolve('other'),
+})
+const sshRetryInSeconds = computed<number | null>(() =>
+  ssh.nextAt.value == null ? null : Math.max(0, Math.ceil((ssh.nextAt.value - sshNow.value) / 1000))
+)
+const sshLabel = computed(() => (props.sshRemote ? sshTargetLabel(props.sshRemote) : ''))
 
 // ── Agent pane ───────────────────────────────────────────────────────────────
 const agentConsole = inject(agentConsoleKey, null)
@@ -535,10 +675,14 @@ defineExpose({
   cleanBuffer: terminal.cleanBuffer,
   cleanBytesSeen: terminal.cleanBytesSeen,
   resumeSpawnedAt: terminal.resumeSpawnedAt,
+  navideDirs: terminal.navideDirs,
   lastActivityAt: terminal.lastActivityAt,
   lastRawActivityAt: terminal.lastRawActivityAt,
   // The person at the keyboard, for App.vue's messaging idle gate.
   hasDraft: terminal.hasDraft,
+  draftText: terminal.draftText,
+  // The prompt last sent with Enter, for Restore (lib/claudeComposer.ts).
+  lastSubmittedPrompt: terminal.lastSubmittedPrompt,
   lastUserKeyAt: terminal.lastUserKeyAt,
   // What the CLI on the other end actually asked for, for injectText's guards.
   isBracketedPasteActive: terminal.isBracketedPasteActive,
@@ -850,6 +994,14 @@ onMounted(() => {
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
         <span v-if="agentView" class="agent-vendor" data-testid="agent-vendor" v-truncate>{{ agentVendorLine }}</span>
+        <span
+          v-if="remote"
+          class="remote-badge"
+          role="button"
+          data-testid="remote-badge"
+          :title="$t('remoteDevcontainer.login-help')"
+          @click.stop="openLoginCard(true)"
+        >{{ $t('remoteDevcontainer.badge', { host: remote.host, container: remote.container }) }}</span>
         <span v-if="isCommander" class="commander-inline" :title="$t('pane.terminal.commander-tooltip')">{{ $t('label.manager-badge') }}</span>
         <template v-if="!agentView">
         <span
@@ -896,6 +1048,13 @@ onMounted(() => {
           :title="$t('pane.terminal.login-expired-tooltip')"
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
+        <span
+          v-if="mcpNeverConnected"
+          class="mcp-never-connected-inline"
+          role="button"
+          :title="$t('pane.terminal.mcp-never-connected-tooltip')"
+          @click.stop="reconnectMcp?.()"
+        >{{ $t('pane.terminal.mcp-never-connected-badge') }}</span>
         </template>
         <span
           v-if="exitCode != null && (displayStatus === 'exited' || displayStatus === 'error')"
@@ -940,7 +1099,7 @@ onMounted(() => {
           ? $t('pane.terminal.usage-limit-badge', { time: formatLoopTime(usageLimitUntil) })
           : $t('pane.terminal.usage-limit-badge-unknown') }}</span>
         <span
-          v-if="usageLimitHit && quotaSwitchOffered"
+          v-if="usageLimitHit && quotaSwitchOffered && !remote"
           class="usage-limit-switch"
           role="button"
           data-testid="usage-limit-switch"
@@ -964,8 +1123,14 @@ onMounted(() => {
           class="status"
           :data-status="displayStatus"
           :style="statusBadgeVars"
-          :title="statusTooltipKey ? $t(statusTooltipKey) : ''"
+          :title="[statusTooltipKey ? $t(statusTooltipKey) : '', permissionBypass === 'on' ? $t('pane.terminal.bypass-on-tooltip') : ''].filter(Boolean).join('\n')"
         >{{ statusBadgeText }}</span>
+        <span
+          v-if="permissionBypass === 'off'"
+          class="bypass-off"
+          data-testid="bypass-off"
+          :title="$t('pane.terminal.bypass-off-tooltip')"
+        >{{ $t('pane.terminal.bypass-off') }}</span>
         <span
           v-if="terminal.stopIneffective.value && displayStatus !== 'exited' && displayStatus !== 'error'"
           class="stop-ineffective"
@@ -973,6 +1138,14 @@ onMounted(() => {
           :title="$t('pane.terminal.stop-ineffective-tooltip')"
         >{{ $t('pane.terminal.stop-ineffective') }}</span>
         <template v-if="!agentView">
+        <span
+          v-if="remote"
+          class="remote-account-chip"
+          aria-disabled="true"
+          data-testid="remote-account-disabled"
+          :title="`${$t('remoteDevcontainer.account-disabled-title')}\n${$t('remoteDevcontainer.account-disabled-body')}`"
+        >{{ $t('remoteDevcontainer.account-disabled') }}</span>
+        <template v-else>
         <UsageBadge
           v-if="agentKey"
           data-tour="usage-badge"
@@ -991,6 +1164,7 @@ onMounted(() => {
           :title="$t('account-follow.pinned-indicator-tooltip')"
           :aria-label="$t('account-follow.pinned-indicator-label')"
         >📌</span>
+        </template>
         </template>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
         <template v-if="agentView">
@@ -1013,6 +1187,8 @@ onMounted(() => {
         </template>
       </div>
       <div v-if="agentView" class="header-sub" data-testid="agent-sub" v-truncate>{{ agentSubLine }}</div>
+      <div v-else-if="sshRemote" class="header-sub" data-testid="ssh-sub" v-truncate>{{ $t('sshRemote.sub', { target: sshLabel }) }}</div>
+      <div v-else-if="remote" class="header-sub" data-testid="remote-sub" v-truncate>{{ $t('remoteDevcontainer.sub', { cli: remoteCliLabel, host: remote.host, container: remote.container }) }}</div>
       <div v-else-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
     <div
@@ -1045,6 +1221,47 @@ onMounted(() => {
     <div v-if="disconnectedNotice" class="disconnected-banner" role="status" aria-live="polite">
       <span class="disconnected-dot" />
       <span class="disconnected-text" v-truncate>{{ disconnectedNotice }}</span>
+    </div>
+    <!-- Remote container pane: its CLI ended (usually the ssh link). Same
+         sibling-of-.xterm-host placement as the banner above. -->
+    <div v-if="remote && remoteDownAt != null" class="remote-disconnected" role="status" data-testid="remote-disconnected">
+      <div class="remote-disc-head">
+        <strong>{{ $t('remoteDevcontainer.disconnected-title', { host: remote.host }) }}</strong>
+        <span class="remote-disc-ago">{{ $t('remoteDevcontainer.disconnected-ago', { seconds: remoteDownSeconds }) }}</span>
+      </div>
+      <p class="remote-disc-body">{{ $t('remoteDevcontainer.disconnected-body') }}</p>
+      <div class="remote-actions">
+        <button type="button" class="primary" data-testid="remote-reconnect" @click.stop="remoteReconnect?.()">{{ $t('remoteDevcontainer.reconnect') }}</button>
+        <button type="button" data-testid="remote-close-pane" @click.stop="remoteClosePane?.()">{{ $t('remoteDevcontainer.close-pane') }}</button>
+      </div>
+    </div>
+    <div v-else-if="sshDown" class="remote-disconnected" role="status" data-testid="ssh-disconnected">
+      <div class="remote-disc-head">
+        <strong>{{ sshExitCode === 255 ? $t('sshRemote.lost-title', { host: sshRemote!.host }) : $t('sshRemote.ended-title', { host: sshRemote!.host }) }}</strong>
+      </div>
+      <p v-if="ssh.reason.value" class="remote-disc-body" data-testid="ssh-banner-reason">{{ $t(`sshRemote.reason-${ssh.reason.value}`, { host: sshRemote!.host }) }}</p>
+      <p v-if="ssh.busy.value" class="remote-disc-body" data-testid="ssh-retrying">{{ $t('sshRemote.reconnecting') }}</p>
+      <p v-else-if="sshRetryInSeconds != null" class="remote-disc-body" data-testid="ssh-retry-in">{{ $t('sshRemote.retry-in', { seconds: sshRetryInSeconds }) }}</p>
+      <div class="remote-actions">
+        <button type="button" class="primary" data-testid="ssh-reconnect" :disabled="ssh.busy.value" @click.stop="ssh.reconnectNow()">{{ $t('sshRemote.reconnect') }}</button>
+        <button type="button" data-testid="ssh-close-pane" @click.stop="remoteClosePane?.()">{{ $t('sshRemote.close-pane') }}</button>
+      </div>
+    </div>
+    <div v-else-if="remote && loginCardOpen" class="remote-login" role="dialog" data-testid="remote-login-card" :aria-label="$t('remoteDevcontainer.login-title', { cli: remoteCliLabel })">
+      <strong class="remote-login-title">{{ $t('remoteDevcontainer.login-title', { cli: remoteCliLabel }) }}</strong>
+      <template v-if="loginStepsOpen">
+        <ol class="remote-login-steps">
+          <li>{{ $t('remoteDevcontainer.login-step1') }}</li>
+          <li>{{ $t('remoteDevcontainer.login-step2') }}</li>
+          <li>{{ $t('remoteDevcontainer.login-step3') }}</li>
+        </ol>
+        <p v-if="remote.cli === 'codex'" class="remote-login-note">{{ $t('remoteDevcontainer.login-codex') }}</p>
+      </template>
+      <p class="remote-login-note">{{ $t('remoteDevcontainer.login-note') }}</p>
+      <div class="remote-actions">
+        <button v-if="!loginStepsOpen" type="button" data-testid="remote-login-help" @click.stop="loginStepsOpen = true">{{ $t('remoteDevcontainer.login-help') }}</button>
+        <button type="button" class="primary" data-testid="remote-login-done" @click.stop="dismissLoginCard">{{ $t('remoteDevcontainer.login-done') }}</button>
+      </div>
     </div>
     <!-- Optional-chained: the pane's tests stub useTerminal with partial objects. -->
     <div
@@ -1336,6 +1553,19 @@ onMounted(() => {
 .login-expired-inline:hover {
   border-color: var(--attention-fg);
 }
+.mcp-never-connected-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--attention-fg);
+  background: var(--attention-subtle);
+  border: 1px solid var(--attention-muted);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
 /* A non-zero exit of the agent CLI: informational, so not clickable. */
 .exit-fault-inline {
   font-size: var(--font-3xs);
@@ -1401,6 +1631,63 @@ onMounted(() => {
 }
 /* Beside the quota badge, with the follow-switch flag on: reopen the pane
    on another account. Quieter than the badge it sits next to. */
+.remote-badge {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-3xs, 10px);
+  line-height: 16px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.remote-badge:hover { color: var(--text-primary); }
+.remote-account-chip {
+  flex: none;
+  padding: 0 6px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-3xs, 10px);
+  line-height: 16px;
+  white-space: nowrap;
+  opacity: 0.7;
+  cursor: help;
+}
+.remote-disconnected,
+.remote-login {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-base);
+  box-shadow: var(--shadow-modal);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.remote-disconnected { border-color: var(--danger-fg, #cf222e); }
+.remote-disc-head { display: flex; gap: 8px; align-items: baseline; }
+.remote-disc-ago { color: var(--text-secondary); }
+.remote-disc-body,
+.remote-login-note { margin: 6px 0 0; color: var(--text-secondary); }
+.remote-login-title { display: block; }
+.remote-login-steps { margin: 6px 0 0; padding-left: 18px; }
+.remote-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.remote-actions button {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.remote-actions button.primary { background: var(--accent-emphasis, var(--accent-focus)); border-color: transparent; color: var(--text-on-emphasis); }
 .usage-limit-switch {
   font-size: var(--font-3xs);
   font-weight: 600;
@@ -1476,8 +1763,10 @@ onMounted(() => {
   border: 1px solid var(--border-default);
 }
 /* A STOP the CLI did not act on: sits beside the live status badge, in the
- * warning colours, so the pane reads as still working and the press as missed. */
-.stop-ineffective {
+ * warning colours, so the pane reads as still working and the press as missed.
+ * A CLI launched without its bypass flag reuses the same chip. */
+.stop-ineffective,
+.bypass-off {
   font-size: var(--font-3xs);
   padding: 2px 8px;
   border-radius: 999px;
@@ -1561,7 +1850,8 @@ onMounted(() => {
 .pane.pane-agent-narrow .header-main > .status,
 .pane.pane-agent-narrow .header-main > .exit-fault-inline,
 .pane.pane-agent-narrow .header-main > .stuck-inline,
-.pane.pane-agent-narrow .header-main > .stop-ineffective { order: 1; flex: none; }
+.pane.pane-agent-narrow .header-main > .stop-ineffective,
+.pane.pane-agent-narrow .header-main > .bypass-off { order: 1; flex: none; }
 .pane.pane-agent-narrow .header-main :deep(.pane-channel) { order: 2; flex: none; }
 .pane.pane-agent-narrow .header-main > .agent-sched-inline { order: 3; }
 .pane.pane-agent-narrow .header-main > .commander-inline,

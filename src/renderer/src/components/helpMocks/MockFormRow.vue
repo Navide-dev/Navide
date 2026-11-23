@@ -4,7 +4,7 @@
 //
 // The `tag` form also serves Git's `.file-row`: the `.file-status` letter,
 // the `.file-name-main` and the dimmed `.file-path-dim` beside it
-// (plugins/navide-git/src/components/GitPane.vue:1911-1922).
+// (navide-git's src/components/GitPane.vue:1911-1922).
 //
 // Mirrors SettingsModal.vue's `.cli-agent-row`: the ⠿ grip, the checkbox and
 // label, and the greyed `.is-disabled` state (:2537-2559); and `.perm-row`

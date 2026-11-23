@@ -172,7 +172,25 @@ pytestmark = pytest.mark.asyncio
 #: user moved web panes to a third-party plugin on 11/8, so cli_send's
 #: description drops the `web:*` paragraph again and the list hashes back to
 #: the pin before it (67632d3e…). No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "67632d3e204f7e75dab83a5455f22b506d07c6937f1d48ca31d084d03f151fb9"
+#: Re-pinned for 0.2.43 MCP disconnect D (previous pin 67632d3e…): the
+#: cli_get_status and cli_list_targets descriptions document
+#: `mcp: "never-connected"`. No other tool changed.
+#: Re-pinned for 0.2.43 MCP disconnect F (previous pin 6873c749…): the
+#: cli_send description documents `delivered: false` / `parked` for a
+#: placeholder and cli_check_message the "not-opened" hold. No other tool changed.
+#: Re-pinned for 0.2.44 MCP disconnected (previous pin c6ba7476…): the
+#: cli_get_status and cli_list_targets descriptions document
+#: `mcp: "disconnected"`. No other tool changed.
+#: Re-pinned for 0.2.46 launch prompts (previous pin ce06b1f2…): the
+#: cli_open_agent description documents `kickoff: "blocked-by-prompt"` with
+#: `prompt`, `options` and `prompt_fingerprint`. No other tool changed.
+#: Re-pinned for 0.2.46 terminal delivery (previous pin 0bf220a3…): the
+#: cli_send and cli_check_message descriptions document the terminal-only
+#: "foreground" hold. No other tool changed.
+#: Re-pinned for 0.2.47 MCP reconnect (previous pin c0df01f7…): the
+#: cli_get_status and cli_list_targets descriptions document `mcp_detail`,
+#: `offline_reason` and `remote_link`. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "1285ae18a93277bcb855cf497fab998c183de71afb4f9315205a7526e79576ee"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -225,6 +243,12 @@ CHANNEL_CORE_TOOLS = frozenset({
 #: description gained the navide:<name> source for skills shipped with Navide.
 #: No other plan_* or skills_* tool changed.
 MAIN_PLAN_SKILLS_TOOLS_SHA256 = "2db42581d9594d109e5d31d6458a050cf6d1005e2efe6f098e16c526d794b4d7"
+#: The same for the ship_log_* tools the built-in Shipped Log package
+#: (navide.shipped-log) installs, new in 0.2.44. Re-pinned in 0.2.46 (previous
+#: pin 6b200031…) for the full version: ship_log_config_register and
+#: ship_log_config_list are new, ship_log_record's ref names a registered
+#: setting and ship_log_report reports the hook basis and pending_detections.
+SHIPPED_LOG_TOOLS_SHA256 = "78109418e0170fadef2b35897e3122c8ddc2eea82f2d48a3ab86048fdf172903"
 
 PERMISSIONS = {
     "system": ["fs", "ui"],
@@ -292,6 +316,12 @@ def _isolated(tmp_path, monkeypatch) -> Any:
         pass
 
     monkeypatch.setattr(app, "broadcast", quiet_broadcast)
+
+    async def no_window(_workspace_path: str, _timeout: float) -> bool:
+        return False
+
+    # No window holds any workspace unless a test says so.
+    monkeypatch.setattr(core, "_probe_window", no_window)
     yield
     # The result helper is module state: no test leaves another its process,
     # a failed start's wait for the next try, or its state.
@@ -374,10 +404,20 @@ async def _builtin_package_tools() -> list[Any]:
     return await probe.list_tools()
 
 
+async def _shipped_log_tools() -> list[Any]:
+    from mcp.server.fastmcp import FastMCP
+
+    from agent_team_backend.plugins.builtin.navide_shipped_log import ship_log_tools
+
+    probe = FastMCP(name="builtin-probe")
+    ship_log_tools.install(probe)
+    return await probe.list_tools()
+
+
 async def _builtin_package_tool_names() -> set[str]:
-    """Names the built-in Plans and Skills packages install on the core server.
-    Other tests in the same run install them there; main's digest is of the
-    server module alone."""
+    """Names the built-in Plans, Skills and Shipped Log packages install on the
+    core server. Other tests in the same run install them there; main's digest
+    is of the server module alone."""
     from mcp.server.fastmcp import FastMCP
 
     from agent_team_backend.plugins.builtin.navide_plans import plan_tools
@@ -386,7 +426,7 @@ async def _builtin_package_tool_names() -> set[str]:
     probe = FastMCP(name="builtin-probe")
     plan_tools.install(probe)
     skills_tools.install(probe)
-    return {tool.name for tool in await probe.list_tools()}
+    return {tool.name for tool in await probe.list_tools()} | {tool.name for tool in await _shipped_log_tools()}
 
 
 async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() -> None:
@@ -420,7 +460,13 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: (experimental) is on: cli_read_log, cli_get_status, cli_wait_idle and
 #: cli_interrupt end with acp_mcp.TOOL_NOTES. With the switch off (the default)
 #: the list hashes to MAIN_TOOLS_LIST_SHA256, which is not re-pinned for it.
-ACP_ON_TOOLS_LIST_SHA256 = "8e682fa51e5e84b56d726771305c07b1cddc3e46344a6dd4dd86d34e689a963c"
+#: Re-pinned with MAIN for 0.2.43 MCP disconnect D (previous pin 8e682fa5…).
+#: Re-pinned with MAIN for 0.2.43 MCP disconnect F (previous pin 82ce0a41…).
+#: Re-pinned with MAIN for 0.2.44 MCP disconnected (previous pin 12601f4d…).
+#: Re-pinned with MAIN for 0.2.46 launch prompts (previous pin 9b4f8389…).
+#: Re-pinned with MAIN for 0.2.46 terminal delivery (previous pin e94a55fb…).
+#: Re-pinned with MAIN for 0.2.47 MCP reconnect (previous pin f5f52db5…).
+ACP_ON_TOOLS_LIST_SHA256 = "2b8d853f114f4c73e59557614f8277eb751048b0b7420bea794853ce3ee8ecac"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
@@ -660,6 +706,35 @@ async def test_external_and_host_callers_need_the_external_switch(host: FakeHost
         # workspace_path is the core's, never the plugin's argument.
         assert request["payload"] == {"arguments": {"block_id": "b1"}}
         assert _accepted_by_host_parser(request)
+
+
+async def test_an_external_caller_names_a_workspace_a_window_holds_with_no_pane_yet(host: FakeHost, monkeypatch) -> None:
+    held = "/ws/window-only"
+    probed: list[str] = []
+
+    async def window_holds(workspace_path: str, _timeout: float) -> bool:
+        probed.append(workspace_path)
+        return workspace_path == held
+
+    monkeypatch.setattr(core, "_probe_window", window_holds)
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    for workspace_path in ("/ws/window-only/sub", "/ws/window-onl", "/ws/not-open", "relative", ""):
+        body = _body(await core.server.call_tool("devmap_read", {"workspace_path": workspace_path}))
+        assert body["error_code"] == "BAD_REQUEST" and "workspace_path" in body["error"], workspace_path
+    assert host.requests == []
+    # A relative or empty path is refused before any window is asked.
+    assert probed == ["/ws/window-only/sub", "/ws/window-onl", "/ws/not-open"]
+
+    await core.server.call_tool("devmap_read", {"workspace_path": "/ws/window-only/", "block_id": "b1"})
+    assert [r["target"]["workspace_path"] for r in host.requests] == [held]
+
+
+async def test_the_workspace_path_refusal_says_what_is_checked(host: FakeHost, monkeypatch) -> None:
+    _apply(_snapshot(1, [_entry("devmap_read")], external=True))
+    _as_caller(monkeypatch, _Caller(kind="external"))
+    body = _body(await core.server.call_tool("devmap_read", {"workspace_path": "/ws/not-open"}))
+    assert "window_ready" in body["error"]
 
 
 async def test_an_external_caller_on_windows_names_an_open_drive_letter_workspace(host: FakeHost, monkeypatch) -> None:
@@ -917,6 +992,14 @@ async def test_plan_and_skills_tools_are_byte_identical_to_main() -> None:
         sort_keys=True, separators=(",", ":"), ensure_ascii=True,
     )
     assert hashlib.sha256(probe_text.encode()).hexdigest() == MAIN_PLAN_SKILLS_TOOLS_SHA256
+
+
+async def test_ship_log_tools_are_pinned() -> None:
+    probe_text = json.dumps(
+        [t.model_dump(mode="json", by_alias=True, exclude_none=True) for t in await _shipped_log_tools()],
+        sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+    )
+    assert hashlib.sha256(probe_text.encode()).hexdigest() == SHIPPED_LOG_TOOLS_SHA256
 
 
 async def test_tools_list_serves_every_schema_string_neutralized() -> None:
@@ -1660,18 +1743,26 @@ async def test_an_idle_helper_exits_after_its_window_and_the_next_large_result_s
 
     proxy._result_worker.stop()  # noqa: SLF001
     proxy._result_worker._start_failed = None  # noqa: SLF001
-    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
+    # A window no round trip outlasts, however slow the machine: the second
+    # call starts well inside it.
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 30.0)
     entry = _devmap_tool(monkeypatch)
     value = {"data": "x" * 200_000}
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
     assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
     first = proxy._result_worker._process  # noqa: SLF001
     assert first is not None
+    # Each request schedules its own idle stop when it ends, so the window
+    # shortened here applies from the end of the next request on.
+    monkeypatch.setattr(worker, "IDLE_EXIT_S", 0.5)
     # Within the window the same helper answers: no new start.
     assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
     assert proxy._result_worker._process is first  # noqa: SLF001
     # Idle past the window: stopped, so what the result left in its memory is gone.
-    await asyncio.sleep(1.0)
+    for _ in range(100):
+        if proxy._result_worker._process is None:  # noqa: SLF001
+            break
+        await asyncio.sleep(0.1)
     assert proxy._result_worker._process is None  # noqa: SLF001
     assert proxy._result_worker.state == "idle"  # noqa: SLF001
     assert await asyncio.wait_for(first.wait(), 10) == 0
@@ -1962,12 +2053,13 @@ async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None
     from agent_team_backend import agent_tool_result_worker as worker
 
     _devmap_tool(monkeypatch)
-    monkeypatch.setattr(worker, "IDLE_S", 0.5)
-    # Works for 1.2 s, more than the window, telling it is alive every 0.2 s.
+    # A window that leaves a slow runner 0.8 s between two signs of life.
+    monkeypatch.setattr(worker, "IDLE_S", 1.0)
+    # Works for 2 s, more than the window, telling it is alive every 0.2 s.
     _fake_helper(monkeypatch, """
 ready()
 read(); read()
-for _ in range(6):
+for _ in range(10):
     write(b"")
     time.sleep(0.2)
 write(json.dumps({"ok": True}).encode())

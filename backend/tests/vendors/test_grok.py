@@ -163,6 +163,41 @@ def test_workspace_scoping_gives_up_when_a_group_was_shortened(
     assert GrokLogReader().session_files_for_workspace("/some/other") is None
 
 
+#: A deep CJK workspace: 9 encoded bytes per character puts its group name far
+#: past the 255-byte NAME_MAX, so grok stores it under a slug plus hash.
+DEEP_WS = "/Users/dev/" + "很深的專案目錄/" * 6 + "proj"
+
+
+def test_a_deep_workspace_is_scoped_by_its_cwd_marker(_grok_home: Path) -> None:
+    """Building the encoded name for DEEP_WS raised ENAMETOOLONG from is_dir()."""
+    path = _write(_grok_home, [_turn(1)], group="proj-a1b2c3d4")
+    (path.parent.parent / ".cwd").write_text(DEEP_WS + "\n", encoding="utf-8")
+    _write(_grok_home, [_turn(1)], session="short-sid")  # an ordinary group beside it
+    reader = GrokLogReader()
+
+    assert reader.session_files_for_workspace(DEEP_WS) == [path]
+    assert reader.session_files_for_workspace(DEEP_WS + "/sub") == []
+    # A short name keeps its group, untouched by the shortened one.
+    assert [p.parent.name for p in reader.session_files_for_workspace(WS) or []] == ["short-sid"]
+
+
+def test_a_deep_workspace_with_no_sessions_yet_is_empty(_grok_home: Path) -> None:
+    (_grok_home / "sessions").mkdir(parents=True)
+    assert GrokLogReader().session_files_for_workspace(DEEP_WS) == []
+
+
+def test_resume_preflight_names_a_deep_workspace_transcript(_grok_home: Path) -> None:
+    from agent_team_backend.cli_vendors.grok import _session_path
+
+    assert _session_path(DEEP_WS, SID) is None  # no group yet: assume resumable
+    path = _write(_grok_home, [_turn(1)], group="proj-a1b2c3d4")
+    (path.parent.parent / ".cwd").write_text(DEEP_WS, encoding="utf-8")
+    assert _session_path(DEEP_WS, SID) == path
+    assert _session_path(DEEP_WS, "missing-sid").is_file() is False
+    # Short names behave as before.
+    assert _session_path(WS, SID) is None
+
+
 # ── token usage ─────────────────────────────────────────────────────────────
 
 def test_usage_comes_from_the_turn_completed_record(_grok_home: Path) -> None:

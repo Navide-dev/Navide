@@ -147,6 +147,58 @@ async def test_send_to_a_placeholder_warns_but_still_parks_the_message(
 
 
 @pytest.mark.asyncio
+async def test_send_to_a_placeholder_says_it_was_not_delivered(
+    delivered: list[dict[str, Any]],
+) -> None:
+    """A sender that reads only `ok` took a parked message for a delivered one
+    (2026-11-12): the answer now says so in the fields it reads first."""
+    _seed()
+    result = await plan_mcp.cli_send("sleeper", "wake up", _pane_ctx())
+
+    assert result["delivered"] is False
+    assert result["parked"] == "placeholder"
+    status = await plan_mcp.cli_check_message(result["msg_key"], _pane_ctx())
+    assert status["status"] == "queued"
+    assert status["hold"] == {"key": "not-opened"}
+
+
+@pytest.mark.asyncio
+async def test_a_live_target_answer_is_unchanged(delivered: list[dict[str, Any]]) -> None:
+    _seed()
+    result = await plan_mcp.cli_send("live", "hi", _pane_ctx())
+
+    assert "delivered" not in result and "parked" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_message_parked_ten_minutes_is_reported_once(
+    delivered: list[dict[str, Any]],
+) -> None:
+    _seed()
+    result = await plan_mcp.cli_send("sleeper", "wake up", _pane_ctx())
+    sent_at = plan_mcp._mcp_message_status[result["msg_key"]]["created_at"]
+
+    assert plan_mcp.take_overdue_parked(sent_at + 599) == []
+    overdue = plan_mcp.take_overdue_parked(sent_at + 601)
+    assert [o["msg_key"] for o in overdue] == [result["msg_key"]]
+    assert overdue[0]["target"].endswith("sleeper")
+    assert overdue[0]["origin"] == "pa"
+    assert plan_mcp.take_overdue_parked(sent_at + 900) == []
+
+
+@pytest.mark.asyncio
+async def test_a_parked_message_that_went_in_is_not_reported(
+    delivered: list[dict[str, Any]],
+) -> None:
+    _seed()
+    result = await plan_mcp.cli_send("sleeper", "wake up", _pane_ctx())
+    entry = plan_mcp._mcp_message_status[result["msg_key"]]
+    entry["status"] = "delivered"
+
+    assert plan_mcp.take_overdue_parked(entry["created_at"] + 700) == []
+
+
+@pytest.mark.asyncio
 async def test_open_target_opens_the_placeholder_before_delivering(
     delivered: list[dict[str, Any]],
 ) -> None:
@@ -371,3 +423,25 @@ async def test_open_agent_by_unknown_pane_id_is_refused(
     assert result["ok"] is False
     assert result["error_code"] == "unknown-pane-id"
     assert _open_requests() == []
+
+
+@pytest.mark.asyncio
+async def test_the_watch_tells_the_windows_about_an_overdue_parked_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, Any]] = []
+    item = {"msg_key": "k1", "target": "alpha/sleeper", "origin": "pa", "excerpt": "wake up"}
+    batches = iter([[item]])
+
+    async def broadcast(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    monkeypatch.setattr(app, "_PARKED_MESSAGE_SWEEP_S", 0)
+    monkeypatch.setattr(plan_mcp, "take_overdue_parked", lambda: next(batches, []))
+    task = asyncio.create_task(app._parked_message_watch())
+    for _ in range(5):
+        await asyncio.sleep(0)
+    task.cancel()
+
+    assert [(e["type"], e["payload"]) for e in events] == [("agent_msg.parked_overdue", item)]

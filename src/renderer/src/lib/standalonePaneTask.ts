@@ -12,7 +12,7 @@
  */
 
 import { kickoffVerified, type EchoEvidence, type SubmitEvidence } from './injectEcho'
-import type { KickoffVerdict } from './spawnKickoff'
+import type { KickoffVerdict, ReportedKickoff } from './spawnKickoff'
 
 /** What injectPane observed while typing the task: the same echo / submit
  *  evidence the pane path's kickoff loop judges. */
@@ -27,7 +27,13 @@ export interface StandaloneKickoffEvidence {
   injectFailed?: boolean
   /** The pane exited before its task could be typed. */
   paneGone?: boolean
+  /** Held on a launch prompt nobody answered: the task was not typed. */
+  heldByPrompt?: boolean
 }
+
+/** The kickoff reporter cli_open_agent waits on (spawnKickoff
+ *  createKickoffReporter): one verdict per request, whoever sends it first. */
+export type StandaloneKickoffReport = (kickoff: ReportedKickoff, reason?: string, extra?: Record<string, unknown>) => void
 
 /** Ceiling on waiting for a fresh standalone pane's prompt. The same 30s the
  *  pane path's kickoffRequestedPane gives KICKOFF_PROMPT_READY_TIMEOUT_MS. */
@@ -49,6 +55,11 @@ export interface StandaloneTaskInjectionDeps {
     prefill?: boolean,
   ) => Promise<boolean>
   onKill: (paneId: string) => Promise<void>
+  /** App.vue's holdKickoffForStartupPrompt, the pane path's: answer an
+   *  allowlisted launch prompt, report any other through `report` as
+   *  blocked-by-prompt and wait for it to be answered. False when the task
+   *  must not be typed (unanswered, or the pane died). */
+  holdForStartupPrompt: (paneId: string, report: StandaloneKickoffReport) => Promise<boolean>
 }
 
 /**
@@ -65,7 +76,13 @@ export async function injectStandaloneTask(
   task: string,
   logLabel: string,
   deps: StandaloneTaskInjectionDeps,
-  opts: { resume?: boolean; evidence?: StandaloneKickoffEvidence; prefill?: boolean } = {},
+  opts: {
+    resume?: boolean
+    evidence?: StandaloneKickoffEvidence
+    prefill?: boolean
+    /** Where a launch prompt is reported; nothing is reported without one. */
+    report?: StandaloneKickoffReport
+  } = {},
 ): Promise<boolean> {
   if (!task) return true
 
@@ -74,6 +91,17 @@ export async function injectStandaloneTask(
   if (!bootstrapped) {
     await deps.dismissStartupDialog(paneId)
     await deps.waitForStartupActivity(paneId)
+  }
+  // A launch prompt the task must not be typed into, decided exactly as for
+  // the pane path (lib/startupPrompts.ts).
+  if (!(await deps.holdForStartupPrompt(paneId, opts.report ?? (() => {})))) {
+    if (!deps.paneAlive(paneId)) {
+      if (opts.evidence) opts.evidence.paneGone = true
+      await deps.onKill(paneId)
+    } else if (opts.evidence) {
+      opts.evidence.heldByPrompt = true
+    }
+    return false
   }
   // A fresh CLI prints its banner and is ready; a RESUMED one reloads the
   // transcript first, and while it does it prints nothing and accepts nothing.
@@ -123,6 +151,13 @@ export function standaloneKickoffVerdict(
 ): { kickoff: KickoffVerdict; reason?: string } {
   if (opts.task === '') return { kickoff: 'sent', reason: 'no task — the pane was left as it was' }
   if (evidence.paneGone) return { kickoff: 'failed', reason: 'the pane exited before its task could be typed' }
+  if (evidence.heldByPrompt) {
+    return {
+      kickoff: 'failed',
+      reason: 'the pane is stopped on a launch prompt nobody answered; the task was not typed — '
+        + 'answer the prompt (cli_answer_prompt), then resend the task',
+    }
+  }
   if (evidence.untyped) {
     return {
       kickoff: 'failed',

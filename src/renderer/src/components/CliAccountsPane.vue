@@ -130,7 +130,7 @@ function rowKind(agentKey: string, profile: CliProfile | null): string {
 
 function listProfiles(agentKey: string): (CliProfile | null)[] {
   const query = listQuery.value.trim().toLowerCase()
-  return [null, ...props.api.profilesForAgent(agentKey)].filter(
+  return orderedCards(agentKey).filter(
     (p) => !query || [rowTitle(agentKey, p), agentLabel(agentKey)].some((part) => part.toLowerCase().includes(query)),
   )
 }
@@ -242,6 +242,63 @@ let renameAborted = false
 
 function slotKey(agentKey: string, profile: CliProfile | null): string {
   return `${agentKey}/${profile?.id ?? '__default__'}`
+}
+
+// ── Account order: drag a card to rank the agent's accounts ────────────────
+// Automatic switching tries them top to bottom (cli_profiles.reorder).
+
+/** The agent's cards in the user's order; null = the built-in Default. */
+function orderedCards(agentKey: string): (CliProfile | null)[] {
+  return props.api.orderedSlotIds(agentKey).flatMap((id) => {
+    if (id === null) return [null]
+    const profile = props.api.findProfile(id)
+    return profile ? [profile] : []
+  })
+}
+
+const orderDragKey = ref('')
+const orderDragOverKey = ref('')
+
+function onOrderDragStart(e: DragEvent, agentKey: string, profile: CliProfile | null): void {
+  orderDragKey.value = slotKey(agentKey, profile)
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', orderDragKey.value)
+  }
+}
+
+function onOrderDragOver(e: DragEvent, agentKey: string, profile: CliProfile | null): void {
+  const key = slotKey(agentKey, profile)
+  // Only within one agent: another vendor's accounts are not a target.
+  if (!orderDragKey.value || orderDragKey.value === key || !orderDragKey.value.startsWith(`${agentKey}/`)) return
+  e.preventDefault()
+  orderDragOverKey.value = key
+}
+
+function onOrderDragLeave(agentKey: string, profile: CliProfile | null): void {
+  if (orderDragOverKey.value === slotKey(agentKey, profile)) orderDragOverKey.value = ''
+}
+
+function onOrderDragEnd(): void {
+  orderDragKey.value = ''
+  orderDragOverKey.value = ''
+}
+
+async function onOrderDrop(agentKey: string, profile: CliProfile | null): Promise<void> {
+  const from = orderDragKey.value
+  const to = slotKey(agentKey, profile)
+  onOrderDragEnd()
+  if (!from || from === to) return
+  const ids = props.api.orderedSlotIds(agentKey)
+  const keys = ids.map((id) => `${agentKey}/${id ?? '__default__'}`)
+  const fi = keys.indexOf(from)
+  const ti = keys.indexOf(to)
+  if (fi < 0 || ti < 0) return
+  ids.splice(ti, 0, ids.splice(fi, 1)[0])
+  const result = await props.api.setSlotOrder(agentKey, ids)
+  if (!result.ok) {
+    toast(t('settings.accounts.cli.order-failed', { message: result.message ?? '' }), { type: 'error' })
+  }
 }
 
 function setRenameInput(el: unknown): void {
@@ -869,10 +926,21 @@ onMounted(() => refreshUsage())
                 :key="p?.id ?? '__default__'"
                 type="button"
                 class="acct-row"
-                :class="{ on: isSelectedAccount(spec.agentKey, p?.id ?? null), dim: !isApiKeyProfile(p) && cardSaysSignedOut(spec.agentKey, p) }"
+                :class="{
+                  on: isSelectedAccount(spec.agentKey, p?.id ?? null),
+                  dim: !isApiKeyProfile(p) && cardSaysSignedOut(spec.agentKey, p),
+                  'order-over': orderDragOverKey === slotKey(spec.agentKey, p),
+                }"
                 :aria-current="isSelectedAccount(spec.agentKey, p?.id ?? null) ? 'true' : undefined"
                 :data-account="slotKey(spec.agentKey, p)"
+                :draggable="api.profilesForAgent(spec.agentKey).length > 0 ? 'true' : undefined"
+                :title="api.profilesForAgent(spec.agentKey).length > 0 ? $t('settings.accounts.cli.order-handle') : undefined"
                 @click="selection = { type: 'account', agentKey: spec.agentKey, profileId: p?.id ?? null }"
+                @dragstart="onOrderDragStart($event, spec.agentKey, p)"
+                @dragend="onOrderDragEnd"
+                @dragover="onOrderDragOver($event, spec.agentKey, p)"
+                @dragleave="onOrderDragLeave(spec.agentKey, p)"
+                @drop.prevent="onOrderDrop(spec.agentKey, p)"
               >
                 <span class="acct-row-text">
                   <b v-truncate>{{ rowTitle(spec.agentKey, p) }}</b>
@@ -950,9 +1018,18 @@ onMounted(() => refreshUsage())
       </div>
 
       <div class="cli-card-grid">
-        <!-- First card is the built-in Default (the user's real home). -->
-        <template v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]" :key="p?.id ?? '__default__'">
-        <div v-if="!p && defaultCollapsed(spec.agentKey)" v-show="isSelectedAccount(spec.agentKey, null)" class="cli-card cli-card-collapsed">
+        <!-- Cards in the user's order (null = the built-in Default, the
+             user's real home); dropping a card on another moves it there. -->
+        <template v-for="p in orderedCards(spec.agentKey)" :key="p?.id ?? '__default__'">
+        <div
+          v-if="!p && defaultCollapsed(spec.agentKey)"
+          v-show="isSelectedAccount(spec.agentKey, null)"
+          class="cli-card cli-card-collapsed"
+          :class="{ 'order-over': orderDragOverKey === slotKey(spec.agentKey, p) }"
+          @dragover="onOrderDragOver($event, spec.agentKey, p)"
+          @dragleave="onOrderDragLeave(spec.agentKey, p)"
+          @drop.prevent="onOrderDrop(spec.agentKey, p)"
+        >
           <span class="cli-card-collapsed-text" v-truncate>{{
             $t('settings.accounts.cli.default-collapsed')
           }}</span>
@@ -968,9 +1045,25 @@ onMounted(() => refreshUsage())
           v-else
           v-show="isSelectedAccount(spec.agentKey, p?.id ?? null)"
           class="cli-card"
-          :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
+          :class="{
+            active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null),
+            'order-over': orderDragOverKey === slotKey(spec.agentKey, p),
+          }"
+          @dragover="onOrderDragOver($event, spec.agentKey, p)"
+          @dragleave="onOrderDragLeave(spec.agentKey, p)"
+          @drop.prevent="onOrderDrop(spec.agentKey, p)"
         >
           <div class="cli-card-head">
+            <span
+              v-if="api.profilesForAgent(spec.agentKey).length > 0"
+              class="cli-card-order"
+              draggable="true"
+              data-testid="account-order-handle"
+              :title="$t('settings.accounts.cli.order-handle')"
+              :aria-label="$t('settings.accounts.cli.order-handle')"
+              @dragstart="onOrderDragStart($event, spec.agentKey, p)"
+              @dragend="onOrderDragEnd"
+            >⠿</span>
             <span
               class="cli-card-av"
               :class="{ default: !p, pending: !rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn }"
@@ -1284,6 +1377,7 @@ onMounted(() => refreshUsage())
 .acct-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%; padding: 5px 7px; border: none; border-radius: 6px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
 .acct-row:hover { background: var(--bg-hover); }
 .acct-row.on { background: var(--accent-subtle, var(--bg-hover)); }
+.acct-row.order-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .acct-row:focus-visible, .acct-add:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: -2px; }
 .acct-row.dim .acct-row-text b { color: var(--text-secondary); font-weight: 500; }
 .acct-row-text { min-width: 0; }
@@ -1388,6 +1482,15 @@ onMounted(() => refreshUsage())
   color: var(--text-secondary);
 }
 .cli-card-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cli-card.order-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
+.cli-card-order {
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  user-select: none;
+}
+.cli-card-order:hover { color: var(--text-secondary); }
 .cli-card-av {
   flex-shrink: 0;
   width: 22px;

@@ -13,7 +13,7 @@ type Listener = (...args: never[]) => unknown
 const appListeners: Array<[string, Listener]> = []
 const ipcListeners = new Map<string, Listener>()
 const windowSends: Array<[string, unknown]> = []
-const dialogState = vi.hoisted(() => ({ response: 0, prompts: 0, lastPrompt: null as { title?: string } | null, notices: [] as Array<{ message?: string; detail?: string }> }))
+const dialogState = vi.hoisted(() => ({ hold: false, response: 0, prompts: 0, lastPrompt: null as { title?: string } | null, notices: [] as Array<{ message?: string; detail?: string }> }))
 
 // The last-window quit only exists off macOS; null keeps the host's answer.
 const osState = vi.hoisted(() => ({ mac: null as boolean | null }))
@@ -100,6 +100,11 @@ vi.mock('electron', () => {
         else {
           dialogState.notices.push(options as { message?: string; detail?: string })
           backendState.events.push('notice')
+        }
+        // A held prompt stays on screen until its signal closes it (SIGTERM).
+        const held = (options as { signal?: AbortSignal }).signal
+        if (dialogState.hold && options?.buttons?.length === 2 && held) {
+          return new Promise((resolve) => held.addEventListener('abort', () => resolve({ response: 1, checkboxChecked: false })))
         }
         return Promise.resolve({ response: dialogState.response, checkboxChecked: false })
       },
@@ -557,5 +562,119 @@ describe('the last window closing quits like Cmd+Q (Linux, Windows)', () => {
     expect(backendState.events).toEqual(['quit stage saving', 'quit stage stopping', 'quit stage closing'])
     expect(markCleanExit).toHaveBeenCalled()
     expect(appQuitting()).toBe(true)
+  })
+})
+
+// SIGTERM (a logout or shutdown, `kill`, a supervisor stopping the app) asks the
+// app to end, not the user. With "confirm before quit" on it used to open the
+// prompt — or, with the prompt already up, just focus it — so the app stayed
+// running until something force-killed it, and the next launch took that for a
+// crash. A SIGTERM quits without asking, closes a prompt already on screen, and
+// is recorded as the clean exit it is.
+describe('SIGTERM quits without the confirm prompt', () => {
+  beforeEach(() => {
+    appListeners.length = 0
+    ipcListeners.clear()
+    windowSends.length = 0
+    dialogState.hold = false
+    dialogState.response = 0
+    dialogState.prompts = 0
+    dialogState.notices.length = 0
+    appState.quits = 0
+    vi.resetModules()
+  })
+  afterEach(() => {
+    dialogState.hold = false
+    vi.restoreAllMocks()
+  })
+
+  async function bootSigterm(participant?: { ok: false; reason: 'refused' | 'busy' | 'timeout' }): Promise<{ beforeQuit: BeforeQuit; sigterm: () => void; markCleanExit: ReturnType<typeof vi.spyOn> }> {
+    const sigtermListeners: Array<() => void> = []
+    const realOn = process.on.bind(process)
+    vi.spyOn(process, 'on').mockImplementation(((event: string, listener: () => void) => {
+      // Capture instead of installing: a real SIGTERM handler would outlive the test.
+      if (event === 'SIGTERM') { sigtermListeners.push(listener); return process }
+      return realOn(event, listener)
+    }) as typeof process.on)
+    await import('./index')
+    // index.ts installs the handler on ready, which this harness fires by hand.
+    for (const [event, listener] of appListeners) if (event === 'ready') (listener as () => void)()
+    const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
+    const { WindowRegistry } = await import('./window-registry')
+    vi.spyOn(frontendPluginManager, 'hasWindowCloseParticipants').mockReturnValue(participant !== undefined)
+    if (participant) vi.spyOn(frontendPluginManager, 'prepareWindowClose').mockResolvedValue(participant as never)
+    vi.spyOn(frontendPluginManager, 'hasBackendActivity').mockReturnValue(false)
+    const setQuitConfirm = ipcListeners.get('app:setQuitConfirm') as (event: unknown, cfg: unknown) => void
+    setQuitConfirm({}, { enabled: true })
+    expect(sigtermListeners, 'index.ts installs no SIGTERM handler').toHaveLength(1)
+    return {
+      beforeQuit: appListeners.find(([event]) => event === 'before-quit')![1] as unknown as BeforeQuit,
+      sigterm: () => { for (const listener of sigtermListeners) listener() },
+      markCleanExit: vi.spyOn(WindowRegistry.prototype, 'markCleanExit'),
+    }
+  }
+
+  it('closes a prompt already on screen and quits cleanly', { timeout: 60_000 }, async () => {
+    const { beforeQuit, sigterm, markCleanExit } = await bootSigterm()
+    dialogState.hold = true
+    // Cmd+Q: the prompt opens and waits for the user.
+    const prompted = beforeQuit({ preventDefault: vi.fn() })
+    await vi.waitFor(() => expect(dialogState.prompts).toBe(1))
+
+    sigterm()
+    // The open prompt goes away instead of holding the quit.
+    await prompted
+    expect(appState.quits).toBe(1)
+    // app.quit() re-enters before-quit: no second prompt, the native quit goes
+    // ahead, and the exit is marked clean so the next launch offers no restore.
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(dialogState.prompts).toBe(1)
+    expect(markCleanExit).toHaveBeenCalled()
+  })
+
+  it('quits without opening the prompt', { timeout: 60_000 }, async () => {
+    const { beforeQuit, sigterm, markCleanExit } = await bootSigterm()
+    sigterm()
+    expect(appState.quits).toBe(1)
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(dialogState.prompts).toBe(0)
+    expect(markCleanExit).toHaveBeenCalled()
+  })
+
+  // A plugin window holding a draft (Mini-IDE on an error page) used to veto a
+  // SIGTERM like a Cmd+Q: "quit cancelled", a native message box, and an app
+  // that kept running. It still gets its preparation, but its answer is logged.
+  it.each(['refused', 'busy', 'timeout'] as const)('quits when a plugin window answers %s', { timeout: 60_000 }, async (reason) => {
+    const { beforeQuit, sigterm, markCleanExit } = await bootSigterm({ ok: false, reason })
+    const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
+    sigterm()
+    expect(appState.quits).toBe(1)
+    // Re-entry: the plugin window is prepared, then the quit goes on.
+    await beforeQuit({ preventDefault: vi.fn() })
+    expect(frontendPluginManager.prepareWindowClose).toHaveBeenCalledWith(expect.anything(), 'quit')
+    expect(appState.quits).toBe(2)
+    expect(dialogState.notices).toEqual([])
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(dialogState.prompts).toBe(0)
+    expect(markCleanExit).toHaveBeenCalled()
+  })
+
+  it('a Cmd+Q is still vetoed by a plugin window that refuses', { timeout: 60_000 }, async () => {
+    const { beforeQuit, markCleanExit } = await bootSigterm({ ok: false, reason: 'refused' })
+    await beforeQuit({ preventDefault: vi.fn() })
+    expect(dialogState.prompts).toBe(1)
+    expect(appState.quits).toBe(1)
+    const preventDefault = vi.fn()
+    await beforeQuit({ preventDefault })
+    expect(preventDefault).toHaveBeenCalled()
+    expect(appState.quits).toBe(1)
+    expect(dialogState.notices).toHaveLength(1)
+    expect(markCleanExit).not.toHaveBeenCalled()
   })
 })

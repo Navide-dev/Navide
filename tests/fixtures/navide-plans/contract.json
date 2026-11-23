@@ -1,0 +1,155 @@
+{
+  "_comment": "Values of the pinned navide.plans version (Navide-dev/navide-plans) the Host checks against: update with the pin. planDocDirs: backend/plans_backend.py PLAN_DOC_DIRS; maxFrameBytes: its MAX_FRAME_BYTES; singleWriteMaxJsonBytes: src/planPaging.ts SINGLE_WRITE_MAX_JSON_BYTES; agentSpecs: src/retained/agentSpecs.ts CLI_AGENT_SPECS; planDocumentLocations: backend/plans_backend.py PLAN_DOC_DIRS, DOC_SUFFIXES and the _MAX_*/_NOISE_SEGMENTS discovery limits (docs/plugin-contracts/plan-document-locations-v1.json).",
+  "planDocDirs": [
+    ".agent-team/plans",
+    ".agent-team/reports",
+    ".claude/loop-reports",
+    ".claude/plans",
+    ".cursor/plans",
+    "docs/plans",
+    "docs/reports"
+  ],
+  "maxFrameBytes": 1048576,
+  "singleWriteMaxJsonBytes": 131072,
+  "agentSpecs": [
+    {
+      "agentKey": "claude",
+      "label": "Claude Code (Anthropic)",
+      "hint": "planner + reviewer"
+    },
+    {
+      "agentKey": "codex",
+      "label": "Codex CLI (OpenAI)",
+      "hint": "implementer"
+    },
+    {
+      "agentKey": "antigravity",
+      "label": "Antigravity CLI (Google)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "grok",
+      "label": "Grok Build (SpaceXAI)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "kimi",
+      "label": "Kimi Code CLI (Moonshot AI)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "opencode",
+      "label": "OpenCode (Anomaly)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "qwen",
+      "label": "Qwen Code (Alibaba Cloud)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "kilo",
+      "label": "Kilo Code CLI",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "pi",
+      "label": "Pi",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "copilot",
+      "label": "GitHub Copilot CLI",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "cursor",
+      "label": "Cursor CLI",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "aider",
+      "label": "Aider",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "muse",
+      "label": "Muse Code (Meta)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "droid",
+      "label": "Droid CLI (Factory)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "mcode",
+      "label": "MiniMax Code",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "goose",
+      "label": "Goose (AAIF)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "devin",
+      "label": "Devin CLI (Cognition)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "kiro",
+      "label": "Kiro CLI (AWS)",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "openclaw",
+      "label": "OpenClaw",
+      "hint": "generalist"
+    },
+    {
+      "agentKey": "hermes",
+      "label": "Hermes Agent",
+      "hint": "generalist"
+    }
+  ],
+  "planDocumentLocations": {
+    "directoryInventory": [
+      ".agent-team/plans",
+      ".agent-team/reports",
+      ".claude/loop-reports",
+      ".claude/plans",
+      ".cursor/plans",
+      "docs/plans",
+      "docs/reports"
+    ],
+    "supportedExtensions": [
+      ".html",
+      ".plan.md",
+      ".md"
+    ],
+    "maxNestedDepth": 2,
+    "maxNestedRoots": 50,
+    "maxNestedCandidates": 2000,
+    "maxDirectoryEntries": 2000,
+    "noiseSegments": [
+      ".cache",
+      ".gradle",
+      ".idea",
+      ".mypy_cache",
+      ".next",
+      ".nuxt",
+      ".pytest_cache",
+      ".ruff_cache",
+      ".turbo",
+      ".venv",
+      "__pycache__",
+      "build",
+      "dist",
+      "node_modules",
+      "out",
+      "target",
+      "venv"
+    ]
+  }
+}

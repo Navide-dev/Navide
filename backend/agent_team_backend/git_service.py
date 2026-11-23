@@ -394,8 +394,31 @@ async def _coalesced_after(
     return await read()
 
 
+def _no_repository_marker(workspace_path: str) -> bool:
+    """True when nothing on *workspace_path* or above it could make git find a
+    repository: no `.git` entry (directory or gitfile), no bare-repository
+    layout, and no GIT_DIR. Git's discovery walks the same chain, so then its
+    answer is certainly "not a git repository"; any doubt is left to git."""
+    if os.environ.get("GIT_DIR"):
+        return False
+    here = Path(os.path.realpath(workspace_path))
+    for d in (here, *here.parents):
+        if (d / ".git").exists():
+            return False
+        if (d / "HEAD").is_file() and (d / "objects").is_dir() and (d / "refs").is_dir():
+            return False
+    return True
+
+
 async def _read_status(workspace_path: str, include_ignored: bool) -> dict[str, Any]:
     if not workspace_path or not Path(workspace_path).is_dir():
+        return asdict(GitStatus(is_git_repo=False))
+
+    # A folder that is no repository (a home-folder workspace) is read on every
+    # git.changed, focus and timer by each window's status bar, badges and Git
+    # pane; asking git each time started a process per read. A `git init`
+    # creates the marker, so the next read goes to git as before.
+    if _no_repository_marker(workspace_path):
         return asdict(GitStatus(is_git_repo=False))
 
     # Verify it's a git repo. Only git's own answer means "not a repo": a check
@@ -1199,6 +1222,109 @@ async def list_tags(workspace_path: str) -> list[dict[str, Any]]:
         commit_hash = parts[1].strip() if len(parts) > 1 else ""
         message = parts[2].strip() if len(parts) > 2 else ""
         tags.append(asdict(GitTag(name=name, commit_hash=commit_hash, message=message)))
+    return tags
+
+
+# ─── deployed history (Shipped Log) ───────────────────────────────────────────
+
+#: Branches taken as the deploy branch, in order, when none is named.
+DEPLOY_BRANCH_CANDIDATES = ("main", "master")
+
+
+async def default_deploy_branch(workspace_path: str) -> str | None:
+    """The first local branch of DEPLOY_BRANCH_CANDIDATES that exists, else None."""
+    if not workspace_path or not Path(workspace_path).is_dir():
+        return None
+    for name in DEPLOY_BRANCH_CANDIDATES:
+        rc, _, _ = await _run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{name}^{{commit}}"], workspace_path
+        )
+        if rc == 0:
+            return name
+    return None
+
+
+def _git_date(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+async def get_first_parent_log(
+    workspace_path: str,
+    branch: str,
+    since: datetime,
+    until: datetime | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Commits on *branch*'s first-parent line committed in [since, until),
+    newest first: what reached the branch, a merge counting once, not the
+    commits it brought in. Empty for an invalid or missing branch."""
+    if not workspace_path or not Path(workspace_path).is_dir():
+        return []
+    if _validate_ref_name(branch, "branch") or any(c.isspace() for c in branch):
+        return []
+    # %x1e ends each record so a multi-line body cannot split one.
+    fmt = "%H%x00%h%x00%ct%x00%P%x00%an%x00%s%x00%b%x1e"
+    args = ["git", "log", "--first-parent", f"--since={_git_date(since)}", f"-n{int(limit)}",
+            f"--pretty=format:{fmt}"]
+    if until is not None:
+        args.append(f"--until={_git_date(until)}")
+    args += [f"refs/heads/{branch.strip()}", "--"]
+    rc, out, _ = await _run(args, workspace_path)
+    if rc != 0:
+        return []
+    low = int(since.timestamp())
+    high = int(until.timestamp()) if until is not None else None
+    commits: list[dict[str, Any]] = []
+    for record in out.split("\x1e"):
+        parts = record.strip("\n").split("\x00")
+        if len(parts) < 7 or not parts[2].isdigit():
+            continue
+        ts = int(parts[2])
+        # git's --since/--until are inclusive and approximate; the window is exact.
+        if ts < low or (high is not None and ts >= high):
+            continue
+        commits.append({
+            "hash": parts[0],
+            "short_hash": parts[1],
+            "committed_at": ts,
+            "parents": parts[3].split(),
+            "author": parts[4],
+            "subject": parts[5],
+            "body": parts[6].strip(),
+        })
+    return commits
+
+
+async def list_tags_created_between(
+    workspace_path: str, since: datetime, until: datetime | None = None
+) -> list[dict[str, Any]]:
+    """Tags created in [since, until), oldest first, each with the commit it
+    points at. A lightweight tag has no date of its own: git dates it by its
+    commit."""
+    if not workspace_path or not Path(workspace_path).is_dir():
+        return []
+    fmt = "%(refname:short)%00%(objectname)%00%(*objectname)%00%(creatordate:unix)%00%(subject)%00%(*subject)"
+    rc, out, _ = await _run(["git", "for-each-ref", f"--format={fmt}", "refs/tags"], workspace_path)
+    if rc != 0:
+        return []
+    low = int(since.timestamp())
+    high = int(until.timestamp()) if until is not None else None
+    tags: list[dict[str, Any]] = []
+    for line in out.splitlines():
+        parts = line.split("\x00")
+        if len(parts) < 6 or not parts[3].isdigit():
+            continue
+        ts = int(parts[3])
+        if ts < low or (high is not None and ts >= high):
+            continue
+        annotated = bool(parts[2])
+        tags.append({
+            "name": parts[0],
+            "commit_hash": parts[2] if annotated else parts[1],
+            "created_at": ts,
+            "subject": parts[5] if annotated else parts[4],
+        })
+    tags.sort(key=lambda t: (t["created_at"], t["name"]))
     return tags
 
 

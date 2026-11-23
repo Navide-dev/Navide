@@ -270,6 +270,7 @@ const troubleshooting = [
       <!-- Who a name reaches. Two windows side by side is the only way to show
            that a bare name never leaves its own one. -->
       <MockFigure
+        shot="mcp.addressing"
         :caption="$t('settings.help.mcp.mock.addressing.caption')"
         :legend="addressingLegend"
       >
@@ -347,6 +348,7 @@ const troubleshooting = [
       <!-- The page those entries are added from. The rows come straight off
            MCP_CATALOG, so the picture cannot drift from the real list. -->
       <MockFigure
+        shot="mcp.settings"
         :caption="$t('settings.help.mcp.mock.settings.caption')"
         :legend="settingsLegend"
       >

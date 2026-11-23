@@ -91,8 +91,9 @@ DEVELOPER_BACKEND_TOOLS = ["plugins_developer_backend_call"]
 #: Registered after it: 0.2.40's running-pane model switch
 #: (mcp_server/pane_model_tool.py).
 SET_MODEL_TOOLS = ["cli_set_model"]
-#: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
-PLUGIN_PREFIXES = ("plan_", "skills_")
+#: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills,
+#: navide.shipped-log).
+PLUGIN_PREFIXES = ("plan_", "skills_", "ship_log_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
 
 

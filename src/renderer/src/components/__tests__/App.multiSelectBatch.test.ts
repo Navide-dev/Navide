@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { hostCatalog } from '../../i18n/testing'
 
 // Mounting App starts backend/terminal/settings lifecycles, so — like the other
 // App.*.test.ts files — these assert against the source text. They lock in the
@@ -17,14 +18,6 @@ const controlPaneSource = readFileSync(
 )
 const agentListSource = readFileSync(
   resolve(process.cwd(), 'src/renderer/src/components/AgentList.vue'),
-  'utf8'
-)
-const enLocale = readFileSync(
-  resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/en-US.json'),
-  'utf8'
-)
-const zhLocale = readFileSync(
-  resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales/zh-TW.json'),
   'utf8'
 )
 
@@ -130,8 +123,8 @@ describe('App CLI-pane multi-select + batch context menu', () => {
   })
 
   it('ships i18n keys for every batch menu label in both locales', () => {
-    for (const src of [enLocale, zhLocale]) {
-      const json = JSON.parse(src)
+    for (const locale of ['en-US', 'zh-TW']) {
+      const json = hostCatalog(locale) as { action: Record<string, string> }
       expect(json.action['selected-count']).toContain('{count}')
       expect(json.action['interrupt-selected']).toBeTruthy()
       expect(json.action['rebuild-selected']).toBeTruthy()

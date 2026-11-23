@@ -1,11 +1,14 @@
-import { createPublicKey, verify } from 'crypto'
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { createPublicKey, generateKeyPairSync, verify } from 'crypto'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DeveloperAccount, packageDigest, redactDeveloperSecrets, registryError } from './developerAccount'
 import { DeveloperVault, DeveloperVaultUnavailableError, type DeveloperVaultCrypto } from './developerVault'
+import { safeStorageCrypto } from '../safeStorageCrypto'
+import { fakeSafeStorage, legacyCiphertext } from '../safeStorageCrypto.fake'
 import { applicationView, createDeveloperQueryHandler, isLoopbackRegistryUrl, membersView } from './developerIpc'
+import { OFFICIAL_REGISTRY_API_URL, developerPagesBase } from '../../shared/marketplaceDeveloper'
 
 // Built by concatenation so no scanner mistakes a fixture for a credential.
 const ACCOUNT_TOKEN = 'nva' + '_' + 'acc0unt' + 'Q'.repeat(24)
@@ -13,9 +16,9 @@ const PUBLISHER_TOKEN = 'nvp' + '_' + 'publ1sher' + 'R'.repeat(24)
 const REGISTRY = 'https://registry.example.test/registry'
 
 const fakeCrypto = (available = true): DeveloperVaultCrypto => ({
-  available,
-  encrypt: (plain) => Buffer.from(Buffer.from(plain).map((b) => b ^ 0x5a)).toString('base64'),
-  decrypt: (enc) => Buffer.from(Buffer.from(enc, 'base64').map((b) => b ^ 0x5a)).toString(),
+  available: async () => available,
+  encrypt: async (plain) => Buffer.from(Buffer.from(plain).map((b) => b ^ 0x5a)).toString('base64'),
+  decrypt: async (enc) => Buffer.from(Buffer.from(enc, 'base64').map((b) => b ^ 0x5a)).toString(),
 })
 
 interface Call { url: string; method: string; headers: Record<string, string>; body: unknown }
@@ -63,43 +66,82 @@ function account(answer: Parameters<typeof fakeFetch>[0], openExternal = vi.fn()
 }
 
 describe('DeveloperVault', () => {
-  it('keeps tokens and the private key only as ciphertext', () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
-    const { privateKeyPem } = vault.signingKey(REGISTRY)
+  it('keeps tokens and the private key only as ciphertext', async () => {
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    const { privateKeyPem } = await vault.signingKey(REGISTRY)
     const onDisk = readFileSync(join(dir, 'marketplace-developer.json'), 'utf8')
     expect(onDisk).not.toContain(PUBLISHER_TOKEN)
     expect(onDisk).not.toContain('PRIVATE KEY')
     expect(onDisk).not.toContain(privateKeyPem.split('\n')[1])
-    expect(vault.token(REGISTRY, 'publisher')).toBe(PUBLISHER_TOKEN)
+    expect(await vault.token(REGISTRY, 'publisher')).toBe(PUBLISHER_TOKEN)
   })
 
-  it('shows a state with no token and no key', () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
-    vault.signingKey(REGISTRY)
+  it('shows a state with no token and no key', async () => {
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
+    await vault.signingKey(REGISTRY)
     const state = JSON.stringify(vault.state(REGISTRY))
     expect(state).not.toContain(ACCOUNT_TOKEN)
     expect(state).not.toContain('PRIVATE')
     expect(vault.state(REGISTRY).signedIn).toEqual({ account: true, publisher: false })
   })
 
-  it('treats an expired token as signed out', () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2000-01-01T00:00:00Z', null)
-    expect(vault.token(REGISTRY, 'account')).toBeNull()
+  it('treats an expired token as signed out', async () => {
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2000-01-01T00:00:00Z', null)
+    expect(await vault.token(REGISTRY, 'account')).toBeNull()
     expect(vault.state(REGISTRY).signedIn.account).toBe(false)
   })
 
-  it('refuses to keep a secret without real encryption', () => {
+  it('refuses to keep a secret without real encryption', async () => {
     const plain = new DeveloperVault(join(dir, 'other.json'), fakeCrypto(false))
-    expect(() => plain.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)).toThrow(DeveloperVaultUnavailableError)
-    expect(() => plain.signingKey(REGISTRY)).toThrow(DeveloperVaultUnavailableError)
+    await expect(plain.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)).rejects.toThrow(DeveloperVaultUnavailableError)
+    await expect(plain.signingKey(REGISTRY)).rejects.toThrow(DeveloperVaultUnavailableError)
   })
 
-  it('signs out without dropping the signing key', () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'ns')
-    const before = vault.signingKey(REGISTRY).publicKeyPem
+  it('creates one signing key when two first uses overlap', async () => {
+    const [first, second] = await Promise.all([vault.signingKey(REGISTRY), vault.signingKey(REGISTRY)])
+    expect(second).toEqual(first)
+    expect((await vault.signingKey(REGISTRY)).publicKeyPem).toBe(first.publicKeyPem)
+  })
+
+  it('signs out without dropping the signing key', async () => {
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'ns')
+    const before = (await vault.signingKey(REGISTRY)).publicKeyPem
     vault.signOut(REGISTRY)
-    expect(vault.token(REGISTRY, 'publisher')).toBeNull()
-    expect(vault.signingKey(REGISTRY).publicKeyPem).toBe(before)
+    expect(await vault.token(REGISTRY, 'publisher')).toBeNull()
+    expect((await vault.signingKey(REGISTRY)).publicKeyPem).toBe(before)
+  })
+})
+
+describe('DeveloperVault upgrade from the synchronous safeStorage API', () => {
+  it('reads a token and a signing key an earlier build wrote with encryptString, without rewriting the file', async () => {
+    const fake = fakeSafeStorage()
+    const keys = generateKeyPairSync('ed25519')
+    const privateKeyPem = keys.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
+    const publicKeyPem = keys.publicKey.export({ type: 'spki', format: 'pem' }).toString()
+    const file = join(dir, 'legacy-developer.json')
+    const onDisk = JSON.stringify({
+      version: 1,
+      registries: {
+        [REGISTRY]: {
+          publisher: { tokenEnc: legacyCiphertext(fake, PUBLISHER_TOKEN), expiresAt: null },
+          namespace: 'ns',
+          privateKeyEnc: legacyCiphertext(fake, privateKeyPem),
+          publicKeyPem,
+        },
+      },
+    })
+    writeFileSync(file, onDisk)
+    const upgraded = new DeveloperVault(file, safeStorageCrypto(fake))
+    await expect(upgraded.token(REGISTRY, 'publisher')).resolves.toBe(PUBLISHER_TOKEN)
+    await expect(upgraded.signingKey(REGISTRY)).resolves.toEqual({ privateKeyPem, publicKeyPem })
+    expect(readFileSync(file, 'utf8')).toBe(onDisk)
+  })
+
+  it('stores a token in the format an earlier build wrote', async () => {
+    const fake = fakeSafeStorage()
+    const file = join(dir, 'new-developer.json')
+    await new DeveloperVault(file, safeStorageCrypto(fake)).saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    expect(JSON.parse(readFileSync(file, 'utf8')).registries[REGISTRY].account.tokenEnc).toBe(legacyCiphertext(fake, ACCOUNT_TOKEN))
   })
 })
 
@@ -137,14 +179,14 @@ describe('DeveloperAccount', () => {
     const { account: dev, calls } = account(() => ({ status: 200, body: { status: 'none' } }))
     expect(await dev.application()).toEqual({ status: 401, body: { detail: expect.objectContaining({ code: 'NOT_SIGNED_IN' }) } })
     expect(calls).toHaveLength(0)
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
     const res = await dev.application()
     expect(res).toEqual({ status: 200, body: { status: 'none' } })
     expect(calls[0].headers.Authorization).toBe(`Bearer ${ACCOUNT_TOKEN}`)
   })
 
   it('signs the package digest with the kept key, the way navide-plugin sign does', async () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
     const { account: dev, calls } = account((call) =>
       call.url.includes('/api/publisher/me/key') ? { status: 200, body: {} } : { status: 201, body: { status: 'pending' } })
     const bytes = new TextEncoder().encode('PK fake package bytes')
@@ -154,14 +196,14 @@ describe('DeveloperAccount', () => {
     expect(upload.pathname).toBe('/registry/api/publish')
     expect(upload.searchParams.get('target')).toBe('universal')
     const signature = Buffer.from(upload.searchParams.get('signature')!, 'base64')
-    const publicKey = createPublicKey(vault.signingKey(REGISTRY).publicKeyPem)
+    const publicKey = createPublicKey((await vault.signingKey(REGISTRY)).publicKeyPem)
     expect(verify(null, Buffer.from(packageDigest(bytes), 'ascii'), publicKey, signature)).toBe(true)
   })
 
   it('never lets a token or the private key reach an answer, an error or the console', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'ns')
-    const { privateKeyPem } = vault.signingKey(REGISTRY)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'ns')
+    const { privateKeyPem } = await vault.signingKey(REGISTRY)
     // A hostile or buggy Registry echoes the credential back in every error.
     const { account: dev } = account(() => ({
       status: 400,
@@ -180,6 +222,39 @@ describe('DeveloperAccount', () => {
       expect(text).not.toContain(secret)
     }
     expect(redactDeveloperSecrets(`x ${privateKeyPem.trim()} y`)).toBe('x [redacted] y')
+  })
+})
+
+describe('the Official Registry sign-in page', () => {
+  it.each([
+    ['https://server.navide.dev/registry', 'https://developers.navide.dev'],
+    ['https://server.navide.dev/registry/', 'https://developers.navide.dev'],
+    ['https://server.navide.dev', 'https://server.navide.dev'],
+    ['https://server.navide.dev/registry/evil', 'https://server.navide.dev/registry/evil'],
+    ['https://server.navide.dev.evil.test/registry', 'https://server.navide.dev.evil.test/registry'],
+    ['http://server.navide.dev/registry', 'http://server.navide.dev/registry'],
+    ['http://127.0.0.1:8787', 'http://127.0.0.1:8787'],
+  ])('%s opens its pages at %s', (registry, pages) => {
+    expect(developerPagesBase(registry)).toBe(pages)
+  })
+
+  it('opens the console to sign in and keeps the API and the vault on the Registry', async () => {
+    const opened: string[] = []
+    const openExternal = vi.fn(async (url: string) => {
+      opened.push(url)
+      const params = new URL(url).searchParams
+      await fetch(`http://127.0.0.1:${params.get('port')}/callback?code=c0de&state=${params.get('state')}`)
+    })
+    const fetcher = fakeFetch(() => ({ status: 200, body: { token: PUBLISHER_TOKEN, scope: 'account', expires_at: null } }))
+    const dev = new DeveloperAccount({
+      vault, registryUrl: () => OFFICIAL_REGISTRY_API_URL, openExternal, fetch: fetcher.impl,
+    })
+    await dev.signIn('account')
+    const authorize = new URL(opened[0])
+    expect(authorize.origin).toBe('https://developers.navide.dev')
+    expect(authorize.pathname).toBe('/cli/authorize')
+    expect(fetcher.calls[0].url).toBe('https://server.navide.dev/registry/api/cli/token')
+    expect(await vault.token(OFFICIAL_REGISTRY_API_URL, 'account')).toBe(PUBLISHER_TOKEN)
   })
 })
 
@@ -239,12 +314,12 @@ describe('reclaimed namespaces in the application (W2)', () => {
     { namespace: 'old-tools', frozen_at: null, frozen_reason: null },
   ]
 
-  it('applicationView passes namespace, frozen_at and frozen_reason through as they are', () => {
+  it('applicationView passes namespace, frozen_at and frozen_reason through as they are', async () => {
     expect(applicationView(body)?.namespaces).toEqual(expected)
   })
 
   it('the agent gets them in marketplace_developer_status', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
     const { account: dev } = account(() => ({ status: 200, body }))
     const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
     expect(answer).toMatchObject({ ok: true, result: { application: { namespaces: expected } } })
@@ -253,7 +328,7 @@ describe('reclaimed namespaces in the application (W2)', () => {
 
 describe('Registry calls that carry the kept credential', () => {
   it('stops reading a package download past the size cap instead of buffering it whole', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, '2099-01-01T00:00:00Z', null)
     const chunk = new Uint8Array(1024 * 1024)
     let pulled = 0
     const stream = new ReadableStream<Uint8Array>({
@@ -272,7 +347,7 @@ describe('Registry calls that carry the kept credential', () => {
 
 describe('L1d: a key the Registry already holds is never replaced by itself', () => {
   it('records the conflict instead of failing, keeps the CLI key publishing, and replaces only on request', async () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
     let registered: string | null = 'sha256:cli-key'
     const { account: dev, calls } = account((call) => {
       if (call.url.endsWith('/api/publisher/me/key')) {
@@ -320,14 +395,14 @@ describe('namespace members (0.2.40)', () => {
     ],
   }
 
-  it('membersView keeps ids, roles and dates only', () => {
+  it('membersView keeps ids, roles and dates only', async () => {
     expect(membersView(registryMembers)).toEqual(view)
     expect(membersView({ your_role: 'admin', members: [{ member_id: 'x', role: 'maintainer' }] }))
       .toEqual({ your_role: null, items: [{ member_id: 'x', role: 'publisher', added_at: null }] })
   })
 
   it('adds and removes a member with the publisher token', async () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
     const { account: dev, calls } = account(() => ({ status: 200, body: registryMembers }))
     await dev.addMember('mem-new')
     await dev.removeMember('mem/../x')
@@ -340,7 +415,7 @@ describe('namespace members (0.2.40)', () => {
   })
 
   it('the agent reads members, read-only, in marketplace_developer_status', async () => {
-    vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
+    await vault.saveToken(REGISTRY, 'publisher', PUBLISHER_TOKEN, null, 'nerdtechnic')
     const { account: dev, calls } = account((call) =>
       call.url.endsWith('/api/publisher/me/members')
         ? { status: 200, body: registryMembers }
@@ -352,7 +427,7 @@ describe('namespace members (0.2.40)', () => {
   })
 
   it('has no members without a publisher sign-in', async () => {
-    vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
+    await vault.saveToken(REGISTRY, 'account', ACCOUNT_TOKEN, null, null)
     const { account: dev, calls } = account(() => ({ status: 200, body: { status: 'none' } }))
     const answer = await createDeveloperQueryHandler(dev)({ kind: 'developer-status' })
     expect(answer).toMatchObject({ ok: true, result: { members: null } })
@@ -363,13 +438,13 @@ describe('namespace members (0.2.40)', () => {
 describe('registryError (0.2.40 c3)', () => {
   const doc = 'https://github.com/Navide-dev/Navide/blob/main/docs/en-US/marketplace-publishing.md#testplace'
 
-  it('reads the code and message as before and keeps a Navide doc link', () => {
+  it('reads the code and message as before and keeps a Navide doc link', async () => {
     expect(registryError({ detail: { code: 'OWNER_ONLY', message: 'owner only' }, doc }))
       .toEqual({ code: 'OWNER_ONLY', message: 'owner only', doc })
     expect(registryError({ detail: 'extension not found' })).toEqual({ code: null, message: 'extension not found', doc: null })
   })
 
-  it('takes a top-level CAPABILITY_DENIED and links its section when the body has no doc', () => {
+  it('takes a top-level CAPABILITY_DENIED and links its section when the body has no doc', async () => {
     expect(registryError({ detail: 'static scan found network hosts the manifest does not declare: x.net', code: 'CAPABILITY_DENIED' }))
       .toEqual({
         code: 'CAPABILITY_DENIED',
@@ -378,7 +453,7 @@ describe('registryError (0.2.40 c3)', () => {
       })
   })
 
-  it('drops a doc that is not Navide documentation', () => {
+  it('drops a doc that is not Navide documentation', async () => {
     for (const bad of ['http://github.com/Navide-dev/Navide/x', 'https://evil.example/doc', 'https://github.com/other/repo', 'javascript:alert(1)', 42]) {
       expect(registryError({ detail: 'x', doc: bad }).doc).toBeNull()
     }

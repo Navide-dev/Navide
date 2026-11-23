@@ -27,6 +27,8 @@ export interface Toast {
   /** One button on the toast (e.g. Undo). Clicking it runs `run` and
    *  dismisses the toast. Absent means no button. */
   action?: ToastAction
+  /** A second button beside `action` (e.g. Copy next to Restore). */
+  secondaryAction?: ToastAction
 }
 
 export interface ToastAction {
@@ -75,7 +77,7 @@ const MAX_TOASTS = 6
 // ── Toast ─────────────────────────────────────────────────────────────────
 function toast(
   message: string,
-  opts: { type?: ToastType; duration?: number; variant?: ToastVariant; title?: string; icon?: string; action?: ToastAction } = {}
+  opts: { type?: ToastType; duration?: number; variant?: ToastVariant; title?: string; icon?: string; action?: ToastAction; secondaryAction?: ToastAction } = {}
 ): void {
   const id = ++seq
   // Evict oldest toasts when the list is full to prevent unbounded growth.
@@ -95,6 +97,7 @@ function toast(
     ...(opts.title ? { title: opts.title } : {}),
     ...(opts.icon ? { icon: opts.icon } : {}),
     ...(opts.action ? { action: opts.action } : {}),
+    ...(opts.secondaryAction ? { secondaryAction: opts.secondaryAction } : {}),
   })
   const duration = opts.duration ?? 4000
   if (duration > 0) {

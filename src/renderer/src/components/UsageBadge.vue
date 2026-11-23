@@ -90,7 +90,33 @@ const pending = computed(() => snap.value?.refreshPending === true)
 // collapses every failure into one word ("unavailable"), which reads as "the
 // account is broken" when it is usually the CLI probe timing out on a loaded
 // machine. The snapshot has carried the real sentence all along; this shows it.
-const refreshError = computed(() => (pending.value || unverified.value ? '' : (snap.value?.error ?? '')))
+// While a read is in flight the error is the previous read's, so it stays on
+// screen labelled as the last failure rather than vanishing.
+const refreshError = computed(() => (unverified.value ? '' : (snap.value?.error ?? '')))
+// How long the in-flight read has been running: "up to 3 minutes" with no clock
+// cannot tell a slow read from a stuck one.
+const nowMs = ref(Date.now())
+let readingClock: ReturnType<typeof setInterval> | null = null
+watch(
+  pending,
+  (on) => {
+    if (readingClock) clearInterval(readingClock)
+    readingClock = null
+    if (!on) return
+    nowMs.value = Date.now()
+    readingClock = setInterval(() => (nowMs.value = Date.now()), 1000)
+  },
+  { immediate: true }
+)
+onBeforeUnmount(() => {
+  if (readingClock) clearInterval(readingClock)
+})
+const readingFor = computed(() => {
+  const since = Date.parse(snap.value?.refreshPendingSince ?? '')
+  if (!pending.value || !Number.isFinite(since)) return ''
+  const s = Math.max(0, Math.floor((nowMs.value - since) / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+})
 // Claude's quota needs its CLI; without the binary there is nothing to read and
 // no cached figure to fall back to either, so the badge would render nothing at
 // all and the one actionable failure would be invisible.
@@ -168,7 +194,14 @@ const badgeSmall = computed(() => {
 
 // Account-switch block: only shown when this agent has ≥1 extra profile.
 const canSwitch = computed(() => props.cliProfiles.hasProfiles(props.agentKey))
-const switchProfiles = computed(() => props.cliProfiles.profilesForAgent(props.agentKey))
+// In the user's account order (Accounts settings); the Default row keeps its
+// own place at the top of the list.
+const switchProfiles = computed(() => {
+  const profiles = props.cliProfiles.profilesForAgent(props.agentKey)
+  const order = props.cliProfiles.orderedSlotIds?.(props.agentKey)
+  if (!order) return profiles
+  return order.flatMap((id) => profiles.filter((p) => p.id === id))
+})
 // The account NEW panes start on — the pane default when one is chosen, else
 // the live credential's owner. The tick marks this; with no account dirs it
 // is exactly the active account it always was. Under scheme A (liveMode) a row
@@ -363,6 +396,13 @@ const queuedHere = computed(() =>
 watch(open, (isOpen) => {
   if (isOpen && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
 })
+// A reorder in another window moves the next account while this one is open.
+watch(
+  () => props.cliProfiles.slotOrder?.value[props.agentKey],
+  () => {
+    if (open.value && showFailover.value && failoverMode.value !== 'off') void loadFailoverNext()
+  },
+)
 async function onFailoverModeChange(raw: string): Promise<void> {
   if (!(FAILOVER_MODES as readonly string[]).includes(raw) || failoverBusy.value) return
   failoverBusy.value = true
@@ -845,7 +885,9 @@ function acctTitle(profileId: string | null): string {
       <div v-if="expired" class="usage-pop-expired">{{ $t('usage.expired-tooltip') }}</div>
       <div v-if="cliMissing" class="usage-pop-missing">{{ $t('usage.cli-missing-tooltip') }}</div>
       <div v-if="unverified" class="usage-pop-missing">{{ $t('usage.unverified-tooltip') }}</div>
-      <div v-if="pending" class="usage-pop-pending">{{ $t('usage.reading-now') }}</div>
+      <div v-if="pending" class="usage-pop-pending">
+        {{ $t('usage.reading-now') }}<template v-if="readingFor"> · {{ $t('usage.reading-for', { time: readingFor }) }}</template>
+      </div>
       <div v-if="exhausted" class="usage-pop-exhausted">
         {{ exhaustedReset
           ? $t('usage.exhausted-tooltip', { time: exhaustedReset })
@@ -856,7 +898,7 @@ function acctTitle(profileId: string | null): string {
         · {{ $t('usage.refresh-status', { status: refreshStatusLabel(snap.refreshStatus) }) }}
       </div>
       <div v-if="refreshError" class="usage-pop-reason">
-        {{ $t('usage.refresh-error', { reason: refreshError }) }}
+        {{ $t(pending ? 'usage.last-refresh-error' : 'usage.refresh-error', { reason: refreshError }) }}
       </div>
       <div v-if="cached && snap.staleExpired" class="usage-pop-expired">
         {{ $t('usage.cached-reset-expired') }}

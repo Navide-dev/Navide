@@ -56,6 +56,37 @@ Supported built-in agent keys cover 14 coding CLIs: Aider, Antigravity CLI, Clau
 
 For Kimi Code panes, Navide gives the CLI a 100 ms escape-sequence reassembly window so arrow-key navigation remains reliable through the embedded terminal. An existing `PI_TUI_ESC_TIMEOUT` environment value still takes precedence.
 
+For Claude Code panes, Navide sets `MCP_TIMEOUT=120000` so the Navide tools still connect when many panes start at once and the backend answers slowly. An existing `MCP_TIMEOUT` value still takes precedence.
+
+### Remote container panes (experimental)
+
+Off by default. Turn it on in **Settings → General → Experimental features → Remote container panes**; the **+** menu then shows **Remote container…**.
+
+A remote container pane runs Claude Code or Codex inside a Docker container on another machine: Navide runs `ssh` to the host and `docker exec` into the container, with the same typing, colors and resizing as a local pane.
+
+- **Host** is a name your own ssh configuration already knows. Navide uses your ssh setup as it is; it does not read or change `~/.ssh`, add keys to your agent, or store any key or password. It remembers only the host name and the container name.
+- **List containers** shows the host's containers. A stopped container, or one whose network mode Navide cannot reach, cannot be chosen.
+- **Test connection** checks each hop: the host, the container, the CLI inside it, and the Navide tools tunnel.
+- **Navide tools** (pane messages, plans) reach the container through an `ssh -R` reverse tunnel to this computer. With host networking the container dials `127.0.0.1`; with a bridge network it dials the bridge gateway, which needs `GatewayPorts clientspecified` in the host's `sshd_config` (test again a minute after changing it: the connection test reuses one ssh connection for up to 60 seconds). Other containers on that bridge can reach the tunnel port too; they still need the pane's token. The pane's tool token is passed on the pane's first input line with echo off, never on a command line.
+- **Sign in inside the container.** A remote pane has no account switching and no automatic quota failover: both work by copying this computer's sign-in files into the CLI, which would send your credentials to another machine. On first open a card walks you through `/login` (Claude Code) or the device code (Codex CLI). The sign-in lives in the container and is lost when the container is rebuilt.
+- **SSH agent forwarding stays off**, and environment variables other than what `ssh` itself needs are removed from the connection, so no `SendEnv` rule can carry a local API key.
+- **Disconnects:** when the connection drops or the pane closes, the CLI in the container stops (Navide records its process in a file under the container's `/tmp`, so the container needs `sh` and a writable `/tmp`), and the pane shows **Reconnect**, which opens a new session in the same container. Long-running work that must survive a disconnect needs `tmux` or similar inside the container.
+- Only Claude Code and Codex are supported in remote panes. Listing and testing share one ssh connection for up to 60 seconds; each pane has a connection of its own, so closing a pane releases its tunnel at once. Windows hosts of Navide never share connections (Windows OpenSSH has no ControlMaster).
+
+### SSH Remote panes (experimental)
+
+A terminal pane whose shell runs on another machine over `ssh`. Only terminal panes: Claude Code and Codex are not opened on the remote host.
+
+With **Settings → General → Experimental features → Remote container panes** on, the **+** menu shows **SSH Remote…** below **Terminal**.
+
+- **Host** is a host name, an IP address or a name from your ssh configuration. **User** is optional; empty, ssh uses your configuration. **Port** is 22 unless you change it.
+- **Private key path** is optional. Navide saves only the path and passes it to `ssh -i`; it never reads, copies or uploads the key.
+- **Recent connections** keeps the last eight targets (host, user, port, key path) on this computer only. They are not part of Navide Cloud sync or an exported settings bundle.
+- **SSH agent forwarding stays off** (`ForwardAgent=no`, never `-A`), and environment variables other than what `ssh` itself needs are removed, so no `SendEnv` rule can carry a local API key.
+- **Connect** checks the host once with a non-interactive `ssh` call. When it answers, Navide opens a terminal pane running your login shell there. When it does not, the dialog says why in plain words: the host can't be reached, the key was refused, or the host can't be verified. After a key or host-key refusal, **Open anyway** opens the pane so `ssh` itself can ask for the key's passphrase or the host's fingerprint.
+- **Dropped connections reconnect on their own.** When `ssh` loses the link, the pane checks the host again after 2, 5, 15, 30 and 60 seconds and shows the reason each try failed; a refused key or host key stops the retries. **Reconnect** tries at once. Typing `exit` ends the pane without reconnecting.
+- An SSH Remote pane is not restored after Navide restarts; open it again from **Recent connections**.
+
 ### CLI risk observations
 
 An active agent pane can show one yellow or red risk pill. Open its popover to inspect the backend's evidence and observation times; multiple findings share that popover. Disk findings apply to the vendor's active panes, while network findings belong to the observed pane's process tree, including its CLI, MCP servers and tools. Reclaimed placeholders show no risk pill.
@@ -291,6 +322,18 @@ These credentials **never leave this machine**: account credentials and keys sta
 **App Lock** (Settings → App Lock) puts a lock screen over every Navide window and unlocks with a 4-to-12-digit PIN, or first with Touch ID on a Mac or Windows Hello on Windows 11. Windows 10 and Linux unlock with the PIN only, and the page says so. It is a privacy screen, not access control: agents, terminals, chat channels, MCP tools, remote devices and schedules keep running underneath, and someone at the computer who knows how can still get past it. While it is up, the application menu is greyed out except for hiding, quitting, the window controls and the editing keys the PIN box needs, and keys never reach the windows underneath, so neither a click nor a shortcut works the App behind it. That includes Toggle Developer Tools: DevTools cannot be opened while locked, and DevTools already open is left as it is. Lock with **Lock Now** (⌘⌥L, or Ctrl+Alt+L on Windows and Linux), or automatically after idle time, when the screen locks, when the computer sleeps, or when Navide starts (off by default). A forgotten PIN is reset after Touch ID or Windows Hello; without either, quit Navide and delete `app-lock.json` from Navide's data folder, which removes App Lock and its PIN and nothing else.
 
 `.agent-team/` is not currently a portability mechanism. Any future migration between machines should use an explicit local export/import flow with redaction and retention controls rather than Git synchronization.
+
+### Build your own Navide plugin
+
+Anyone can make a Navide plugin and list it on the Navide Marketplace. **Settings → Navide Marketplace → Developer** walks you through the steps in the app; [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md) is the guide, with every command.
+
+1. **Create it from the template.** `navide-plugin init acme-hello --id acme.hello` writes a plugin with no build step; `--template vue` writes a Vue view, a small backend and an agent tool. The developer packages are not on npm yet: the guide shows the one-line `npx` command that runs them from the GitHub Release `plugin-packages-1.0.0`.
+2. **Load it without publishing.** Turn on [Developer Mode](#developer-mode) and choose **Load from Folder…**. A loaded folder reloads by itself when you save.
+3. **Validate and package it.** `navide-plugin validate` and `navide-plugin package` run the checks the Navide Marketplace runs before review and write a `.vsix` file. An agent in a pane can run the same checks with `plugins_validate_package` and `plugins_package`; neither installs anything.
+4. **Apply as a developer, once.** Sign in on the Developer page and fill in the real-name application; a person reviews it.
+5. **Submit for review.** Claim a namespace, register a signing key, then sign the package and submit it with `navide-plugin publish` or Navide's publish form. A person reviews each version (a target of 3 business days) before it is listed.
+
+Steps 1–3 stay on your computer. Nothing is sent in steps 4–5 until you press the button or run the command yourself, including when an agent fills a form for you.
 
 ### Navide plugin commands
 

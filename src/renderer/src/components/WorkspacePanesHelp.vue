@@ -246,6 +246,7 @@ const prose = computed(() => ({
            three terms above are easier to hold once you can see where each of
            them lives. -->
       <MockFigure
+        shot="workspace.shell"
         :caption="$t('settings.help.workspace.mock.shell.caption')"
         :legend="shellLegend"
       >
@@ -341,6 +342,7 @@ const prose = computed(() => ({
         <li v-html="$t('settings.help.workspace.s3.addMenu.role')"></li>
         <li v-html="$t('settings.help.workspace.s3.addMenu.cliList', prose)"></li>
         <li v-html="$t('settings.help.workspace.s3.addMenu.terminal')"></li>
+        <li v-html="$t('settings.help.workspace.s3.addMenu.sshRemote')"></li>
       </ul>
       <p class="wph-p" v-html="$t('settings.help.workspace.s3.p2')"></p>
 
@@ -409,6 +411,7 @@ const prose = computed(() => ({
       <!-- Same panes, both ways round: the tab bar and grid on the stage, the
            three-level list in the sidebar. -->
       <MockFigure
+        shot="workspace.groups"
         :caption="$t('settings.help.workspace.mock.groups.caption')"
         :legend="groupsLegend"
       >

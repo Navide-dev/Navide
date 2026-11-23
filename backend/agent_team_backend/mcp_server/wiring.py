@@ -119,7 +119,10 @@ def plan_mcp_url(port: int, pane_id: str = "", *, with_token: bool = True) -> st
     ``with_token=False`` leaves the credential out, for a CLI that sends it
     as a bearer header instead (see TOKEN_ENV).
     """
-    base = f"http://127.0.0.1:{port}/plan-mcp"
+    from agent_team_backend.mcp_server import own_loop
+
+    # The /plan-mcp listener on its own event loop, while it runs (own_loop).
+    base = f"http://127.0.0.1:{own_loop.port() or port}/plan-mcp"
     query = f"pane={quote(pane_id, safe='')}" if pane_id else "client=host"
     if not with_token:
         return f"{base}?{query}"

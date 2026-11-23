@@ -64,39 +64,13 @@ bun run dev
 Daily development — install, `bun run dev`, typecheck, tests and builds — runs on
 Bun. pnpm still works for all of it (`pnpm install`, `pnpm dev`, …), and the local
 release scripts `./release.sh` and `./build.sh` still use pnpm and Node.js 22.
-Electron 44 downloads its binary lazily and electron-vite does not trigger that
+Electron downloads its binary lazily and electron-vite does not trigger that
 download, so after a fresh `bun install` run `bun node_modules/electron/install.js`
 once before the first `bun run dev`; otherwise it fails with `Electron uninstall`.
 Do not mix `bun install` and `pnpm install` in one `node_modules`; if you did,
 delete `node_modules` and reinstall with one of them.
 
 The `bun run dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
-
-The first development start packages the production Plans backend with
-`uv`/PyInstaller. Later starts reuse it when the Python sources, build script,
-dependency files, resolved interpreter, platform, architecture, and executable
-contents are unchanged. Missing or changed output is rebuilt automatically.
-`bun run build:plans:backend` always rebuilds it explicitly; production and CI
-builds remain unconditional — only `bun run dev` passes `--if-needed`, and the
-build script honours the opt-out below on that invocation alone.
-
-Without `uv`/PyInstaller that build fails and `bun run dev` stops before Electron
-starts. To work on anything else in the meantime, skip it:
-
-```bash
-NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev
-```
-
-The app then starts without the packaged Plans backend: the Host finds no
-backend entry on disk, so the Plans v2 package is not registered and Plans runs
-through its legacy recovery window instead. Every other surface — terminals,
-Git, the editor — is unaffected. Never set this for a production or CI build:
-invoked without `--if-needed` (`bun run build`, `bun run dist`, the CI gates) the
-script fails with a message naming the variable rather than shipping a release
-with no packaged Plans backend.
-
-> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev` 跳過打包，
-> Plans 會以 legacy recovery 視窗運作，其他功能不受影響。
 
 > `bun run dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
 
@@ -161,6 +135,10 @@ rewritten: rotate it.
    > author who uses pnpm, so it needs a real `pnpm` (10.x) on `PATH`. It is not
    > skipped without one: it fails with `Executable not found in $PATH: "pnpm"`.
    > CI installs pnpm for that test.
+
+   The root config covers the Host and the workspace packages; the
+   first-party plugins (Git, Mini-IDE, Browser, Plans) are tested in their own
+   repositories, `Navide-dev/navide-<name>`.
    While iterating, run only what your change can affect, then the full suites
    above before you push (CI and the release gates always run them in full):
    ```bash

@@ -599,7 +599,7 @@ function usage() {
     '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
     '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]',
     '',
-    `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry.`,
+    `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry (its login page is on https://developers.navide.dev).`,
     'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
     'publish --via-navide hands the package to the running Navide, where you sign in and submit it; the CLI reads no token.',
     '',

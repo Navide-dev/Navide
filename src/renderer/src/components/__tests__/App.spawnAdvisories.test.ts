@@ -95,11 +95,22 @@ describe('cli_open_agent advisories forwarding (agent_spawn.result)', () => {
   })
 
   it('passes gate.advisories through on both success paths (standalone and parented)', () => {
-    const matches = [...handler.matchAll(/report\(\{ ok: true, paneId, name: childName(, advisories: gate\.advisories)?/g)]
+    expect(handler).toContain(
+      'const advisories = placement ? [...(gate.advisories ?? []), placement] : gate.advisories'
+    )
+    const matches = [...handler.matchAll(/report\(\{ ok: true, paneId, name: childName(, advisories)? \}\)/g)]
     expect(matches.length).toBe(2)
     for (const m of matches) {
-      expect(m[1]).toBe(', advisories: gate.advisories')
+      expect(m[1]).toBe(', advisories')
     }
+  })
+
+  it('adds where a terminal landed when it is not on screen, on both paths', () => {
+    expect(handler).toContain('const placement = terminalPlacementNote(paneId)')
+    const create = block("registerCommand('ui.pane.create', async (args) => {", "\nregisterCommand('ui.pane.close'")
+    expect(create).toContain(
+      "if (placement) recordDiagnostic({ level: 'warn', code: 'spawn.placement', message: placement, paneId })"
+    )
   })
 })
 

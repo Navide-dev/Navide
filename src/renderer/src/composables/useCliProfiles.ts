@@ -230,6 +230,11 @@ export type CliProfileAccountDirs = Record<string, Record<string, CliAccountDir>
 // live credential's owner. Absent = new panes follow `defaults`.
 export type CliProfilePaneDefaults = Record<string, string>
 
+// agentKey -> the user's ranking of that agent's accounts for automatic
+// switching, slot ids with the built-in Default as "__default__". Absent =
+// the backend ranks by remaining quota.
+export type CliProfileSlotOrder = Record<string, string[]>
+
 const DEFAULT_SLOT_ID = '__default__'
 
 /**
@@ -245,6 +250,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
   const duplicates = ref<CliProfileDuplicates>({})
   const accountDirs = ref<CliProfileAccountDirs>({})
   const paneDefaults = ref<CliProfilePaneDefaults>({})
+  const slotOrder = ref<CliProfileSlotOrder>({})
   const supportedAgents = ref<string[]>([])
   const loaded = ref<boolean>(false)
   const loading = ref<boolean>(false)
@@ -266,6 +272,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
         duplicates?: CliProfileDuplicates
         accountDirs?: CliProfileAccountDirs
         paneDefaults?: CliProfilePaneDefaults
+        slotOrder?: CliProfileSlotOrder
         supported_agents: string[]
         account_capabilities?: Record<string, CliAccountCapability>
       }>('cli_profiles.list', {})
@@ -280,6 +287,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
       duplicates.value = resp.payload.duplicates ?? {}
       accountDirs.value = resp.payload.accountDirs ?? {}
       paneDefaults.value = resp.payload.paneDefaults ?? {}
+      slotOrder.value = resp.payload.slotOrder ?? {}
       supportedAgents.value = resp.payload.supported_agents
       accountCapabilities.value = resp.payload.account_capabilities ?? {}
       loaded.value = true
@@ -495,6 +503,38 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     return profiles.value.filter((p) => p.agentKey === agentKey)
   }
 
+  /** Every account of one agent — the built-in Default as null — in the
+   *  user's order: ranked accounts first, the rest after them with the
+   *  Default first and profiles in creation order. */
+  function orderedSlotIds(agentKey: string): (string | null)[] {
+    const ids: (string | null)[] = [null, ...profilesForAgent(agentKey).map((p) => p.id)]
+    const order = slotOrder.value[agentKey] ?? []
+    const rank = (id: string | null): number => {
+      const i = order.indexOf(id ?? DEFAULT_SLOT_ID)
+      return i < 0 ? order.length : i
+    }
+    return ids
+      .map((id, i) => ({ id, i }))
+      .sort((a, b) => rank(a.id) - rank(b.id) || a.i - b.i)
+      .map((row) => row.id)
+  }
+
+  /** Save the user's order for automatic switching; null = built-in Default. */
+  async function setSlotOrder(
+    agentKey: string,
+    ids: (string | null)[],
+  ): Promise<{ ok: boolean; code?: string; message?: string }> {
+    const resp = await backend.send<{ slotOrder: CliProfileSlotOrder }>(
+      'cli_profiles.reorder',
+      { agent_key: agentKey, slot_ids: ids.map((id) => id ?? DEFAULT_SLOT_ID) },
+    )
+    if (!resp.ok || !resp.payload) {
+      return { ok: false, code: resp.error?.code, message: resp.error?.message }
+    }
+    slotOrder.value = resp.payload.slotOrder
+    return { ok: true }
+  }
+
   /** True when the agent supports multiple accounts (has at least one profile). */
   function hasProfiles(agentKey: string): boolean {
     return profiles.value.some((p) => p.agentKey === agentKey)
@@ -605,6 +645,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
       duplicates?: CliProfileDuplicates
       accountDirs?: CliProfileAccountDirs
       paneDefaults?: CliProfilePaneDefaults
+      slotOrder?: CliProfileSlotOrder
     }
     if (payload?.profiles) profiles.value = payload.profiles
     if (payload?.defaults) defaults.value = payload.defaults
@@ -619,6 +660,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     if (payload?.accountDirs !== undefined) accountDirs.value = payload.accountDirs
     // Presence, not truthiness: clearing the last choice broadcasts {}.
     if (payload?.paneDefaults !== undefined) paneDefaults.value = payload.paneDefaults
+    if (payload?.slotOrder !== undefined) slotOrder.value = payload.slotOrder
   })
 
   // The first load, shared: a pane restore can ask for the list while the
@@ -681,6 +723,9 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
     remove,
     setDefault,
     profilesForAgent,
+    orderedSlotIds,
+    slotOrder,
+    setSlotOrder,
     hasProfiles,
     defaultProfileId,
     findProfile,
@@ -883,11 +928,13 @@ export function paneNeedsAccountRestart(
     isLogin?: boolean
     pinnedSessionId?: string
     sessionOnDisk?: boolean
+    /** A remote container pane never follows this machine's accounts. */
+    remote?: unknown
   },
   agentKey: string,
   status: string | undefined,
 ): boolean {
-  if (!pane.realized || pane.agentKey !== agentKey || pane.isLogin) return false
+  if (!pane.realized || pane.agentKey !== agentKey || pane.isLogin || pane.remote) return false
   if (status === 'exited' || status === 'error') return false
   return paneCanRebuild({ ...pane, agentKey })
 }

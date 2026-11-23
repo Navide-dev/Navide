@@ -1,38 +1,30 @@
 #!/usr/bin/env bash
-# Build, pack, sign and publish the first-party v2 plugins to a Registry.
+# Sign and publish the first-party v2 plugins, packed by their own
+# repositories' CI, to a Registry.
 #
 #   NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 #   NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
 #   NAVIDE_PLUGIN_TOKEN=<navide publisher bearer token> \
-#   scripts/publish-first-party-plugins.sh [--skip-build] [--only git|plans|mini-ide|browser]
 #   scripts/publish-first-party-plugins.sh --package <vsix> --target <target> \
 #       --version <version> [--id <plugin id>]
 #   scripts/publish-first-party-plugins.sh --from-run <run id> --version <version> \
-#       [--target "<target> <target> ..."] [--yes]
+#       [--repo <owner/name>] [--id <plugin id>] [--target "<target> <target> ..."] [--yes]
 #
-# --package signs and publishes one already-packed vsix (no build), for
-# example one produced by .github/workflows/plugin-packages.yml. It refuses a
-# vsix whose manifest id/version differ from --id (default navide.plans) and
-# --version, and a target outside KNOWN_TARGETS.
+# navide.git, navide.mini-ide, navide.browser and navide.plans live in their
+# own repositories (Navide-dev/navide-<name>), whose CI builds and packs them.
 #
-# The built packages carry the plugin's own version (plugins/<dir>/manifest.json,
-# independent of the App version) unless NAVIDE_PLUGIN_ARTIFACT_VERSION=<x.y.z>
-# is set (the plugin vite configs read it); plugin-packages.yml takes the same
-# value as its artifact_version input.
+# --package signs and publishes one already-packed vsix. It refuses a vsix
+# whose manifest id/version differ from --id (default navide.plans) and
+# --version, and a target outside KNOWN_TARGETS and `universal`.
 #
-# --from-run downloads the navide.plans packages of a finished
-# plugin-packages.yml run with `gh run download`, checks each one's sha256,
-# prints what it would publish, and publishes each target in order only with
-# --yes. --target narrows it to the listed targets (default: all KNOWN_TARGETS);
-# a target already published for that version is a 409 and stops the run. CI never sees the publisher key: it only builds and packs.
-#
-# navide.git and navide.mini-ide are frontend-only and are published once as
-# `universal`.
-# navide.plans and navide.browser ship a PyInstaller backend, so their packages
-# are built for, and published as, the current host target only
-# (`<platform>-<arch>`, e.g. darwin-arm64). Other targets must be built and published from a machine of
-# that platform/architecture with the same command; the Registry keeps one
-# artifact per target of the same version and 409s a target published twice.
+# --from-run downloads the --id packages (default navide.plans) of a finished
+# packaging run of --repo (default Navide-dev/navide-plans; navide.browser:
+# --repo Navide-dev/navide-browser --id navide.browser) with `gh run
+# download`, checks each one's sha256, prints what it would publish, and
+# publishes each target in order only with --yes. --target narrows it to the
+# listed targets (default: all KNOWN_TARGETS); a target already published for
+# that version is a 409 and stops the run. CI never sees the publisher key: it
+# only builds and packs.
 #
 # Packing and signing reuse the Registry's own `navide-plugin` CLI
 # (marketplace/registry/registry/cli.py). The publisher key path and the token
@@ -47,21 +39,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-SKIP_BUILD=0
-ONLY=""
 PACKAGE=""
 TARGET=""
 RUN_ID=""
+RUN_REPO="Navide-dev/navide-plans"
 EXPECT_ID="navide.plans"
 EXPECT_VERSION=""
 YES=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --skip-build) SKIP_BUILD=1 ;;
-    --only) ONLY="${2:?--only needs git, plans, mini-ide or browser}"; shift ;;
     --package) PACKAGE="${2:?--package needs a vsix path}"; shift ;;
     --target) TARGET="${2:?--target needs a target}"; shift ;;
     --from-run) RUN_ID="${2:?--from-run needs a run id}"; shift ;;
+    --repo) RUN_REPO="${2:?--repo needs owner/name}"; shift ;;
     --id) EXPECT_ID="${2:?--id needs a plugin id}"; shift ;;
     --version) EXPECT_VERSION="${2:?--version needs a version}"; shift ;;
     --yes) YES=1 ;;
@@ -69,10 +59,6 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-case "$ONLY" in
-  ""|git|plans|mini-ide|browser) ;;
-  *) echo "--only must be git, plans, mini-ide or browser" >&2; exit 2 ;;
-esac
 
 # The targets the app ships a build for (release.yml); a plugin artifact for
 # any other target could never be installed.
@@ -91,22 +77,9 @@ require_publish_env() {
 
 OUT_DIR="$ROOT/dist-plugins/publish"
 mkdir -p "$OUT_DIR"
-HOST_TARGET="$(node -p "process.platform + '-' + process.arch")"
 
 navide_plugin() {
   uv --project "$ROOT/marketplace/registry" run --quiet navide-plugin "$@"
-}
-
-# publish_dir <built plugin dir> <registry target>
-publish_dir() {
-  local src="$1" target="$2"
-  local id version vsix
-  id="$(node -p "require('$src/manifest.json').id")"
-  version="$(node -p "require('$src/manifest.json').version")"
-  vsix="$OUT_DIR/$id-$version-$target.vsix"
-  echo "==> Packing $id $version ($target)"
-  navide_plugin pack "$src" --out "$vsix" --target "$target"
-  publish_vsix "$vsix" "$target"
 }
 
 # publish_vsix <packed vsix> <registry target>
@@ -124,9 +97,10 @@ publish_vsix() {
 # manifest is not the expected id and version.
 check_vsix() {
   local vsix="$1" target="$2" found
-  case " $KNOWN_TARGETS " in
+  # `universal` too: a frontend-only plugin built elsewhere (navide.git).
+  case " $KNOWN_TARGETS universal " in
     *" $target "*) ;;
-    *) echo "refusing: unknown target '$target' (known: $KNOWN_TARGETS)" >&2; exit 1 ;;
+    *) echo "refusing: unknown target '$target' (known: $KNOWN_TARGETS universal)" >&2; exit 1 ;;
   esac
   [ -f "$vsix" ] || { echo "refusing: no such package: $vsix" >&2; exit 1; }
   found="$(python3 -c 'import json, sys, zipfile
@@ -138,9 +112,11 @@ print(m["id"], m["version"])' "$vsix")"
   fi
 }
 
-if [ -n "$PACKAGE" ] || [ -n "$RUN_ID" ]; then
-  [ -n "$EXPECT_VERSION" ] || { echo "--package/--from-run need --version" >&2; exit 2; }
+if [ -z "$PACKAGE" ] && [ -z "$RUN_ID" ]; then
+  echo "pass --package <vsix> or --from-run <run id>" >&2
+  exit 2
 fi
+[ -n "$EXPECT_VERSION" ] || { echo "--package/--from-run need --version" >&2; exit 2; }
 
 if [ -n "$PACKAGE" ]; then
   [ -n "$TARGET" ] || { echo "--package needs --target" >&2; exit 2; }
@@ -151,12 +127,12 @@ if [ -n "$PACKAGE" ]; then
 fi
 
 if [ -n "$RUN_ID" ]; then
-  RUN_DIR="$OUT_DIR/run-$RUN_ID"
+  RUN_DIR="$OUT_DIR/run-${RUN_REPO//\//-}-$RUN_ID"
   if [ ! -d "$RUN_DIR" ]; then
-    gh run download "$RUN_ID" --dir "$RUN_DIR" --pattern "$EXPECT_ID-*"
+    gh run download "$RUN_ID" --repo "$RUN_REPO" --dir "$RUN_DIR" --pattern "$EXPECT_ID-*"
   fi
   RUN_TARGETS="${TARGET:-$KNOWN_TARGETS}"
-  echo "==> Run $RUN_ID will publish to ${NAVIDE_REGISTRY_URL:-<NAVIDE_REGISTRY_URL unset>}:"
+  echo "==> Run $RUN_ID of $RUN_REPO will publish to ${NAVIDE_REGISTRY_URL:-<NAVIDE_REGISTRY_URL unset>}:"
   for target in $RUN_TARGETS; do
     name="$EXPECT_ID-$EXPECT_VERSION-$target.vsix"
     check_vsix "$RUN_DIR/$name/$name" "$target"
@@ -175,55 +151,4 @@ if [ -n "$RUN_ID" ]; then
     name="$EXPECT_ID-$EXPECT_VERSION-$target.vsix"
     publish_vsix "$RUN_DIR/$name/$name" "$target"
   done
-  exit 0
-fi
-
-require_publish_env
-
-if [ "$SKIP_BUILD" -eq 0 ]; then
-  pnpm run build:public-packages
-fi
-
-if [ -z "$ONLY" ] || [ "$ONLY" = "git" ]; then
-  if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:git:v2
-  fi
-  publish_dir "$ROOT/dist-plugins/navide-git" universal
-fi
-
-if [ -z "$ONLY" ] || [ "$ONLY" = "mini-ide" ]; then
-  if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:mini-ide:v2
-  fi
-  publish_dir "$ROOT/dist-plugins/navide-mini-ide" universal
-fi
-
-if [ -z "$ONLY" ] || [ "$ONLY" = "plans" ]; then
-  if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:plans:v2
-    pnpm run build:plans:backend
-  fi
-  backend="$ROOT/dist-plugins/navide-plans/backend/navide-plans"
-  case "$HOST_TARGET" in win32-*) backend="$backend.exe" ;; esac
-  if [ ! -x "$backend" ]; then
-    echo "missing Plans backend executable: $backend (run without --skip-build)" >&2
-    exit 1
-  fi
-  echo "==> Plans backend: $(file -b "$backend" 2>/dev/null || echo unknown)"
-  publish_dir "$ROOT/dist-plugins/navide-plans" "$HOST_TARGET"
-fi
-
-if [ -z "$ONLY" ] || [ "$ONLY" = "browser" ]; then
-  if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:browser:v2
-    pnpm run build:browser:backend
-  fi
-  backend="$ROOT/dist-plugins/navide-browser/backend/navide-browser"
-  case "$HOST_TARGET" in win32-*) backend="$backend.exe" ;; esac
-  if [ ! -x "$backend" ]; then
-    echo "missing Navide Browser backend executable: $backend (run without --skip-build)" >&2
-    exit 1
-  fi
-  echo "==> Navide Browser backend: $(file -b "$backend" 2>/dev/null || echo unknown)"
-  publish_dir "$ROOT/dist-plugins/navide-browser" "$HOST_TARGET"
 fi

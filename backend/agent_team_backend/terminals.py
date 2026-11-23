@@ -18,6 +18,8 @@ from datetime import datetime, timezone
 from typing import IO, Any, Awaitable, Callable
 from uuid import uuid4
 
+import psutil
+
 from . import login_panes, osplat, pty_registry
 from .applog import app_data_dir, in_data_dir
 from .cli_vendors.base import VendorRuntimeContext
@@ -175,6 +177,9 @@ class TerminalSession:
     descendants: dict[int, str] = field(default_factory=dict)
     # Sanitized path/override context only; never persisted as pane metadata.
     risk_context: VendorRuntimeContext | None = field(default=None, repr=False)
+    # Observers of raw output, called before it is buffered for the client
+    # (a remote pane's token feeder). Empty for every other pane.
+    output_taps: list[Callable[[bytes], None]] = field(default_factory=list, repr=False)
 
 
 # Output logs currently held open for append by a live session (terminal
@@ -397,6 +402,11 @@ _ECHO_PROBE_MAX_INPUT_CHARS = 16
 _LIFECYCLE_EXECUTOR = ThreadPoolExecutor(
     max_workers=32, thread_name_prefix="pty-lifecycle"
 )
+
+
+def _parent_pid(pid: int) -> int:
+    """The parent of one live process, straight from the kernel (no ps)."""
+    return psutil.Process(pid).ppid()
 
 
 def _ps_snapshot() -> dict[int, tuple[int, int, str]]:
@@ -795,8 +805,26 @@ class TerminalService:
         if fg <= 0:
             return None
         try:
-            return fg == osplat.process_tree.group_of(session.proc.pid)
+            if fg == osplat.process_tree.group_of(session.proc.pid):
+                return True
         except (ProcessLookupError, PermissionError):
+            return None
+        # The pane helper's child is the shell: an interactive one moves to a
+        # group of its own, which is then the shell in front (0.2.43 macOS dmg).
+        # Asked at the moment of the question — is the leader of the group in
+        # front the helper's own child? — never read off the rolling descendant
+        # snapshot: until that snapshot named the shell, and for good once it
+        # stopped naming new ones, an idle terminal read busy, so every
+        # cli_send to it held "mid-turn" and failed after 2 min (0.2.46).
+        if not getattr(osplat.terminal_backend, "helper", None):
+            return False
+        try:
+            return _parent_pid(fg) == session.proc.pid
+        except psutil.NoSuchProcess:
+            # The group's leader is gone while the group is still in front:
+            # whatever is left there is not the shell.
+            return False
+        except psutil.Error:
             return None
 
     def live_pane_marks(self) -> set[str]:
@@ -1735,7 +1763,13 @@ class TerminalService:
         # Whatever arrived before EOF still has to reach the client, and _close
         # flushes the output buffer — so absorb first, then close.
         if raw:
-            self._absorb_output(session, b"".join(raw), nbytes)
+            combined = b"".join(raw)
+            for tap in getattr(session, "output_taps", ()):
+                try:
+                    tap(combined)
+                except Exception:  # noqa: BLE001 — an observer never stops output
+                    log.exception("output tap failed for session %s", session.id)
+            self._absorb_output(session, combined, nbytes)
         if close_reason is not None:
             pending = getattr(session, "pending_close_reason", None)
             if close_reason == "exit" and pending:
@@ -1949,6 +1983,11 @@ class TerminalService:
             self._decoders[session.id] = decoder
         try:
             session.output_log_fp.write(_clean_for_log(decoder.decode(data)))
+            # cli_read_log reads the file, and line buffering is not enough:
+            # cleaning drops each chunk's trailing line break, and ConPTY moves
+            # between lines with cursor positioning, so a Windows shell's echo,
+            # output and prompt never carried a newline and sat unflushed.
+            session.output_log_fp.flush()
         except Exception as err:  # noqa: BLE001
             log.warning("output log write failed: %s", err)
 

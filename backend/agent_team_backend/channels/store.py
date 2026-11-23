@@ -7,6 +7,7 @@ Only non-secret data lives here. Bot tokens and app secrets go to
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -14,6 +15,9 @@ from typing import Any
 
 from ..db import Database
 from .base import Location, is_shared_sender
+from .inbound import chat_hash
+
+log = logging.getLogger(__name__)
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
@@ -151,6 +155,16 @@ def _v8(cur: sqlite3.Cursor) -> None:
     )
 
 
+def _v9(cur: sqlite3.Cursor) -> None:
+    # A binding outlives its pane: closing the pane parks it ("dormant") instead of deleting
+    # it, so the chat can wake the conversation back or start a new one, until someone
+    # unlinks it from the chat or from the window. `agent` is the CLI a wake or a new
+    # conversation opens; `closed_at` is when the pane was closed (0 while it is active).
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN state TEXT NOT NULL DEFAULT 'active'")
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN agent TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN closed_at INTEGER NOT NULL DEFAULT 0")
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -189,6 +203,13 @@ class Binding:
     auto: bool = False
     workspace_path: str = ""  # where the pane lives, for waking it ("" = unknown)
     session_id: str = ""  # the conversation a wake resumes ("" = unknown)
+    state: str = "active"  # "dormant": its pane was closed; kept for a wake until unlinked
+    agent: str = ""  # the CLI a wake or a new conversation opens ("" = unknown)
+    closed_at: int = 0  # when its pane was closed (0 = active)
+
+    @property
+    def dormant(self) -> bool:
+        return self.state == "dormant"
 
     def location(self) -> Location:
         return Location(self.platform, self.account, self.chat_id, self.thread_id, self.title)
@@ -196,7 +217,8 @@ class Binding:
     def public(self) -> dict[str, Any]:
         return {"pane_id": self.pane_id, "platform": self.platform, "account": self.account,
                 "chat_id": self.chat_id, "thread_id": self.thread_id, "title": self.title,
-                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto}
+                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto,
+                "state": self.state, "closed_at": self.closed_at}
 
 
 class ChannelStore:
@@ -210,6 +232,7 @@ class ChannelStore:
         db.migrate(COMPONENT, 6, _v6)
         db.migrate(COMPONENT, 7, _v7)
         db.migrate(COMPONENT, 8, _v8)
+        db.migrate(COMPONENT, 9, _v9)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -424,7 +447,7 @@ class ChannelStore:
     def _binding(r: sqlite3.Row) -> Binding:
         return Binding(r["pane_id"], r["platform"], r["account"], r["chat_id"], r["thread_id"],
                        r["title"], int(r["created_at"]), r["verbosity"], r["parent_pane_id"], bool(r["auto"]),
-                       r["workspace_path"], r["session_id"])
+                       r["workspace_path"], r["session_id"], r["state"], r["agent"], int(r["closed_at"]))
 
     def bindings(self) -> list[Binding]:
         return [self._binding(r) for r in self._rows("SELECT * FROM channel_bindings ORDER BY created_at")]
@@ -434,6 +457,10 @@ class ChannelStore:
         now = int(time.time())
         with self._db.transaction() as cur:
             # One pane <-> one location: rebinding either side replaces the old row.
+            replaced = cur.execute("SELECT pane_id FROM channel_bindings WHERE platform = ? AND account = ?"
+                                   " AND chat_id = ? AND thread_id = ?",
+                                   (loc.platform, loc.account, loc.chat_id, loc.thread_id)).fetchone()
+            moved = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (pane_id,)).fetchone()
             cur.execute("DELETE FROM channel_bindings WHERE pane_id = ? OR (platform = ? AND account = ?"
                         " AND chat_id = ? AND thread_id = ?)",
                         (pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id))
@@ -441,6 +468,9 @@ class ChannelStore:
                         " created_at, verbosity, parent_pane_id, auto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id, loc.title, now,
                          verbosity, parent_pane_id, int(auto)))
+        if moved is not None and self._binding(moved).location().key() != loc.key():
+            _log_change("removed", self._binding(moved).location(), pane_id, "")
+        _log_change("bound", loc, replaced["pane_id"] if replaced is not None else "", pane_id)
         return Binding(pane_id, loc.platform, loc.account, loc.chat_id, loc.thread_id, loc.title, now,
                        verbosity, parent_pane_id, auto)
 
@@ -450,18 +480,49 @@ class ChannelStore:
             if r is None:
                 return None
             cur.execute("DELETE FROM channel_bindings WHERE pane_id = ?", (pane_id,))
-            return self._binding(r)
+            removed = self._binding(r)
+        _log_change("removed", removed.location(), pane_id, "")
+        return removed
 
     def rename_pane(self, old_pane_id: str, new_pane_id: str) -> bool:
         with self._db.transaction() as cur:
             cur.execute("UPDATE channel_bindings SET parent_pane_id = ? WHERE parent_pane_id = ?",
                         (new_pane_id, old_pane_id))
-            return cur.execute("UPDATE channel_bindings SET pane_id = ? WHERE pane_id = ?",
-                               (new_pane_id, old_pane_id)).rowcount > 0
+            r = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (old_pane_id,)).fetchone()
+            # The binding now follows a live pane: whatever it was parked for is over.
+            renamed = cur.execute("UPDATE channel_bindings SET pane_id = ?, state = 'active', closed_at = 0"
+                                  " WHERE pane_id = ?", (new_pane_id, old_pane_id)).rowcount > 0
+        if renamed and r is not None:
+            _log_change("renamed", self._binding(r).location(), old_pane_id, new_pane_id)
+        return renamed
 
-    def set_wake_target(self, pane_id: str, workspace_path: str, session_id: str) -> bool:
-        return self._exec("UPDATE channel_bindings SET workspace_path = ?, session_id = ? WHERE pane_id = ?",
-                          (workspace_path, session_id, pane_id)) > 0
+    def set_wake_target(self, pane_id: str, workspace_path: str, session_id: str, agent: str = "") -> bool:
+        return self._exec("UPDATE channel_bindings SET workspace_path = ?, session_id = ?,"
+                          " agent = CASE WHEN ? = '' THEN agent ELSE ? END WHERE pane_id = ?",
+                          (workspace_path, session_id, agent, agent, pane_id)) > 0
+
+    def park(self, pane_id: str, *, workspace_path: str = "", session_id: str = "",
+             agent: str = "") -> Binding | None:
+        """Mark the binding of a closed pane dormant, keeping it for a later wake. What the
+        window knows of the pane fills in a wake target the binding has not learnt yet;
+        a stored one stays. None when the pane has no binding."""
+        with self._db.transaction() as cur:
+            cur.execute("UPDATE channel_bindings SET state = 'dormant', closed_at = ?,"
+                        " workspace_path = CASE WHEN workspace_path = '' THEN ? ELSE workspace_path END,"
+                        " session_id = CASE WHEN session_id = '' THEN ? ELSE session_id END,"
+                        " agent = CASE WHEN agent = '' THEN ? ELSE agent END WHERE pane_id = ?",
+                        (int(time.time()), workspace_path, session_id, agent, pane_id))
+            r = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (pane_id,)).fetchone()
+        if r is None:
+            return None
+        parked = self._binding(r)
+        _log_change("parked", parked.location(), pane_id, "")
+        return parked
+
+    def activate(self, pane_id: str) -> bool:
+        """A dormant binding whose pane came back under the same id is active again."""
+        return self._exec("UPDATE channel_bindings SET state = 'active', closed_at = 0"
+                          " WHERE pane_id = ? AND state != 'active'", (pane_id,)) > 0
 
     def set_verbosity(self, pane_id: str, verbosity: str) -> Binding | None:
         with self._db.transaction() as cur:
@@ -500,3 +561,11 @@ class ChannelStore:
         rows = self._rows("SELECT id, created_at, payload FROM channel_inbound"
                           " WHERE platform = ? AND account = ? ORDER BY id", (platform, account))
         return [(int(r["id"]), float(r["created_at"]), json.loads(r["payload"])) for r in rows]
+
+
+def _log_change(what: str, loc: Location, old_pane_id: str, new_pane_id: str) -> None:
+    """A binding change in the log: which pane a chat went from and to, by a hash of the
+    chat, never its id. Without it a message for a binding that changed meanwhile
+    leaves no trail of where it was meant to go."""
+    log.info("channels: binding %s: %s/%s chat=%s: %s -> %s", what, loc.platform, loc.account,
+             chat_hash(loc.key()), old_pane_id or "(none)", new_pane_id or "(none)")

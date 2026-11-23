@@ -24,7 +24,7 @@ function fn(name: string): string {
 const markerSetsStart = source.indexOf('const SESSION_MARKER_AGENTS =')
 const markerSetsEnd = source.indexOf('/** Trailing line', markerSetsStart)
 const declarations = [source.slice(markerSetsStart, markerSetsEnd), ...[
-  'sessionMarkerLine', 'sendSessionMarkerBootstrap', 'spawnPane', 'onManualSpawn',
+  'paneAgentSpec', 'savedRemoteTarget', 'sessionMarkerLine', 'sendSessionMarkerBootstrap', 'spawnPane', 'onManualSpawn',
   'rebuildPaneClean', 'spawnRestoredPane', 'performRealizeRestoredPane',
   'looksLikeResumeCommand', 'paneWaitingForSessionId',
 ].map(fn)].join('\n')
@@ -56,6 +56,7 @@ function harness() {
   let nextId = 0
   const deps = {
     agentSpecs: AGENT_SPECS, RESTORE_PIN_AGENTS,
+    REMOTE_AGENT_KEY: 'remote', REMOTE_AGENT_SPEC: { agentKey: 'remote' },
     pinFreshSessionAtLaunch, sessionHomeIdFor, buildResumeCommand,
     normalizeResumeSessionId, shouldPreserveMissingSessionOnRestore,
     shouldWarnMissingResume, shouldAttemptResume,
@@ -101,7 +102,7 @@ function harness() {
     workspaceRestoreSession: () => ({}), explicitRestoreDecision: () => 'fresh',
     // The one-CLI-per-conversation guard (a chat's wake): no other pane holds a session here.
     sessionHeldElsewhere, sessionHolders: () => [],
-    scheduledRestoreIds: new Set<string>(), wakeClaims: new WakeClaims(),
+    scheduledRestoreIds: new Set<string>(), realizedPaneIds: new Map<string, string>(), wakeClaims: new WakeClaims(),
     deferredPaneStillCurrent: () => true, skipFlagFor: () => '',
     canResumeSession: async () => false, savedHistoryFile: async () => '',
     stripPinnedSessionId: (command: string) => command,

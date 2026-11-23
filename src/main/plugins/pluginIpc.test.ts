@@ -78,6 +78,7 @@ vi.setConfig({ testTimeout: 30_000 })
 import { app as electronApp } from 'electron'
 import {
   MARKETPLACE_ICON_MAX_BYTES,
+  MARKETPLACE_SCREENSHOT_MAX_BYTES,
   OFFICIAL_MARKETPLACE_URL,
   declaredForActivity,
   isTrustedPluginManagementSender,
@@ -5088,6 +5089,60 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     await expect(handler(null, { namespace: 'acme', name: 7 })).rejects.toThrow(/invalid/)
   })
 
+  /** A Registry connection that never answers: it settles only when aborted. */
+  function stalled(_url: unknown, init?: RequestInit): Promise<never> {
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+    })
+  }
+
+  it('times out a stalled detail request instead of waiting forever, and a retry succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(stalled)
+      .mockImplementation(async (url: unknown) =>
+        String(url) === `${BASE}/acme/demo`
+          ? { ok: true, status: 200, async json() { return { namespace: 'acme', name: 'demo', versions: [] } } }
+          : { ok: false, status: 404, async json() { return {} } }
+      )
+    global.fetch = fetchMock as unknown as typeof fetch
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG, undefined, {
+      marketplaceFetchTimeoutMs: 20,
+    })
+    const handler = handlers.get('plugins:marketplaceDetail')!
+    await expect(handler(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/time(d)? ?out|abort/i)
+    const detail = (await handler(null, { namespace: 'acme', name: 'demo' })) as { name: unknown }
+    expect(detail.name).toBe('demo')
+  })
+
+  it('treats a stalled README request as no README', async () => {
+    const fetchMock = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url) === `${BASE}/acme/demo/readme`) return stalled(url, init)
+      return { ok: true, status: 200, async json() { return { namespace: 'acme', name: 'demo', versions: [] } } }
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG, undefined, {
+      marketplaceFetchTimeoutMs: 20,
+    })
+    const detail = (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })) as {
+      name: unknown
+      readme: unknown
+    }
+    expect(detail.name).toBe('demo')
+    expect(detail.readme).toBeNull()
+  })
+
+  it('gives every Marketplace Registry read a deadline', async () => {
+    const fetchMock = respond({})
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG)
+    await Promise.resolve(handlers.get('plugins:marketplaceSearch')!(null, 'demo')).catch(() => undefined)
+    await Promise.resolve(handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })).catch(() => undefined)
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+    for (const call of fetchMock.mock.calls as unknown as Array<[unknown, RequestInit | undefined]>) {
+      expect(call[1]?.signal).toBeInstanceOf(AbortSignal)
+    }
+  })
+
   it('reports only strictly newer Registry versions of official-registry packages', async () => {
     const row = (version: string, target = 'universal', yanked = false) => ({ version, target, yanked })
     const host = `${process.platform}-${process.arch}`
@@ -5405,7 +5460,7 @@ describe('Marketplace discovery (Phase 1)', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       `${ROOT}/extensions/acme/demo/1.0.0/assets/assets/icon.png`
     )
-    expect(fetchMock.mock.calls[0]?.[1]).toEqual({ redirect: 'error' })
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error', signal: expect.any(AbortSignal) })
   })
 
   it('refuses SVG, oversized and unsafe-path icons', async () => {
@@ -5501,6 +5556,55 @@ describe('Marketplace discovery (Phase 1)', () => {
       '# 1.0.0'
     )
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${ROOT}/api/extensions/acme/demo/changelog`)
+  })
+
+  it('passes a well-formed verified domain and safe screenshot paths, and links the website page', async () => {
+    jsonFetch({
+      namespace: 'acme',
+      name: 'demo',
+      latest_version: '1.0.0',
+      verified_domain: 'acme.dev',
+      screenshots: ['media/one.png', '../secret.png', 'a/../b.png', 42, 'two.webp'],
+      versions: [{ version: '1.0.0', target: 'universal', yanked: false }],
+    })
+    registerAll()
+    const detail = (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })) as
+      Record<string, unknown>
+    expect(detail.verified_domain).toBe('acme.dev')
+    expect(detail.screenshots).toEqual(['media/one.png', 'two.webp'])
+    expect(detail.web_url).toBe(`${ROOT}/extensions/acme/demo`)
+
+    jsonFetch({ namespace: 'acme', name: 'demo', verified_domain: 'not a domain', screenshots: 'x.png', versions: [] })
+    const older = (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'demo' })) as
+      Record<string, unknown>
+    expect(older.verified_domain).toBeNull()
+    expect(older.screenshots).toEqual([])
+  })
+
+  it('names the website in a search answer for the footer links', async () => {
+    jsonFetch({ items: [], total: 0, offset: 0, limit: 20 })
+    registerAll()
+    const res = (await handlers.get('plugins:marketplaceSearch')!(null)) as Record<string, unknown>
+    expect(res.site_url).toBe(ROOT)
+  })
+
+  it('lets a screenshot be larger than an icon, up to its own cap', async () => {
+    registerAll()
+    const icon = handlers.get('plugins:marketplaceIcon')!
+    const shot = new Uint8Array(MARKETPLACE_ICON_MAX_BYTES + 1)
+    shot.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    bytesFetch(shot)
+    expect(await icon(null, { namespace: 'acme', name: 'demo', version: '1.0.0', path: 's.png' })).toBeNull()
+    bytesFetch(shot)
+    expect(
+      await icon(null, { namespace: 'acme', name: 'demo', version: '1.0.0', path: 's.png', kind: 'screenshot' })
+    ).toMatch(/^data:image\/png;base64,/)
+    const tooBig = new Uint8Array(MARKETPLACE_SCREENSHOT_MAX_BYTES + 1)
+    tooBig.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    bytesFetch(tooBig)
+    expect(
+      await icon(null, { namespace: 'acme', name: 'demo', version: '1.0.0', path: 'big.png', kind: 'screenshot' })
+    ).toBeNull()
   })
 
   it('marks per-version compatibility and the newest compatible version in the detail', async () => {

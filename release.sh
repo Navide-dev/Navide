@@ -117,7 +117,7 @@ VERSION_FILES=(
   README.md
   README.zh-TW.md
   README.ja-JP.md
-  plugins/official-plugin-fingerprints.json
+  CHANGELOG.md
 )
 
 if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
@@ -143,6 +143,10 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
 fi
 
 pnpm release:check
+# The installer takes navide.git from the official Registry: the pinned
+# version must be published and verify before anything else runs.
+node scripts/stage-official-plugin-artifacts.mjs --check-registry \
+  || fail "a pinned Registry plugin version is missing or does not verify (see above)"
 warn_missing_announcement "$VERSION"
 require_uv_version "$MIN_UV_VERSION"
 
@@ -174,9 +178,9 @@ node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
 node scripts/update-readme-download-links.mjs "$VERSION"
-# Record what each bundled first-party plugin ships in this release; refuses
-# when a plugin's content changed since the last release without a bump.
-node scripts/official-plugin-fingerprints.mjs --write --baseline "$TAG"
+# Date the release's CHANGELOG section: the site's /news reads each version's
+# date from its heading (scripts/export-whats-new.mjs).
+node scripts/stamp-changelog-release.mjs "$VERSION" "$(date +%Y-%m-%d)"
 uv --project backend lock
 pnpm release:check "$TAG"
 
@@ -188,7 +192,13 @@ uv --project backend run --locked ruff check backend
 # `pnpm test:run` reads, and the backend tests touch neither. Backend tests
 # run with a throwaway HOME and no reach to the real keychain.
 run_gates pnpm typecheck -- scripts/release-backend-tests.sh
-pnpm test:run
+# The artifact tests read the official plugins staged under
+# dist-plugins/official-artifacts, which Git ignores and an older build may
+# have left behind (0.2.46: stale copies failed the gate). Stage the pinned
+# versions fresh, after the type check has rebuilt the plugin SDK, and make a
+# missing copy fail instead of skip.
+node scripts/stage-official-plugin-artifacts.mjs
+NAVIDE_TEST_STAGED_PLUGINS=1 pnpm test:run
 
 echo ""
 echo "=== Building release artifacts ==="
@@ -203,7 +213,7 @@ node scripts/check-no-dev-web.mjs out
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \
     | sed -E 's/^.. //' \
-    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|plugins/official-plugin-fingerprints\.json)$' \
+    | grep -Ev '^(package.json|backend/agent_team_backend/__init__\.py|backend/pyproject\.toml|backend/uv\.lock|README\.md|README\.zh-TW\.md|README\.ja-JP\.md|CHANGELOG\.md)$' \
     || true
 )"
 [[ -z "$unexpected_changes" ]] || \
@@ -228,6 +238,9 @@ if [[ "$publish" =~ ^[Yy]$ ]]; then
   echo "https://github.com/Navide-dev/Navide/actions"
   echo "If a job fails, $TAG stays a draft: fix the cause and use \"Re-run failed jobs\""
   echo "(RELEASING.md, \"After the tag push\")."
+  echo "With the WINDOWS_SIGN_LOCALLY variable on, the run stops at the draft: sign the"
+  echo "Windows installers with scripts/sign-windows-local.mjs --tag $TAG (then --apply)"
+  echo "and publish it (docs/en-US/releases.md, \"Windows code signing (local)\")."
 else
   echo "Release remains local. Publish later with:"
   echo "  git push origin main"

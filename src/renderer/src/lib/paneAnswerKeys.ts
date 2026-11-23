@@ -26,6 +26,14 @@
  *   Submit / Next button, which Enter presses. Each step is written on its own
  *   (`steps`), so the CLI never reads text and Enter as one paste.
  *
+ * - claude's "Adding a new directory" dialog at launch (lib/startupPrompts.ts)
+ *   draws "No, exit / Yes, add it" without numbers and takes no hotkey: the
+ *   arrows move the cursor and Enter confirms. "allow" (or option 2) moves to
+ *   "Yes, add it" only for a folder the spawn handed the pane itself (the
+ *   allowlist in startupPrompts.ts): adding any other folder trusts it for the
+ *   session and is refused here. "deny" (option 1) is Esc, the dialog's own
+ *   "No, exit", which ends the CLI.
+ *
  * Free text is the only input the remote sender shapes, and it is typed into
  * the text box the question offered, as one line with no control characters.
  *
@@ -33,6 +41,8 @@
  * session" …) is never pressed from here: that choice is made at the computer.
  */
 
+
+import { ADD_DIR_OPTIONS, decideStartupPrompt, readStartupPrompt, type StartupPrompt } from './startupPrompts'
 export type PaneAnswer =
   | { kind: 'permission'; choice: 'allow' | 'deny' }
   | { kind: 'question'; option: number; text?: string }
@@ -87,7 +97,9 @@ export function isPermanentAllow(option: string): boolean {
 
 /** Numbered options at the bottom of the screen: the last run 1, 2, 3 … */
 export function parseMenuOptions(screen: string): string[] {
-  return parseMenu(screen).options
+  const options = parseMenu(screen).options
+  // Claude's "Adding a new directory" dialog draws its two options unnumbered.
+  return options.length ? options : (readStartupPrompt('claude', screen)?.options ?? [])
 }
 
 /** The last numbered run and the index of the row the cursor is on (-1: none). */
@@ -212,6 +224,28 @@ function pickerName(option: string): string {
 /** True while claude's /model picker is on screen. */
 export function onModelPicker(screen: string): boolean {
   return MODEL_PICKER_TITLE.test(screen) && parseMenu(screen).options.length > 0
+}
+
+// Claude Code's input prompt: a "❯" row with a full-width rule directly above
+// and below it (an older boxed prompt draws the rules with ╭ ╰ and the row
+// with │). First-run screens have no such frame: the text-style picker's
+// dashed ╌ lines enclose a code preview, not the cursor row.
+export const PROMPT_RULE = /^\s*[╭╰]?─{8,}/
+export const PROMPT_ROW = /^\s*(?:│\s*)?[❯>](?:\s|$)/
+
+/** True when the screen shows Claude Code's input prompt, ready for typing. */
+export function atClaudeInputPrompt(screen: string): boolean {
+  const lines = screen.split('\n')
+  return lines.some((line, at) =>
+    PROMPT_ROW.test(line) && PROMPT_RULE.test(lines[at - 1] ?? '') && PROMPT_RULE.test(lines[at + 1] ?? ''))
+}
+
+/** True when a menu cursor row (❯ outside the prompt frame) is on screen —
+ *  numbered or not, like the first-run text-style picker. */
+export function onCursorMenu(screen: string): boolean {
+  const lines = screen.split('\n')
+  return lines.some((line, at) =>
+    CURSOR_LINE.test(line) && !PROMPT_RULE.test(lines[at - 1] ?? '') && !PROMPT_RULE.test(lines[at + 1] ?? ''))
 }
 
 /** Between the picker's keys: still the same picker, with the same rows.
@@ -427,6 +461,9 @@ export function resolveAnswerKeys(input: {
    *  path's Guard screen); when given, the keys go in only while the same
    *  prompt is still on screen, so a prompt that replaced it is never answered. */
   expected?: { prompt: string; options: string[] }
+  /** Folders the spawn handed this pane itself (`navide_dirs`): the only ones
+   *  Claude's "Adding a new directory" dialog may be accepted for from here. */
+  navideDirs?: readonly string[]
 }): AnswerKeys {
   const { agentKey, answer } = input
   if (input.displayStatus !== 'awaiting') return { ok: false, error: 'pane is not awaiting' }
@@ -458,6 +495,10 @@ export function resolveAnswerKeys(input: {
       : freeTextKeys(input.screen, answer.option, answer.text ?? '')
   }
 
+  if (agentKey === 'claude') {
+    const addDir = readStartupPrompt('claude', input.screen)
+    if (addDir) return addDirKeys(addDir, answer, input.navideDirs ?? [])
+  }
   const options = parseMenuOptions(input.screen)
   if (!options.length) return { ok: false, error: 'no option menu on screen' }
   if (answer.kind === 'permission') {
@@ -475,4 +516,23 @@ export function resolveAnswerKeys(input: {
   }
   if (isPermanentAllow(options[n - 1])) return { ok: false, error: `option ${n} allows permanently` }
   return { ok: true, keys: String(n) }
+}
+
+/** Keys for Claude's "Adding a new directory" dialog: Esc is its "No, exit";
+ *  "Yes, add it" is reached with Down from wherever the cursor is, then Enter. */
+function addDirKeys(prompt: StartupPrompt, answer: PaneAnswer, navideDirs: readonly string[]): AnswerKeys {
+  const option = answer.kind === 'permission' ? (answer.choice === 'allow' ? 2 : 1) : answer.kind === 'question' ? answer.option : 0
+  if (answer.kind === 'multi' || (answer.kind === 'question' && answer.text !== undefined) || (option !== 1 && option !== 2)) {
+    return { ok: false, error: 'the dialog has two options: 1 (No, exit) and 2 (Yes, add it)' }
+  }
+  if (option === 1) return { ok: true, keys: ESC }
+  // "Yes, add it" trusts the folder for the session: its skills, commands and
+  // hooks load and can run commands. Only the allowlisted case Navide would
+  // answer by itself is accepted from an agent or a chat; any other folder is
+  // the user's to trust at the computer. Refusing is always allowed.
+  if (decideStartupPrompt(prompt, { navideDirs }).action !== 'auto') {
+    return { ok: false, error: `adding ${prompt.folder} trusts it for this session; accept it at the computer` }
+  }
+  const moves = prompt.cursorOn === ADD_DIR_OPTIONS[1] ? [] : [DOWN]
+  return { ok: true, keys: [...moves, '\r'].join(''), steps: [...moves, '\r'] }
 }

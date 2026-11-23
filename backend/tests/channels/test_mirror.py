@@ -63,10 +63,11 @@ def test_store_v4_gives_old_bindings_the_pre_mirror_replies_level(tmp_path) -> N
     with db.transaction() as cur:
         cur.execute("INSERT INTO channel_bindings VALUES ('p1','telegram','default','-1','5','t',9)")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 8
+    assert db.schema_version("channels") == 9
     assert s.bindings()[0].public() == {
         "pane_id": "p1", "platform": "telegram", "account": "default", "chat_id": "-1", "thread_id": "5",
-        "title": "t", "verbosity": "replies", "parent_pane_id": "", "auto": False}
+        "title": "t", "verbosity": "replies", "parent_pane_id": "", "auto": False,
+        "state": "active", "closed_at": 0}
     # A binding made after the upgrade with no level named gets the conservative one too.
     assert s.bind("p2", Location("telegram", "default", "-2", "", "u")).verbosity == "replies"
     db.close()
