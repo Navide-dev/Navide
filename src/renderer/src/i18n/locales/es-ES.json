@@ -6874,7 +6874,7 @@
         "manage": "Gestionar en org.navide.dev",
         "manage-failed": "No se pudo abrir el sitio de la organización: {reason}",
         "not-joined": "Aún no perteneces a ninguna organización. Cuando te unas o crees una, aquí aparecerán las máquinas que compartan las organizaciones vinculadas.",
-        "not-exposed": "Esta máquina aún no se comparte con la organización. Configúralo en org.navide.dev.",
+        "not-exposed": "Aún no perteneces a una organización, o esta máquina no se comparte con ninguna. Puedes verlo y configurarlo en org.navide.dev.",
         "machines": "{count} máquinas compartidas",
         "linked": "Vinculada",
         "owner": "Propietario {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "Mantenerlo detenido",
         "rebuild-done": "Se ha borrado el registro de confianza. Vuelve a emparejar tus dispositivos cuando quieras.",
         "locked-retrying": "Puede que sea temporal: un llavero bloqueado o un cuadro de permiso descartado se ven igual desde aquí. Se sigue reintentando; si se resuelve, no se habrá perdido nada.",
-        "approve-trust-unavailable": "Este equipo no puede leer ahora su registro de confianza, así que no se escribió ninguna regla. Resuelve primero la tarjeta «Navide Cloud está detenido» de abajo (por ejemplo, pulsa «Empezar de nuevo») y luego vuelve a permitir la solicitud."
+        "approve-trust-unavailable": "Este equipo no puede leer ahora su registro de confianza, así que no se escribió ninguna regla. Resuelve primero la tarjeta «Navide Cloud está detenido» de abajo (por ejemplo, pulsa «Empezar de nuevo») y luego vuelve a permitir la solicitud.",
+        "state-revoked": "Vínculo de organización revocado"
       },
       "link": {
         "pause": "Desactivar",

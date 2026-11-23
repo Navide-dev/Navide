@@ -6874,7 +6874,7 @@
         "manage": "Manage on org.navide.dev",
         "manage-failed": "Could not open the organization site: {reason}",
         "not-joined": "Not in an organization yet. Once you join or create one, machines shared by linked organizations appear here.",
-        "not-exposed": "This machine is not shared with your organization yet. Set it up on org.navide.dev.",
+        "not-exposed": "Not in an organization yet, or this machine is not shared with one. You can view and set this up on org.navide.dev.",
         "machines": "{count} machines shared",
         "linked": "Linked",
         "owner": "Owner {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "Keep It Stopped",
         "rebuild-done": "The trust record was cleared. Pair your devices again when you are ready.",
         "locked-retrying": "This may be temporary — a locked keychain or a dismissed permission dialog reads the same way from here. It is still being retried; if it clears, nothing was lost.",
-        "approve-trust-unavailable": "This machine cannot read its trust record right now, so no rule was written. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start Over”), then allow the request again."
+        "approve-trust-unavailable": "This machine cannot read its trust record right now, so no rule was written. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start Over”), then allow the request again.",
+        "state-revoked": "Organization link revoked"
       },
       "link": {
         "pause": "Turn Off",

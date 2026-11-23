@@ -6874,7 +6874,7 @@
         "manage": "Quản lý trên org.navide.dev",
         "manage-failed": "Không mở được trang tổ chức: {reason}",
         "not-joined": "Bạn chưa tham gia tổ chức nào. Sau khi tham gia hoặc tạo tổ chức, các máy do tổ chức liên kết chia sẻ sẽ hiện ở đây.",
-        "not-exposed": "Máy này chưa được chia sẻ với tổ chức. Hãy thiết lập trên org.navide.dev.",
+        "not-exposed": "Bạn chưa tham gia tổ chức nào, hoặc máy này chưa được chia sẻ với tổ chức. Bạn có thể xem và thiết lập trên org.navide.dev.",
         "machines": "{count} máy được chia sẻ",
         "linked": "Đã liên kết",
         "owner": "Chủ sở hữu {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "Giữ trạng thái dừng",
         "rebuild-done": "Đã xóa bản ghi tin cậy. Hãy ghép đôi lại các thiết bị khi bạn sẵn sàng.",
         "locked-retrying": "Có thể chỉ là tạm thời — keychain bị khóa hoặc hộp thoại cấp quyền bị đóng đều trông giống nhau từ đây. Hệ thống vẫn đang thử lại; nếu ổn trở lại, sẽ không mất gì.",
-        "approve-trust-unavailable": "Máy này hiện không đọc được bản ghi tin cậy của nó, nên chưa ghi quy tắc nào. Hãy xử lý thẻ “Navide Cloud đã dừng” bên dưới trước (ví dụ nhấn “Bắt đầu lại”), rồi cho phép yêu cầu này lần nữa."
+        "approve-trust-unavailable": "Máy này hiện không đọc được bản ghi tin cậy của nó, nên chưa ghi quy tắc nào. Hãy xử lý thẻ “Navide Cloud đã dừng” bên dưới trước (ví dụ nhấn “Bắt đầu lại”), rồi cho phép yêu cầu này lần nữa.",
+        "state-revoked": "Đã thu hồi liên kết tổ chức"
       },
       "link": {
         "pause": "Tắt",

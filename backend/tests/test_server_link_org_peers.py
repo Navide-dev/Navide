@@ -811,3 +811,98 @@ async def test_a_revoked_org_pin_survives_the_other_side_unpairing():
         assert pin is not None and pin["orgRevoked"]["reason"] == "link-revoked"
     finally:
         await link.stop()
+
+
+# ---- integration findings (0.2.47) ------------------------------------------------
+
+
+def _org_rule(peer: Peer, grant_id: str = "g_1", pane: str = "reviewer") -> dict:
+    return {"from": {"memberId": ORG_MEMBER, "deviceId": peer.device_id},
+            "to": {"workspace": "proj-a", "paneName": pane}, "action": "allow", "grantId": grant_id}
+
+
+UNTAGGED = {"from": {"memberId": "m-x", "deviceId": "dev-x"},
+            "to": {"workspace": "proj-a", "paneName": "reviewer"}, "action": "allow"}
+
+
+async def test_a_downgrade_drops_that_devices_rules_of_the_grant_and_signs_again():
+    policy = {"version": 1, "default": "deny",
+              "rules": [_org_rule(ORG_PEER), _org_rule(OTHER_ORG_PEER), UNTAGGED]}
+    server, link = await _link_with({"grants": [_grant("g_1", ORG_PEER, OTHER_ORG_PEER)]}, policy=policy)
+    try:
+        _pin_org(ORG_PEER)
+        _pin_org(OTHER_ORG_PEER)
+        conn = server.opened[0]
+        before = len(conn.policy_sets)
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [ORG_PEER.device_id], "reason": "exposure-withdrawn", "at": 1})
+        assert len(conn.policy_sets) == before + 1
+        written = server.policy
+        assert [r["from"]["deviceId"] for r in written["rules"]] == [OTHER_ORG_PEER.device_id, "dev-x"]
+        assert written["_sig"]["sig"]
+    finally:
+        await link.stop()
+
+
+async def test_withdrawn_then_shared_again_then_paired_again_needs_allowing_again(broadcasts):
+    """spec 3.4.3: the one-click rule lapses with the downgrade, even when the
+    machine comes back under the very same grant."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    policy = {"version": 1, "default": "deny", "rules": [_org_rule(ORG_PEER)]}
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state, policy=policy)
+    try:
+        _pin_org()
+        conn = server.opened[0]
+        # Allowed while paired.
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:w:1", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: len(broadcasts) == 1)
+        assert conn.acks == []
+
+        # Withdrawn: downgraded, its rule goes.
+        state["grants"] = [_grant("g_1", OTHER_ORG_PEER)]
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [ORG_PEER.device_id], "reason": "exposure-withdrawn", "at": 2})
+        assert server.policy["rules"] == []
+
+        # Shared again under the same grant and paired again.
+        state["grants"] = [_grant()]
+        await link._refresh_peers()
+        await _pair(link, conn, tag="again-w")
+        assert trust_store.pin_for(ORG_PEER.device_id)["approved"] is True
+
+        # Not allowed until someone allows it again.
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:w:2", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: any(a.get("msgKey") == "pa:w:2" for a in conn.acks))
+        (ack,) = [a for a in conn.acks if a.get("msgKey") == "pa:w:2"]
+        assert ack["reason"] == "policy-denied"
+    finally:
+        await link.stop()
+
+
+async def test_the_device_list_names_the_organisation_and_shows_revoked():
+    state = {"grants": [_grant(), _same_org_grant("g_same")]}
+    state["grants"][1]["peers"][0]["deviceId"] = OTHER_ORG_PEER.device_id
+    server = FakeServer(responder=_org_responder(state))
+    server.directory = [
+        PEER.session_row(),
+        ORG_PEER.session_row(sessionId="s-org"),
+        OTHER_ORG_PEER.session_row(sessionId="s-org2"),
+    ]
+    link = await _connected(server)
+    try:
+        await _until(lambda: link._org_status == org_peers.STATUS_OK)
+        _pin_org(ORG_PEER)
+        rows = {d["deviceId"]: d for d in link.network_snapshot()["devices"]}
+        assert rows[ORG_PEER.device_id]["trustState"] == "trusted"
+        assert rows[ORG_PEER.device_id]["org"]["orgName"] == "北辰設計"
+        assert rows[ORG_PEER.device_id]["org"]["ownerName"] == "陳怡君"
+        assert rows[OTHER_ORG_PEER.device_id]["org"]["sameOrg"] is True
+        assert "org" not in rows[PEER.device_id]
+        trust_store.revoke_org_pins("g_1", device_ids=None, local_device_id="", reason="link-revoked", at=1)
+        rows = {d["deviceId"]: d for d in link.network_snapshot()["devices"]}
+        assert rows[ORG_PEER.device_id]["trustState"] == "revoked"
+    finally:
+        await link.stop()

@@ -6874,7 +6874,7 @@
         "manage": "在 org.navide.dev 管理",
         "manage-failed": "无法打开组织网站：{reason}",
         "not-joined": "尚未加入组织。加入或创建组织后，互连组织公开的机器会列在这里。",
-        "not-exposed": "这台机器尚未对组织公开，请到 org.navide.dev 设置。",
+        "not-exposed": "尚未加入组织，或这台机器尚未对组织公开。可以到 org.navide.dev 查看与设置。",
         "machines": "{count} 台机器公开",
         "linked": "已互连",
         "owner": "所有者 {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "维持停止状态",
         "rebuild-done": "信任记录已清除。准备好之后再重新配对你的设备。",
         "locked-retrying": "这可能只是暂时的——钥匙圈被锁住、或权限对话框被按掉，从这里看起来都一样。它还在重试；如果通了，什么都没有损失。",
-        "approve-trust-unavailable": "这台机器的信任记录目前读不出来，所以还没写入规则。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再允许一次这个请求。"
+        "approve-trust-unavailable": "这台机器的信任记录目前读不出来，所以还没写入规则。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再允许一次这个请求。",
+        "state-revoked": "组织连接已撤销"
       },
       "link": {
         "pause": "关闭",

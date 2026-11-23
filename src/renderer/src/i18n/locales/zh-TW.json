@@ -6874,7 +6874,7 @@
         "manage": "在 org.navide.dev 管理",
         "manage-failed": "無法開啟組織網站：{reason}",
         "not-joined": "尚未加入組織。加入或建立組織後，互連組織公開的機器會列在這裡。",
-        "not-exposed": "這台機器尚未對組織公開，請到 org.navide.dev 設定。",
+        "not-exposed": "尚未加入組織，或這台機器尚未對組織公開。可以到 org.navide.dev 檢視與設定。",
         "machines": "{count} 台機器公開",
         "linked": "已互連",
         "owner": "擁有者 {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "維持停止狀態",
         "rebuild-done": "信任記錄已清除。準備好之後再重新配對你的裝置。",
         "locked-retrying": "這可能只是暫時的——鑰匙圈被鎖住、或權限對話框被按掉，從這裡看起來都一樣。它還在重試；如果通了，什麼都沒有損失。",
-        "approve-trust-unavailable": "這台機器的信任紀錄目前讀不出來，所以還沒寫入規則。請先處理下方「Navide Cloud 已停止」卡片（例如按「重新開始」），再允許一次這個請求。"
+        "approve-trust-unavailable": "這台機器的信任紀錄目前讀不出來，所以還沒寫入規則。請先處理下方「Navide Cloud 已停止」卡片（例如按「重新開始」），再允許一次這個請求。",
+        "state-revoked": "組織連結已撤銷"
       },
       "link": {
         "pause": "關閉",

@@ -519,3 +519,65 @@ describe('pressing Pair', () => {
     await flushPromises()
   })
 })
+
+describe('a device reached through an organization', () => {
+  const tt = (key: string, args?: Record<string, unknown>) => i18n.global.t(key, args ?? {})
+
+  async function mountRows(devices: Record<string, unknown>[]) {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      trustConfirm: vi.fn().mockResolvedValue({ token: 't', issuedAt: 1 }),
+    }
+    const mock = createMockBackend('connected')
+    mock.setResponse('p2p.link.status', {
+      status: { state: 'connected', accountEmail: 'a@b.c', serverUrl: 'wss://x', emailVerified: true },
+    })
+    mock.setResponse('p2p.network.snapshot', {
+      state: 'connected',
+      deviceId: 'me',
+      devices: [
+        { deviceId: 'me', deviceName: 'This one', isLocal: true, online: true, paneCount: 0, panes: [] },
+        ...devices,
+      ],
+    })
+    wrapper = mount(AccountModal, { props: { open: true, backend: mock.backend as never }, global: { plugins: [i18n] } })
+    await flushPromises()
+  }
+
+  const row = (name: string) => wrapper!.findAll('.dev-row, li, div').find((el) => el.find('[data-org-tag]').exists() && el.text().includes(name))
+
+  it('says which organization and whose it is, beside a paired state', async () => {
+    i18n.global.locale.value = 'en-US'
+    await mountRows([
+      { deviceId: 'd-org', deviceName: 'Design iMac', isLocal: false, online: true, paneCount: 0, panes: [],
+        trustState: 'trusted', org: { grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' } },
+    ])
+    const tag = wrapper!.find('[data-org-tag]')
+    expect(tag.text()).toContain(tt('settings.cloud.org.from-org', { org: 'North Design' }))
+    expect(tag.text()).toContain(tt('settings.cloud.org.owner', { name: 'Chen' }))
+    // Disclosed, not taken away: unpairing is still offered.
+    expect(wrapper!.text()).toContain(tt('settings.p2p.trust.unpair'))
+    expect(row('Design iMac')).toBeTruthy()
+  })
+
+  it('says "member of your organization" for the same organization, and shows a revoked one as revoked', async () => {
+    i18n.global.locale.value = 'zh-TW'
+    await mountRows([
+      { deviceId: 'd-same', deviceName: 'Mate', isLocal: false, online: true, paneCount: 0, panes: [],
+        trustState: 'trusted', org: { grantId: 'g_s', orgName: '星河工作室', ownerName: '小明', sameOrg: true } },
+      { deviceId: 'd-gone', deviceName: 'Gone', isLocal: false, online: false, paneCount: 0, panes: [],
+        trustState: 'revoked', org: { grantId: 'g_1', orgName: '北辰設計', ownerName: '陳怡君' } },
+    ])
+    const tags = wrapper!.findAll('[data-org-tag]').map((el) => el.text())
+    expect(tags[0]).toContain(tt('settings.cloud.org.same-org-tag', { org: '星河工作室' }))
+    expect(tags[1]).toContain(tt('settings.cloud.org.from-org', { org: '北辰設計' }))
+    expect(wrapper!.find('.ts-revoked').text()).toBe(tt('settings.p2p.trust.state-revoked'))
+  })
+
+  it('adds nothing to one of your own machines', async () => {
+    i18n.global.locale.value = 'en-US'
+    await mountRows([
+      { deviceId: 'd-mine', deviceName: 'Laptop', isLocal: false, online: true, paneCount: 0, panes: [], trustState: 'trusted' },
+    ])
+    expect(wrapper!.find('[data-org-tag]').exists()).toBe(false)
+  })
+})
