@@ -1404,7 +1404,8 @@ async def _notify_mcp_never_connected(entry: Any) -> None:
 
     manager = get_manager()
     if manager is not None:
-        await manager.notify_mcp_never_connected(entry.name)
+        await manager.notify_mcp_never_connected(entry.name, entry.pane_id, entry.workspace_path,
+                                                 entry.spawned_by)
 
 
 async def _notify_mcp_disconnected(entry: Any) -> None:
@@ -1421,7 +1422,8 @@ async def _notify_mcp_disconnected(entry: Any) -> None:
 
     manager = get_manager()
     if manager is not None:
-        await manager.notify_mcp_disconnected(entry.name)
+        await manager.notify_mcp_disconnected(entry.name, entry.pane_id, entry.workspace_path,
+                                              entry.spawned_by)
 
 
 async def _auto_reconnect_mcp(entry: Any) -> bool:
