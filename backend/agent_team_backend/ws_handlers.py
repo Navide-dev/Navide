@@ -6136,6 +6136,10 @@ async def p2p_trust_device_unpair(
         )
         return
     removed = await asyncio.to_thread(trust_store.forget_device, device_id)
+    # Its knocks were left under the pairing that just ended; approving one
+    # later would write a rule for a relationship that no longer exists.
+    if server_link.forget_access_requests_for_device(device_id):
+        await _announce_requests()
     # Told, not just forgotten. Two machines disagreeing about whether they are
     # paired is a state where one silently refuses everything the other sends,
     # and the sender's only symptom is silence.

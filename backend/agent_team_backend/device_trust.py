@@ -237,8 +237,12 @@ class AccessRequests:
         # now, not the one it had the first time it knocked.
         if device_name:
             row["deviceName"] = device_name
+        # Overwritten every time, cleared when absent: the row says how the
+        # sender is paired *now*, never how it was paired some earlier time.
         if grant_id:
             row["grantId"] = grant_id
+        else:
+            row.pop("grantId", None)
         row["lastSeenAt"] = now
         row["attempts"] = int(row["attempts"]) + 1
         return dict(row)

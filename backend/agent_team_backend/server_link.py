@@ -4046,6 +4046,8 @@ class ServerLink:
                 # which one of them silently refuses everything the other sends.
                 self._cancel_exchange(device_id)
                 removed = await asyncio.to_thread(trust_store.forget_device, device_id)
+                if self._access_requests.forget_device(device_id):
+                    await self._announce_access_requests()
                 if removed.get("found"):
                     await asyncio.to_thread(
                         trust_store.note_pairing, device_id, kind="revoked", device_name=name
@@ -4133,6 +4135,10 @@ class ServerLink:
         except Exception as err:  # noqa: BLE001
             log.error("could not pin %s after pairing: %s", device_id, err)
             return False
+        # Knocks from before this pairing were made under another one (or
+        # none); the device knocks again under this one if it still wants in.
+        if self._access_requests.forget_device(device_id):
+            await self._announce_access_requests()
         await asyncio.to_thread(
             trust_store.note_pairing,
             device_id,
