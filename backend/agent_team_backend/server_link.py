@@ -4440,6 +4440,14 @@ class ServerLink:
             return
         await self._remember_inbound(msg_key)
         await self._ensure_policy()
+        # Read again: a revocation can land during the awaits above, and the
+        # rings and rules below must see the pin as it is now.
+        held = trust_store.pin_for(sender_device)
+        if held is not None and held.get("grantId") and held.get("approved") is not True:
+            log.info("refusing message %s: the organisation link for %s was revoked",
+                     msg_key, sender_device)
+            await self._ack(msg_key, "rejected", reason=REASON_NOT_PAIRED)
+            return
         # An organisation machine is judged by the member id its grant named
         # when it was paired, not the one in the frame, which the relay writes:
         # otherwise a frame claiming this account's member id would match the

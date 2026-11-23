@@ -669,3 +669,28 @@ async def test_an_org_sender_is_judged_by_its_pinned_member_not_the_frame(broadc
         assert conn.acks[1]["reason"] == "policy-denied"
     finally:
         await link.stop()
+
+
+async def test_a_revocation_during_authentication_is_seen_before_the_rules(broadcasts, monkeypatch):
+    """The pin is read again after the awaits, so a revocation that lands in
+    between refuses the message instead of letting the stale approval through."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        _pin_org()
+        original = link._ensure_policy
+
+        async def revoke_meanwhile():
+            trust_store.revoke_org_pins("g_1", device_ids=None, local_device_id="",
+                                        reason="link-revoked", at=1)
+            await original()
+
+        monkeypatch.setattr(link, "_ensure_policy", revoke_meanwhile)
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:race:1", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0] == {"msgKey": "pa:race:1", "state": "rejected", "reason": "not-paired"}
+        assert broadcasts == []
+    finally:
+        await link.stop()
