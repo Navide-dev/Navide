@@ -6808,7 +6808,8 @@
         "aria": "Navide Cloud 子分頁",
         "sync": "同步",
         "share": "分享",
-        "devices": "裝置"
+        "devices": "裝置",
+        "org": "組織"
       },
       "inventory": {
         "title": "這台機器與雲端",
@@ -6865,6 +6866,45 @@
         "rekey-confirm": "確定換新連結",
         "rekeyed-old-alive": "已複製新連結。server 沒有確認舊連結已失效，若舊連結不可再開啟，請手動撤銷。",
         "refresh": "重新整理"
+      },
+      "org": {
+        "title": "可配對的組織",
+        "intro": "你的組織 {org} 已和下面這些組織互連。這裡只列出對方成員自己選擇公開的機器。配對仍然走六碼比對，兩邊都按「一致」才算配對完成。",
+        "intro-generic": "你的組織已和下面這些組織互連。這裡只列出對方成員自己選擇公開的機器。配對仍然走六碼比對，兩邊都按「一致」才算配對完成。",
+        "manage": "在 org.navide.dev 管理",
+        "manage-failed": "無法開啟組織網站：{reason}",
+        "not-joined": "尚未加入組織。加入或建立組織後，互連組織公開的機器會列在這裡。",
+        "not-exposed": "這台機器尚未對組織公開，請到 org.navide.dev 設定。",
+        "machines": "{count} 台機器公開",
+        "linked": "已互連",
+        "owner": "擁有者 {name}",
+        "state-pending": "尚未配對",
+        "state-trusted": "已配對",
+        "state-blocked": "已封鎖",
+        "reason-link-revoked": "組織連結已撤銷",
+        "reason-member-removed": "成員已移出組織",
+        "reason-exposure-withdrawn": "已取消公開",
+        "reason-org-deleted": "組織已刪除",
+        "reason-lapsed": "組織連結已失效",
+        "revoked-on": "{when} {reason}",
+        "revoked-title": "組織連結已撤銷",
+        "revoked-body": "這個組織所有機器的配對已一起改回「未核准」，紀錄保留在下面。之後它們送來的訊息會以 not-paired 拒收。要恢復，得先在 org.navide.dev 重新互連，再走一次六碼配對。",
+        "repair-hint": "先在 org.navide.dev 重新互連，再走一次六碼配對",
+        "pair": "配對",
+        "unpair": "解除配對",
+        "offline-title": "配對需要兩台機器都在線上",
+        "footer": "配對只代表確認了對方是誰。配對之後，對方的訊息能送到哪個分格，仍然照「誰能對這台裝置下指令」的規則決定，預設是拒絕。",
+        "from-org": "來自組織 {org}",
+        "field-org": "組織",
+        "field-owner": "擁有者",
+        "field-device": "機器",
+        "knock-paired": "已配對（組織配對）",
+        "knock-hint": "來自其他組織的機器要先完成配對，才會出現在這裡。組織連結被撤銷時，這條規則也會跟著失效。",
+        "allow-one": "一鍵允許",
+        "refresh": "重新整理",
+        "loading": "讀取中…",
+        "paired-on": "曾於 {when} 配對",
+        "pairing-elsewhere": "六碼比對進行中，請在兩台機器上核對"
       }
     },
     "sync": {
@@ -7391,7 +7431,8 @@
         "rebuild-confirm": "確定，清除並重新開始",
         "rebuild-cancel": "維持停止狀態",
         "rebuild-done": "信任記錄已清除。準備好之後再重新配對你的裝置。",
-        "locked-retrying": "這可能只是暫時的——鑰匙圈被鎖住、或權限對話框被按掉，從這裡看起來都一樣。它還在重試；如果通了，什麼都沒有損失。"
+        "locked-retrying": "這可能只是暫時的——鑰匙圈被鎖住、或權限對話框被按掉，從這裡看起來都一樣。它還在重試；如果通了，什麼都沒有損失。",
+        "approve-trust-unavailable": "這台機器的信任紀錄目前讀不出來，所以還沒寫入規則。請先處理下方「Navide Cloud 已停止」卡片（例如按「重新開始」），再允許一次這個請求。"
       },
       "link": {
         "pause": "關閉",

@@ -6808,7 +6808,8 @@
         "aria": "Sections de Navide Cloud",
         "sync": "Synchronisation",
         "share": "Partage",
-        "devices": "Appareils"
+        "devices": "Appareils",
+        "org": "Organisations"
       },
       "inventory": {
         "title": "Cette machine et le cloud",
@@ -6865,6 +6866,45 @@
         "rekey-confirm": "Remplacer le lien maintenant",
         "rekeyed-old-alive": "Nouveau lien copié. Le serveur n’a pas confirmé que l’ancien lien ne fonctionne plus ; révoquez-le s’il ne doit pas s’ouvrir.",
         "refresh": "Actualiser"
+      },
+      "org": {
+        "title": "Organisations avec lesquelles s’appairer",
+        "intro": "Votre organisation {org} est reliée aux organisations ci-dessous. Seules les machines que leurs membres ont choisi de partager sont listées. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
+        "intro-generic": "Votre organisation est reliée aux organisations ci-dessous. Seules les machines que leurs membres ont choisi de partager sont listées. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
+        "manage": "Gérer sur org.navide.dev",
+        "manage-failed": "Impossible d’ouvrir le site de l’organisation : {reason}",
+        "not-joined": "Pas encore dans une organisation. Une fois que vous en rejoignez ou en créez une, les machines partagées par les organisations reliées apparaissent ici.",
+        "not-exposed": "Cette machine n’est pas encore partagée avec l’organisation. Configurez-la sur org.navide.dev.",
+        "machines": "{count} machines partagées",
+        "linked": "Reliée",
+        "owner": "Propriétaire {name}",
+        "state-pending": "Non appairée",
+        "state-trusted": "Appairée",
+        "state-blocked": "Bloquée",
+        "reason-link-revoked": "Lien d’organisation révoqué",
+        "reason-member-removed": "Membre retiré de l’organisation",
+        "reason-exposure-withdrawn": "N’est plus partagée",
+        "reason-org-deleted": "Organisation supprimée",
+        "reason-lapsed": "Lien d’organisation expiré",
+        "revoked-on": "{when} {reason}",
+        "revoked-title": "Lien d’organisation révoqué",
+        "revoked-body": "Les appairages avec toutes les machines de cette organisation sont repassés à « non approuvé » ; l’historique reste ci-dessous. Leurs messages sont désormais refusés comme not-paired. Pour rétablir, reliez à nouveau les organisations sur org.navide.dev, puis refaites l’appairage à six chiffres.",
+        "repair-hint": "Reliez à nouveau les organisations sur org.navide.dev, puis refaites l’appairage à six chiffres",
+        "pair": "Appairer",
+        "unpair": "Dissocier",
+        "offline-title": "L’appairage nécessite que les deux machines soient en ligne",
+        "footer": "L’appairage confirme seulement qui est l’autre côté. Ensuite, les volets que leurs messages peuvent atteindre restent décidés par les règles de qui peut donner des instructions à cet appareil, refusées par défaut.",
+        "from-org": "De l’organisation {org}",
+        "field-org": "Organisation",
+        "field-owner": "Propriétaire",
+        "field-device": "Machine",
+        "knock-paired": "Appairée (organisation)",
+        "knock-hint": "Les machines d’autres organisations n’apparaissent ici qu’après appairage. Si le lien d’organisation est révoqué, cette règle tombe avec lui.",
+        "allow-one": "Autoriser ce volet",
+        "refresh": "Actualiser",
+        "loading": "Chargement…",
+        "paired-on": "Appairée le {when}",
+        "pairing-elsewhere": "Comparaison à six chiffres en cours — vérifiez sur les deux machines"
       }
     },
     "sync": {
@@ -7391,7 +7431,8 @@
         "rebuild-confirm": "Oui, effacer et recommencer",
         "rebuild-cancel": "Laisser arrêté",
         "rebuild-done": "Le registre de confiance a été effacé. Appairez de nouveau vos appareils quand vous serez prêt.",
-        "locked-retrying": "Cela peut être temporaire – un trousseau verrouillé ou une boîte de dialogue d’autorisation fermée produisent le même résultat vu d’ici. De nouvelles tentatives sont en cours ; si la situation se rétablit, rien n’est perdu."
+        "locked-retrying": "Cela peut être temporaire – un trousseau verrouillé ou une boîte de dialogue d’autorisation fermée produisent le même résultat vu d’ici. De nouvelles tentatives sont en cours ; si la situation se rétablit, rien n’est perdu.",
+        "approve-trust-unavailable": "Cette machine ne peut pas lire son registre de confiance pour l’instant ; aucune règle n’a donc été écrite. Traitez d’abord la carte « Navide Cloud est arrêté » ci-dessous (par exemple, cliquez sur « Recommencer »), puis autorisez à nouveau la demande."
       },
       "link": {
         "pause": "Désactiver",

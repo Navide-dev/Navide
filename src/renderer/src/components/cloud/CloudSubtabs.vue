@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The Navide Cloud page's sub-tab bar — Sync, Share, Devices — and the slots
+ * The Navide Cloud page's sub-tab bar — Sync, Share, Devices, Organizations — and the slots
  * it switches between. The Sync slot renders bare, with no wrapper, in the
  * same place whether or not the bar is shown, so its content (the page as it
  * was before sub-tabs) is never remounted by the link coming and going; the
@@ -16,7 +16,7 @@
 import { reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-export type CloudSubtab = 'sync' | 'share' | 'devices'
+export type CloudSubtab = 'sync' | 'share' | 'devices' | 'org'
 
 const props = withDefaults(defineProps<{ enabled?: boolean; tabs?: CloudSubtab[] }>(), {
   enabled: true,
@@ -71,6 +71,14 @@ watch(
     data-subtab-panel="devices"
   >
     <slot name="devices"></slot>
+  </div>
+  <div
+    v-if="enabled && tabs.includes('org') && visited.has('org')"
+    v-show="model === 'org'"
+    role="tabpanel"
+    data-subtab-panel="org"
+  >
+    <slot name="org"></slot>
   </div>
 </template>
 

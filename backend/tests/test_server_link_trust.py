@@ -968,6 +968,10 @@ def test_no_public_read_answers_from_an_empty_cache():
     trust_store.note_seen_message("k-seen")
     trust_store.flush_seen_messages()
     trust_store.note_blocked("dev-cold-blocked", "m-cold-blocked")
+    trust_store.pin_paired_device(
+        "dev-cold-org", sign_key="k-org", enc_key="e-org", member_id="m-org",
+        org={"grantId": "g-cold", "orgId": "o", "orgName": "n", "ownerName": "w"},
+    )
 
     # Every public reader, with an argument that has something to find. A new
     # one added here without a loading path makes this test fail.
@@ -979,6 +983,7 @@ def test_no_public_read_answers_from_an_empty_cache():
         "has_seen_message": lambda: trust_store.has_seen_message("k-seen"),
         "unapproved_devices": lambda: len(trust_store.unapproved_devices()),
         "legacy_pinned_devices": lambda: trust_store.legacy_pinned_devices(),
+        "org_pins": lambda: len(trust_store.org_pins()),
         # The one reader here that is a refusal. A cold cache answering "not
         # blocked" would make a backend restart into a way to lift every block.
         "is_blocked_locally": lambda: trust_store.is_blocked_locally(

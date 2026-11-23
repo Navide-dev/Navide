@@ -241,7 +241,7 @@ describe('Navide Cloud page lifecycle', () => {
     const b = backend({ shareList: { ok: false, error: { code: 'SHARE_LIST_FAILED', message: 'server said no' } } })
     await mountModal(b)
     const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
-    expect(tabs).toEqual(['Sync', 'Share', 'Devices'])
+    expect(tabs).toEqual(['Sync', 'Share', 'Devices', 'Organizations'])
   })
 
   it('does not ask for share.list again when Share opens (UI-F6)', async () => {
@@ -264,7 +264,7 @@ describe('Navide Cloud page lifecycle', () => {
     reload!.click()
     await flushPromises()
     const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
-    expect(tabs).toEqual(['Sync', 'Share', 'Devices'])
+    expect(tabs).toEqual(['Sync', 'Share', 'Devices', 'Organizations'])
     expect(document.querySelector('[data-subtab-panel="share"] [data-notice="error"]')).not.toBeNull()
   })
 

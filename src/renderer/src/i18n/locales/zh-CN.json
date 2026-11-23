@@ -6808,7 +6808,8 @@
         "aria": "Navide Cloud 子标签页",
         "sync": "同步",
         "share": "分享",
-        "devices": "设备"
+        "devices": "设备",
+        "org": "组织"
       },
       "inventory": {
         "title": "这台机器与云端",
@@ -6865,6 +6866,45 @@
         "rekey-confirm": "确定换新链接",
         "rekeyed-old-alive": "已复制新链接。server 没有确认旧链接已失效，若旧链接不可再打开，请手动撤销。",
         "refresh": "刷新"
+      },
+      "org": {
+        "title": "可配对的组织",
+        "intro": "你的组织 {org} 已和下面这些组织互连。这里只列出对方成员自己选择公开的机器。配对仍然走六码比对，两边都按「一致」才算配对完成。",
+        "intro-generic": "你的组织已和下面这些组织互连。这里只列出对方成员自己选择公开的机器。配对仍然走六码比对，两边都按「一致」才算配对完成。",
+        "manage": "在 org.navide.dev 管理",
+        "manage-failed": "无法打开组织网站：{reason}",
+        "not-joined": "尚未加入组织。加入或创建组织后，互连组织公开的机器会列在这里。",
+        "not-exposed": "这台机器尚未对组织公开，请到 org.navide.dev 设置。",
+        "machines": "{count} 台机器公开",
+        "linked": "已互连",
+        "owner": "所有者 {name}",
+        "state-pending": "尚未配对",
+        "state-trusted": "已配对",
+        "state-blocked": "已屏蔽",
+        "reason-link-revoked": "组织连接已撤销",
+        "reason-member-removed": "成员已移出组织",
+        "reason-exposure-withdrawn": "已取消公开",
+        "reason-org-deleted": "组织已删除",
+        "reason-lapsed": "组织连接已失效",
+        "revoked-on": "{when} {reason}",
+        "revoked-title": "组织连接已撤销",
+        "revoked-body": "这个组织所有机器的配对已一起改回「未核准」，记录保留在下面。之后它们发来的消息会以 not-paired 拒收。要恢复，需先在 org.navide.dev 重新互连，再走一次六码配对。",
+        "repair-hint": "先在 org.navide.dev 重新互连，再走一次六码配对",
+        "pair": "配对",
+        "unpair": "解除配对",
+        "offline-title": "配对需要两台机器都在线",
+        "footer": "配对只代表确认了对方是谁。配对之后，对方的消息能送到哪个分格，仍然按「谁能对这台设备下指令」的规则决定，默认是拒绝。",
+        "from-org": "来自组织 {org}",
+        "field-org": "组织",
+        "field-owner": "所有者",
+        "field-device": "机器",
+        "knock-paired": "已配对（组织配对）",
+        "knock-hint": "来自其他组织的机器要先完成配对，才会出现在这里。组织连接被撤销时，这条规则也会随之失效。",
+        "allow-one": "一键允许",
+        "refresh": "刷新",
+        "loading": "读取中…",
+        "paired-on": "曾于 {when} 配对",
+        "pairing-elsewhere": "六码比对进行中，请在两台机器上核对"
       }
     },
     "sync": {
@@ -7391,7 +7431,8 @@
         "rebuild-confirm": "确定，清除并重新开始",
         "rebuild-cancel": "维持停止状态",
         "rebuild-done": "信任记录已清除。准备好之后再重新配对你的设备。",
-        "locked-retrying": "这可能只是暂时的——钥匙圈被锁住、或权限对话框被按掉，从这里看起来都一样。它还在重试；如果通了，什么都没有损失。"
+        "locked-retrying": "这可能只是暂时的——钥匙圈被锁住、或权限对话框被按掉，从这里看起来都一样。它还在重试；如果通了，什么都没有损失。",
+        "approve-trust-unavailable": "这台机器的信任记录目前读不出来，所以还没写入规则。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再允许一次这个请求。"
       },
       "link": {
         "pause": "关闭",

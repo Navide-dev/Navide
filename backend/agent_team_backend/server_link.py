@@ -67,6 +67,7 @@ from . import (
     device_pairing,
     device_signing,
     device_trust,
+    org_peers,
     osplat,
     pane_policy,
     remote_roster,
@@ -922,6 +923,16 @@ class ServerLink:
         # (see ``_on_presence_changed``), and because a device with no sessions
         # at all has no row to carry that flag.
         self._online_devices: set[str] | None = None
+        #: What ``peers.list`` last said: the cross-organisation grants this
+        #: device is on one side of. ``_org_status`` tells "never asked" and
+        #: "this server has no organisations" apart from "none listed".
+        self._org_status = org_peers.STATUS_UNKNOWN
+        self._org_grants: list[dict[str, Any]] = []
+        self._org_as_of = 0
+        #: device id -> the grant a pairing exchange with it began through.
+        #: Completing that exchange requires the same grant to still be live,
+        #: so a grant revoked mid-exchange cannot end in a pin outside it.
+        self._pairing_grants: dict[str, str] = {}
         self.terminated_reason = ""
         # Why the last dial or session failed, kept so `state()` can tell a
         # server that is not answering apart from one that has not been tried
@@ -1143,6 +1154,10 @@ class ServerLink:
                 # so the cache is realigned from a full directory read once per
                 # connection and kept current by the push after that.
                 await self._refresh_directory()
+                # Organisation grants too, and for a stronger reason: a
+                # revocation pushed while this device was away is not re-sent,
+                # so this read is also where those pins are downgraded.
+                await self._refresh_peers()
                 # Everything written on other devices while this one was away
                 # is waiting behind a cursor, and no `sync.changed` will be
                 # re-sent for it. One catch-up round per connection; deliberately
@@ -1190,6 +1205,11 @@ class ServerLink:
                 await _quiet(reader)
                 self._ws = None
                 self._authenticated = False
+                # Grants are only as good as the connection that read them: a
+                # revocation pushed while this is down would be missed, so none
+                # stays usable until the next peers.list.
+                self._org_grants = []
+                self._org_status = org_peers.STATUS_UNKNOWN
                 self._fail_pending(ConnectionError("navide-server link closed"))
         return authenticated
 
@@ -1237,6 +1257,13 @@ class ServerLink:
             return
         if msg_type == "presence.changed":
             self._on_presence_changed(message.get("payload"))
+            return
+        if msg_type == "peers.changed":
+            # Only a hint that something changed; the list is the answer.
+            self._spawn(self._refresh_peers())
+            return
+        if msg_type == "org.grant.revoked":
+            self._spawn(self._on_grant_revoked(message.get("payload")))
             return
         if msg_type == "account.verified":
             # The browser tab that confirmed the address is not this process, so
@@ -2659,6 +2686,223 @@ class ServerLink:
         self._online_devices = online
         remote_roster.set_online_devices(online)
 
+    # ---- organisation peers ------------------------------------------------
+
+    async def _refresh_peers(self) -> None:
+        """Read ``peers.list``, then downgrade the pins it no longer backs.
+
+        Never raises. A server that does not know ``peers.list`` (older than
+        organisations) or answers NOT_FOUND leaves the org view saying "not in
+        an organisation" and changes nothing else — in particular it does not
+        reconcile, because "no answer" is not "every grant is gone".
+        """
+        try:
+            reply = await self._request("peers.list", {})
+        except Exception as err:  # noqa: BLE001
+            log.info("navide-server peers.list failed: %s", err)
+            if self._org_status == org_peers.STATUS_UNKNOWN:
+                self._org_status = org_peers.STATUS_ERROR
+            return
+        if not reply.get("ok"):
+            error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+            code = str(error.get("code") or "")
+            self._org_status = (
+                org_peers.STATUS_UNSUPPORTED
+                if code in org_peers.UNSUPPORTED_CODES
+                else org_peers.STATUS_ERROR
+            )
+            if self._org_status == org_peers.STATUS_UNSUPPORTED:
+                self._org_grants = []
+            return
+        payload = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
+        self._org_grants = org_peers.parse(payload)
+        self._org_as_of = payload.get("asOf") if isinstance(payload.get("asOf"), int) else 0
+        self._org_status = org_peers.STATUS_OK
+        try:
+            changed = await asyncio.to_thread(
+                trust_store.reconcile_org_pins,
+                org_peers.live_map(self._org_grants),
+                reason=org_peers.REASON_LAPSED,
+                at=int(time.time()),
+            )
+        except Exception as err:  # noqa: BLE001 - asked again on the next read
+            log.warning("could not reconcile organisation pins: %s", err)
+            return
+        if changed:
+            log.info("organisation grants no longer back %d pinned device(s)", len(changed))
+            await self._announce_trust_notices()
+
+    async def _on_grant_revoked(self, payload: Any) -> None:
+        """``org.grant.revoked``: downgrade that grant's pins, keep them."""
+        data = payload if isinstance(payload, dict) else {}
+        grant_id = str(data.get("grantId") or "")
+        if not grant_id:
+            return
+        scope = str(data.get("scope") or "grant")
+        raw_ids = data.get("deviceIds")
+        device_ids = (
+            [str(d) for d in raw_ids if isinstance(d, str)]
+            if scope == "devices" and isinstance(raw_ids, list)
+            else None
+        )
+        if scope == "devices" and not device_ids:
+            return
+        reason = str(data.get("reason") or "")
+        if reason not in org_peers.REASONS:
+            reason = "link-revoked" if scope == "grant" else "exposure-withdrawn"
+        at = data.get("at") if isinstance(data.get("at"), int) else int(time.time() * 1000)
+        try:
+            changed = await asyncio.to_thread(
+                trust_store.revoke_org_pins,
+                grant_id,
+                device_ids=device_ids,
+                local_device_id=self._device_id,
+                reason=reason,
+                at=int(at),
+            )
+        except Exception as err:  # noqa: BLE001 - the reconnect read catches it
+            log.warning("could not downgrade pins for grant %s: %s", grant_id, err)
+            changed = []
+        if changed:
+            log.info("grant %s revoked (%s): downgraded %d pin(s)", grant_id, reason, len(changed))
+            await self._announce_trust_notices()
+        # Off the local copy before asking again, so a refresh that fails
+        # cannot leave the revoked grant (or devices) available to pair through.
+        self._drop_from_grants(grant_id, device_ids)
+        await self._refresh_peers()
+
+    def _drop_from_grants(self, grant_id: str, device_ids: list[str] | None) -> None:
+        whole = device_ids is None or (bool(self._device_id) and self._device_id in device_ids)
+        kept = []
+        for grant in self._org_grants:
+            if grant["grantId"] != grant_id:
+                kept.append(grant)
+            elif not whole:
+                gone = set(device_ids or [])
+                kept.append({**grant, "peers": [p for p in grant["peers"] if p["deviceId"] not in gone]})
+        self._org_grants = kept
+
+    def _cancel_exchange(self, device_id: str) -> Any:
+        """End a pairing exchange, and forget which grant it began through."""
+        self._pairing_grants.pop(device_id, None)
+        return device_pairing.cancel(device_id)
+
+    def _note_pairing_grant(self, device_id: str) -> None:
+        """Remember which grant, if any, a pairing with *device_id* begins through."""
+        found = self._org_peer(device_id)
+        if found is not None and found[1]["memberId"] != self._own_member:
+            self._pairing_grants[device_id] = found[0]["grantId"]
+        else:
+            self._pairing_grants.pop(device_id, None)
+
+    def _org_peer(self, device_id: str) -> tuple[dict, dict] | None:
+        return org_peers.find(self._org_grants, device_id)
+
+    def _org_label(self, device_id: str) -> dict[str, str] | None:
+        """Which organisation a device belongs to, for a card to say so.
+
+        From the live grant when there is one, else from the pin a grant once
+        earned. None for this account's own machines and for strangers.
+        """
+        found = self._org_peer(device_id)
+        if found is not None:
+            grant, peer = found
+            return {
+                "grantId": grant["grantId"],
+                "orgName": grant["peerOrg"]["name"],
+                "ownerName": peer["ownerName"],
+            }
+        try:
+            pin = trust_store.pin_for(device_id)
+        except trust_store.TrustStoreLocked:
+            return None
+        if pin and pin.get("grantId"):
+            org = pin.get("org") if isinstance(pin.get("org"), dict) else {}
+            return {
+                "grantId": str(pin.get("grantId")),
+                "orgName": str(org.get("orgName") or ""),
+                "ownerName": str(org.get("ownerName") or ""),
+            }
+        return None
+
+    def org_snapshot(self) -> dict[str, Any]:
+        """The organisation view: grants, their machines, and downgraded pins.
+
+        A downgraded pin whose grant is still live is shown in that grant's
+        card; one whose grant is gone is grouped under ``revokedGrants`` with
+        the organisation name it was paired under.
+        """
+        pins = {row["deviceId"]: row for row in trust_store.org_pins()}
+        grants_out = []
+        for grant in self._org_grants:
+            rows = []
+            listed = set()
+            for peer in grant["peers"]:
+                device_id = peer["deviceId"]
+                listed.add(device_id)
+                pin = pins.get(device_id)
+                trust = self._trust_state(device_id, is_local=False)
+                if pin is not None and pin["revoked"] and trust != "blocked":
+                    trust = "revoked"
+                can_trust = (
+                    peer["online"]
+                    and trust in ("pending", "revoked")
+                    and bool(peer["signPublicKey"])
+                    and not self._trust_locked
+                )
+                rows.append(
+                    {
+                        "deviceId": device_id,
+                        "deviceName": peer["deviceName"],
+                        "ownerName": peer["ownerName"],
+                        "online": peer["online"],
+                        "listed": True,
+                        "trustState": trust,
+                        "canTrust": can_trust,
+                        "signFingerprint": (
+                            device_signing.fingerprint(peer["signPublicKey"]) if can_trust else ""
+                        ),
+                        "pairedAt": pin["pairedAt"] if pin else None,
+                        "revoked": pin["revoked"] if pin and pin["grantId"] == grant["grantId"] else None,
+                    }
+                )
+            for device_id, pin in pins.items():
+                if pin["grantId"] != grant["grantId"] or device_id in listed or not pin["revoked"]:
+                    continue
+                rows.append(self._revoked_row(device_id, pin))
+            grants_out.append({**{k: v for k, v in grant.items() if k != "peers"}, "peers": rows})
+        live = {grant["grantId"] for grant in self._org_grants}
+        gone: dict[str, dict[str, Any]] = {}
+        for device_id, pin in pins.items():
+            if pin["grantId"] in live or not pin["revoked"]:
+                continue
+            group = gone.setdefault(
+                pin["grantId"],
+                {"grantId": pin["grantId"], "peerOrg": {"orgId": pin["orgId"], "name": pin["orgName"]},
+                 "revoked": pin["revoked"], "peers": []},
+            )
+            group["peers"].append(self._revoked_row(device_id, pin))
+        return {
+            "status": self._org_status,
+            "asOf": self._org_as_of,
+            "grants": grants_out,
+            "revokedGrants": list(gone.values()),
+        }
+
+    def _revoked_row(self, device_id: str, pin: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "deviceId": device_id,
+            "deviceName": self._device_name_for(device_id),
+            "ownerName": pin["ownerName"],
+            "online": False,
+            "listed": False,
+            "trustState": "revoked",
+            "canTrust": False,
+            "signFingerprint": "",
+            "pairedAt": pin["pairedAt"],
+            "revoked": pin["revoked"],
+        }
+
     async def ensure_directory(self) -> None:
         """Read the directory once if this connection has not carried one yet.
 
@@ -2676,7 +2920,8 @@ class ServerLink:
         for raw in self._directory or []:
             if str(raw.get("deviceId") or "") == device_id:
                 return str(raw.get("deviceName") or "")
-        return ""
+        found = self._org_peer(device_id)
+        return found[1]["deviceName"] if found else ""
 
     async def _announce_access_requests(self) -> None:
         """Tell every window that the knock list changed.
@@ -2689,11 +2934,18 @@ class ServerLink:
         from .ipc import make_event
 
         await app.broadcast(
-            make_event("p2p.access_requests.changed", {"requests": self._access_requests.list()})
+            make_event("p2p.access_requests.changed", {"requests": self.access_requests()})
         )
 
     def access_requests(self) -> list[dict[str, Any]]:
-        return self._access_requests.list()
+        rows = [dict(row) for row in self._access_requests.list()]
+        for row in rows:
+            # A knock from another organisation's machine says which, so the
+            # card can tell it apart from one of this account's own.
+            org = self._org_label(str(row.get("deviceId") or ""))
+            if org is not None:
+                row["org"] = org
+        return rows
 
     def forget_access_request(self, key: str) -> bool:
         return self._access_requests.forget(key)
@@ -2814,7 +3066,10 @@ class ServerLink:
             # undecided, the directory advertises a key to pin, and that key is
             # attributed to this account — pairing on sight is for your own
             # machines, and anyone else's still has to knock first.
-            advertised = remote_roster.sign_public_key_for(device_id)
+            org_found = self._org_peer(device_id)
+            advertised = remote_roster.sign_public_key_for(device_id) or (
+                org_found[1]["signPublicKey"] if org_found else ""
+            )
             row["canTrust"] = (
                 # Pairing needs both machines present: the exchange is four
                 # frames and two people. Offering it against a device that is
@@ -2826,8 +3081,14 @@ class ServerLink:
                 # something this machine cannot check.
                 and row["trustState"] == "pending"
                 and bool(advertised)
-                and bool(self._own_member)
-                and self._member_id_for(device_id) == self._own_member
+                and (
+                    # This account's own machine…
+                    (bool(self._own_member) and self._member_id_for(device_id) == self._own_member)
+                    # …or one a live organisation grant makes reachable.
+                    # Pairing it lands in the member ring all the same: see
+                    # _own_device, which still reads only the account.
+                    or org_found is not None
+                )
             )
             # The one part of a pairing a server cannot fake, so it has to reach
             # the surface where the pairing is offered. Same digest the pending
@@ -2848,8 +3109,10 @@ class ServerLink:
             # the ledger is in memory here, the block list is in the policy
             # this machine already holds — so neither costs the server
             # anything.
-            "accessRequests": self._access_requests.list(),
+            "accessRequests": self.access_requests(),
             "blocked": device_trust.blocked_entries(self._policy),
+            # Cross-organisation grants and pins; see org_snapshot.
+            "org": self.org_snapshot(),
             # Two things a person has to be told, folded into the same read:
             # a device seen for the first time (a narrative — this is what got
             # pinned) and a pinned device whose key has changed (a refusal in
@@ -3444,6 +3707,9 @@ class ServerLink:
         any of its panes reported a live host — the same two sources the device
         list itself uses, so the button and the row can never disagree.
         """
+        found = self._org_peer(device_id)
+        if found is not None and found[1]["online"]:
+            return True
         if self._online_devices is not None:
             return device_id in self._online_devices
         return any(
@@ -3460,7 +3726,8 @@ class ServerLink:
         for row in self._directory or []:
             if str(row.get("deviceId") or "") == device_id:
                 return str(row.get("hostMemberId") or row.get("memberId") or "")
-        return ""
+        found = self._org_peer(device_id)
+        return found[1]["memberId"] if found else ""
 
     def _pending_context(self, device_id: str) -> dict[str, Any]:
         """What this machine knows about a device waiting to be vouched for.
@@ -3629,7 +3896,7 @@ class ServerLink:
         """
         if pairing is None or device_pairing.get(device_id) is not pairing:
             return False
-        device_pairing.cancel(device_id)
+        self._cancel_exchange(device_id)
         self._pairing_failures[device_id] = {
             "deviceId": device_id,
             "deviceName": pairing.device_name or self._device_name_for(device_id),
@@ -3728,6 +3995,10 @@ class ServerLink:
                     their_nonce=str(frame.get("nonce") or ""),
                 )
                 self._pairing_failures.pop(device_id, None)
+                # Only once the request is accepted: a refused one (an exchange
+                # already running) must not rewrite which grant that one began
+                # through.
+                self._note_pairing_grant(device_id)
                 await self._send_pair_frame(
                     device_id,
                     device_pairing.PAIR_RESPONSE,
@@ -3765,7 +4036,7 @@ class ServerLink:
                 device_pairing.note_peer_confirmed(device_id)
                 await self._finish_pairing(device_id, member_id=member_id)
             elif kind == device_pairing.PAIR_REJECT:
-                if device_pairing.cancel(device_id) is not None:
+                if self._cancel_exchange(device_id) is not None:
                     await asyncio.to_thread(
                         trust_store.note_pairing, device_id, kind="refused", device_name=name
                     )
@@ -3773,7 +4044,7 @@ class ServerLink:
                 # They unpaired. Dropping our side too keeps the two machines
                 # from disagreeing about whether they are paired — a state in
                 # which one of them silently refuses everything the other sends.
-                device_pairing.cancel(device_id)
+                self._cancel_exchange(device_id)
                 removed = await asyncio.to_thread(trust_store.forget_device, device_id)
                 if removed.get("found"):
                     await asyncio.to_thread(
@@ -3805,9 +4076,31 @@ class ServerLink:
         "which key does this machine trust for that device" has exactly one
         answer and one moment at which it was decided.
         """
+        found = self._org_peer(device_id)
+        try:
+            held = trust_store.pin_for(device_id)
+        except trust_store.TrustStoreLocked:
+            held = None  # the pin write below meets the same lock and says so
+        # Read, not taken: this runs once per confirm and only the second one
+        # completes, so the check has to still be there for that one.
+        began_through = self._pairing_grants.get(device_id, "")
+        if began_through and (found is None or found[0]["grantId"] != began_through):
+            # The exchange began through a grant that is gone (or replaced)
+            # by now: finishing it would pin the device outside any grant.
+            self._cancel_exchange(device_id)
+            log.info("not pairing %s: the organisation grant it began through ended", device_id)
+            return False
+        if held is not None and held.get("grantId") and found is None:
+            # A pin a grant earned can only be re-approved through a grant that
+            # is live now; otherwise a revoked organisation machine could pair
+            # its way back without the organisations linking again.
+            self._cancel_exchange(device_id)
+            log.info("not re-pairing %s: no live organisation grant reaches it", device_id)
+            return False
         pairing = device_pairing.complete(device_id)
         if pairing is None:
             return False
+        self._pairing_grants.pop(device_id, None)
         try:
             await asyncio.to_thread(
                 trust_store.pin_paired_device,
@@ -3816,6 +4109,14 @@ class ServerLink:
                 enc_key=pairing.their_enc_key,
                 member_id=member_id or member_id_for(device_id),
                 own_member_id=self._own_member,
+                # Recorded when the pairing ran through an organisation grant,
+                # never for this account's own machines: those pins stay as
+                # they always were and no grant can touch them.
+                org=(
+                    org_peers.pin_org(*found)
+                    if found is not None and found[1]["memberId"] != self._own_member
+                    else None
+                ),
             )
         except trust_store.TrustStoreFull as err:
             # Said where the person looks, not only in the log: the digits
@@ -3856,7 +4157,12 @@ class ServerLink:
             # that this side can never finish.
             return {"ok": False, "error": {"code": "TRUST_UNAVAILABLE",
                                            "message": self._trust_locked}}
-        if trust_store.pin_for(device_id) is not None:
+        held = trust_store.pin_for(device_id)
+        org_revoked = held is not None and bool(held.get("grantId")) and held.get("approved") is not True
+        if org_revoked and self._org_peer(device_id) is None:
+            return {"ok": False, "error": {"code": "ORG_LINK_REVOKED",
+                                           "message": "the organisation link to that device was revoked"}}
+        if held is not None and not org_revoked:
             return {"ok": False, "error": {"code": "ALREADY_PAIRED",
                                            "message": "that device is already paired"}}
         # Both machines, or neither. The exchange is four frames and two people;
@@ -3880,6 +4186,7 @@ class ServerLink:
             return {"ok": False, "error": {"code": "PAIRING_BUSY", "message": str(err)}}
         # A new round: what was said about how the last one ended is history.
         self._pairing_failures.pop(device_id, None)
+        self._note_pairing_grant(device_id)
         sent = await self._send_pair_frame(
             device_id,
             device_pairing.PAIR_REQUEST,
@@ -3890,7 +4197,7 @@ class ServerLink:
         if not sent:
             # Nothing is left half-started: the other side has heard nothing, so
             # a card here waiting on a reply would be waiting for ever.
-            device_pairing.cancel(device_id)
+            self._cancel_exchange(device_id)
             return self._unavailable()
         return {"ok": True, "payload": {"state": pairing.state}}
 
@@ -3902,7 +4209,7 @@ class ServerLink:
         said what that side wants — see ``device_pairing.complete``.
         """
         if not accept:
-            pairing = device_pairing.cancel(device_id)
+            pairing = self._cancel_exchange(device_id)
             if pairing is not None:
                 await self._send_pair_frame(device_id, device_pairing.PAIR_REJECT)
             await self._announce_trust_notices()
@@ -3925,7 +4232,7 @@ class ServerLink:
 
     async def revoke_pairing(self, device_id: str) -> None:
         """Tell the other side we unpaired, so the two do not disagree."""
-        device_pairing.cancel(device_id)
+        self._cancel_exchange(device_id)
         await self._send_pair_frame(device_id, device_pairing.PAIR_REVOKED)
 
     def pairing_rows(self) -> list[dict[str, Any]]:
@@ -3933,7 +4240,12 @@ class ServerLink:
         our_key = device_signing.public_key()
         our_enc_key = device_crypto.public_key()
         rows = []
-        for pairing in device_pairing.active():
+        live = device_pairing.active()
+        # An exchange that timed out leaves nothing to finish; neither should
+        # the note of which grant it began through.
+        for stale in set(self._pairing_grants) - {p.device_id for p in live}:
+            self._pairing_grants.pop(stale, None)
+        for pairing in live:
             rows.append(
                 {
                     "deviceId": pairing.device_id,
@@ -3948,6 +4260,8 @@ class ServerLink:
                     # When it stops waiting, so "already in progress" can say
                     # how long that is.
                     "expiresAt": pairing.deadline,
+                    # Another organisation's machine: which, and whose.
+                    **({"org": org} if (org := self._org_label(pairing.device_id)) else {}),
                 }
             )
         return rows
@@ -4059,6 +4373,17 @@ class ServerLink:
             await self._ack(msg_key, "rejected", reason="pairing-refused")
             return
 
+        # A pin an organisation grant earned and then lost (revoked, member
+        # removed, machine no longer shared, expired). Kept so the view can say
+        # what happened, but it no longer counts as paired, and the one-click
+        # rules written for it go with it.
+        held = trust_store.pin_for(sender_device)
+        if held is not None and held.get("grantId") and held.get("approved") is not True:
+            log.info("refusing message %s: the organisation link for %s was revoked",
+                     msg_key, sender_device)
+            await self._ack(msg_key, "rejected", reason=REASON_NOT_PAIRED)
+            return
+
         # Authenticity before authorization. Everything below this line reads
         # fields the relay writes; the signature is what says the relay only
         # *carried* them. A message that does not verify never reaches a trust
@@ -4104,7 +4429,7 @@ class ServerLink:
         refused = trust_ring == device_trust.RING_BLOCKED or (
             trust_ring != device_trust.RING_SELF
             and not pane_policy.is_allowed(
-                self._policy,
+                pane_policy.for_grant(self._policy, str((held or {}).get("grantId") or "")),
                 member_id=sender_member,
                 device_id=sender_device,
                 workspace=workspace,
@@ -4129,6 +4454,7 @@ class ServerLink:
                     device_name=self._device_name_for(sender_device),
                     workspace=workspace,
                     pane_name=pane_name,
+                    grant_id=str((held or {}).get("grantId") or ""),
                 )
                 await self._announce_access_requests()
             # One wire reason for both, deliberately: telling a sender that it
@@ -5114,10 +5440,7 @@ def member_id_for(device_id: str) -> str:
     """
     if _link is None:
         return ""
-    for row in _link._directory or []:
-        if str(row.get("deviceId") or "") == device_id:
-            return str(row.get("hostMemberId") or row.get("memberId") or "")
-    return ""
+    return _link._member_id_for(device_id)
 
 
 def access_requests() -> list[dict[str, Any]]:
@@ -5244,6 +5567,17 @@ async def registry_assertion(
     return await _link._carry(
         "auth.assertion.issue",
         {"aud": "registry", "scope": scope, "namespace": namespace, "challenge": challenge},
+    )
+
+
+async def org_assertion(*, challenge: str) -> dict[str, Any] | None:
+    """An assertion naming this account to the organisation site (aud "org",
+    scope "account"), bound to the main process's PKCE challenge. Same shape
+    and rules as ``registry_assertion``; None with no server configured."""
+    if _link is None:
+        return None
+    return await _link._carry(
+        "auth.assertion.issue", {"aud": "org", "scope": "account", "challenge": challenge}
     )
 
 

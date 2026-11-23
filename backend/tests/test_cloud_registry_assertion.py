@@ -164,3 +164,46 @@ async def test_identity_only_while_authenticated(monkeypatch: pytest.MonkeyPatch
     link._authenticated = False
     await ws_handlers.host_cloud_identity(session, "2", "host.cloud.identity", {})
     assert _sent(session)[-1]["payload"] == {"identity": None}
+
+
+# ---- host.cloud.org_assertion (organisation site handoff) -------------------
+
+
+@pytest.mark.asyncio
+async def test_org_assertion_asks_for_aud_org_and_returns_only_the_assertion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[dict[str, Any]] = []
+
+    async def fake_carry(msg_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+        seen.append({"type": msg_type, **payload})
+        return {"ok": True, "payload": {"assertion": "nvsa1.fake", "memberId": "m1", "expiresAt": 1}}
+
+    class _Link:
+        _carry = staticmethod(fake_carry)
+
+    monkeypatch.setattr(server_link, "_link", _Link())
+    session = _session(host=True)
+    await ws_handlers.host_cloud_org_assertion(
+        session, "1", "host.cloud.org_assertion", {"challenge": CHALLENGE}
+    )
+    assert seen == [{"type": "auth.assertion.issue", "aud": "org", "scope": "account", "challenge": CHALLENGE}]
+    assert _sent(session)[-1]["payload"] == {"assertion": "nvsa1.fake", "memberId": "m1"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("host,payload,code", [
+    (False, {"challenge": CHALLENGE}, "UNAUTHORIZED"),
+    (True, {"challenge": "short"}, "BAD_REQUEST"),
+    (True, {"challenge": CHALLENGE, "aud": "registry"}, "BAD_REQUEST"),
+])
+async def test_org_assertion_refuses_before_reaching_the_server(
+    monkeypatch: pytest.MonkeyPatch, host: bool, payload: dict, code: str
+) -> None:
+    async def fake(**_kwargs: Any) -> dict[str, Any]:
+        raise AssertionError("must not be called")
+
+    monkeypatch.setattr(server_link, "org_assertion", fake)
+    session = _session(host=host)
+    await ws_handlers.host_cloud_org_assertion(session, "1", "host.cloud.org_assertion", payload)
+    assert _sent(session)[-1]["error"]["code"] == code

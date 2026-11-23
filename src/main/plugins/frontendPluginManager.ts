@@ -10714,6 +10714,32 @@ export class FrontendPluginManager {
     }
   }
 
+  /** A short-lived organisation-site assertion for the signed-in Cloud
+   *  account, bound to `challenge` (main/orgHandoff.ts). Same rules as the
+   *  Registry one: only the assertion crosses, never the Cloud token. */
+  async requestCloudOrgAssertion(
+    challenge: string,
+  ): Promise<{ ok: true; assertion: string; memberId: string } | { ok: false; code: string; message: string }> {
+    // A navide://org/login link can start the app; give the Host session the
+    // time a cold start needs rather than failing before it exists.
+    const deadline = Date.now() + 20_000
+    while ((!this.wsClient || !this.hostSessionRegistered) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return { ok: false, code: 'HOST_NOT_READY', message: 'Navide Host session is not ready' }
+    const response = await client.send('host.cloud.org_assertion', { challenge }, 20_000)
+    const payload = response.ok ? response.payload as { assertion?: unknown; memberId?: unknown } | undefined : undefined
+    if (typeof payload?.assertion === 'string' && typeof payload.memberId === 'string') {
+      return { ok: true, assertion: payload.assertion, memberId: payload.memberId }
+    }
+    return {
+      ok: false,
+      code: response.error?.code ?? 'ASSERTION_UNAVAILABLE',
+      message: response.error?.message ?? 'the backend issued no assertion',
+    }
+  }
+
   /** Install the function that carries out an agent's plugins_disable /
    *  plugins_enable (plan B, B2-c): the Extensions Disabled switch for an
    *  installed Marketplace package, then a notice naming the caller. */

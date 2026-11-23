@@ -858,6 +858,52 @@ async def host_cloud_registry_assertion(
     )
 
 
+@handler("host.cloud.org_assertion")
+async def host_cloud_org_assertion(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """An assertion for the organisation site (Host-authenticated), for the
+    main process's App-to-site handoff. Like ``host.cloud.registry_assertion``:
+    only the main process holds the PKCE verifier, and only the assertion and
+    member id come back."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    challenge = payload.get("challenge") if isinstance(payload, dict) else None
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"challenge"}
+        or not isinstance(challenge, str)
+        or not _ASSERTION_CHALLENGE.fullmatch(challenge)
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "host.cloud.org_assertion is malformed")
+        )
+        return
+    from . import server_link
+
+    reply = await server_link.org_assertion(challenge=challenge)
+    if reply is None:
+        await session.send_json(
+            make_error(msg_id, msg_type, "CLOUD_NOT_CONFIGURED", "no Navide Cloud server is configured")
+        )
+        return
+    result = reply.get("payload") if reply.get("ok") else None
+    assertion = result.get("assertion") if isinstance(result, dict) else None
+    member_id = result.get("memberId") if isinstance(result, dict) else None
+    if not isinstance(assertion, str) or not isinstance(member_id, str):
+        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        code = error.get("code") if isinstance(error.get("code"), str) else "ASSERTION_UNAVAILABLE"
+        message = error.get("message") if isinstance(error.get("message"), str) else "the server issued no assertion"
+        await session.send_json(make_error(msg_id, msg_type, code, message))
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, {"assertion": assertion, "memberId": member_id})
+    )
+
+
 @handler("plugins.activity.report")
 async def plugins_activity_report(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -5812,12 +5858,30 @@ async def p2p_access_requests_approve(
         )
         return
 
+    # Which grant the sender was paired through, from the pin — the record the
+    # delivery path checks. When it cannot be read, a knock known to come from
+    # another organisation is refused: its rule would carry no grantId and
+    # outlive the grant. Every other knock is approved as it always was.
+    from_org = bool(request.get("grantId") or request.get("org"))
+    try:
+        pin = trust_store.pin_for(str(request["deviceId"])) or {}
+    except trust_store.TrustStoreLocked as err:
+        if from_org:
+            await session.send_json(make_error(msg_id, msg_type, "TRUST_UNAVAILABLE", str(err)))
+            return
+        pin = {}
+    grant_id = str(pin.get("grantId") or "")
+
     def add_rule(policy: dict) -> None:
         rule = {
             "from": {"memberId": request["memberId"], "deviceId": request["deviceId"]},
             "to": {"workspace": request["workspace"], "paneName": request["paneName"]},
             "action": "allow",
         }
+        # A knock from another organisation's machine: the rule is tied to the
+        # grant it was paired through and lapses with it (pane_policy.for_grant).
+        if grant_id:
+            rule["grantId"] = grant_id
         if rule not in policy["rules"]:
             policy["rules"].append(rule)
 

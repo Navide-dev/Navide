@@ -127,3 +127,32 @@ describe('rule list editing', () => {
     expect(before).toEqual(snapshot)
   })
 })
+
+describe('a rule tied to an organization grant', () => {
+  const tagged = {
+    from: { memberId: 'm-org', deviceId: 'dev-org' },
+    to: { workspace: 'proj', paneName: 'lead' },
+    action: 'allow',
+    grantId: 'g_1',
+  }
+  const raw = { version: 1, default: 'deny', rules: [tagged] }
+
+  it('keeps its grantId through reading', () => {
+    expect(readPolicy(raw).rules).toEqual([tagged])
+  })
+
+  it('keeps its grantId when any other rule is added, removed or toggled', () => {
+    const doc = readPolicy(raw)
+    const added = addRule(doc, makeRule({ memberId: 'm2', workspace: 'w', paneName: 'p' }))
+    expect(added.rules[0]).toEqual(tagged)
+    expect(removeRuleAt(added, 1).rules).toEqual([tagged])
+    expect(withOwnDevices(doc, 'm1', true).rules[0]).toEqual(tagged)
+    expect(withOwnDevices(withOwnDevices(doc, 'm1', true), 'm1', false).rules).toEqual([tagged])
+  })
+
+  it('is not the same rule as the untagged one', () => {
+    const { grantId: _drop, ...untagged } = tagged
+    expect(sameRule(readPolicy(raw).rules[0], untagged as never)).toBe(false)
+    expect(addRule(readPolicy(raw), untagged as never).rules).toHaveLength(2)
+  })
+})
