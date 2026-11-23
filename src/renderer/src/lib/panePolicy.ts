@@ -23,6 +23,8 @@ export interface PolicyRule {
    *  only through that grant, and must survive every rewrite of the document
    *  or the rule would outlive the grant (backend pane_policy.for_grant). */
   grantId?: string
+  /** When a grant-tagged rule was allowed; kept through rewrites like grantId. */
+  grantedAt?: number
 }
 
 export interface PolicyDocument {
@@ -47,11 +49,13 @@ function readRule(raw: unknown): PolicyRule | null {
   const paneName = text(to.paneName)
   if (!memberId || !deviceId || !workspace || !paneName) return null
   const grantId = text(rule.grantId)
+  const grantedAt = typeof rule.grantedAt === 'number' && Number.isFinite(rule.grantedAt) ? rule.grantedAt : undefined
   return {
     from: { memberId, deviceId },
     to: { workspace, paneName },
     action: 'allow',
     ...(grantId ? { grantId } : {}),
+    ...(grantId && grantedAt !== undefined ? { grantedAt } : {}),
   }
 }
 

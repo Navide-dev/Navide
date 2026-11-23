@@ -5772,7 +5772,8 @@ async def p2p_policy_set(session: "Session", msg_id: str, msg_type: str, payload
             )
             policy = {**policy, "blocked": carried}
 
-    reply = await server_link.set_policy(policy)
+    async with server_link.POLICY_WRITE_LOCK:
+        reply = await server_link.set_policy(policy)
     if reply is None:
         await session.send_json(
             make_error(
@@ -5890,6 +5891,9 @@ async def p2p_access_requests_approve(
         # grant it was paired through and lapses with it (pane_policy.for_grant).
         if grant_id:
             rule["grantId"] = grant_id
+            # When it was allowed, so a later re-pairing can tell this rule
+            # from one written for the pairing before it.
+            rule["grantedAt"] = time.time()
         if rule not in policy["rules"]:
             policy["rules"].append(rule)
 
@@ -6369,6 +6373,12 @@ async def _announce_requests() -> None:
 
 
 async def _write_policy(session: "Session", msg_id: str, msg_type: str, mutate) -> bool:
+    """See ``_write_policy_locked``; serialised with every other policy write."""
+    async with server_link.POLICY_WRITE_LOCK:
+        return await _write_policy_locked(session, msg_id, msg_type, mutate)
+
+
+async def _write_policy_locked(session: "Session", msg_id: str, msg_type: str, mutate) -> bool:
     """Read the cached policy, apply *mutate*, write the whole document back.
 
     Read-modify-write because the server's only write is a replace — it stores

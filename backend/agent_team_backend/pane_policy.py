@@ -144,7 +144,7 @@ def is_allowed(
     return policy.get("default") == "allow"
 
 
-def for_grant(policy: Any, grant_id: str) -> Any:
+def for_grant(policy: Any, grant_id: str, *, not_before: float = 0) -> Any:
     """*policy* as it applies to a sender paired through *grant_id*.
 
     A rule written by approving an organisation machine's knock carries the
@@ -154,15 +154,28 @@ def for_grant(policy: Any, grant_id: str) -> Any:
     ``grantId`` (written by hand, or for this account's own machines) applies
     as it always did. A sender with no grant at all is held to none of the
     grant-tagged rules.
+
+    ``not_before`` is when a pin that grant had dropped was approved again. A
+    grant-tagged rule allowed before then (or carrying no ``grantedAt``)
+    belongs to the earlier pairing and is left out, whether or not removing
+    it at the time could be written (spec 3.4.3: allowing it again is a new
+    decision).
     """
     if not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
         return policy
     rules = policy["rules"]
-    kept = [
-        rule
-        for rule in rules
-        if not (isinstance(rule, dict) and rule.get("grantId") and rule.get("grantId") != grant_id)
-    ]
+
+    def lapsed(rule: Any) -> bool:
+        if not (isinstance(rule, dict) and rule.get("grantId")):
+            return False
+        if rule.get("grantId") != grant_id:
+            return True
+        if not not_before:
+            return False
+        granted = rule.get("grantedAt")
+        return not isinstance(granted, (int, float)) or isinstance(granted, bool) or granted < not_before
+
+    kept = [rule for rule in rules if not lapsed(rule)]
     if len(kept) == len(rules):
         return policy
     return {**policy, "rules": kept}

@@ -172,3 +172,18 @@ describe('mayApplyToOrgMachines', () => {
     expect(mayApplyToOrgMachines(rule('m-org', 'dev-org', 'g_1'), MEMBER)).toBe(false)
   })
 })
+
+describe('a grant-tagged rule keeps when it was allowed', () => {
+  it('keeps grantedAt through reading and editing', () => {
+    const tagged = {
+      from: { memberId: 'm-org', deviceId: 'dev-org' },
+      to: { workspace: 'proj', paneName: 'lead' },
+      action: 'allow',
+      grantId: 'g_1',
+      grantedAt: 1763870000,
+    }
+    const doc = readPolicy({ version: 1, default: 'deny', rules: [tagged] })
+    expect(doc.rules).toEqual([tagged])
+    expect(addRule(doc, makeRule({ memberId: 'm2', workspace: 'w', paneName: 'p' })).rules[0]).toEqual(tagged)
+  })
+})

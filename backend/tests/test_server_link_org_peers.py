@@ -906,3 +906,73 @@ async def test_the_device_list_names_the_organisation_and_shows_revoked():
         assert rows[ORG_PEER.device_id]["trustState"] == "revoked"
     finally:
         await link.stop()
+
+
+async def test_an_old_one_click_rule_stays_lapsed_even_when_removing_it_could_not_be_written(broadcasts):
+    """The lapse is enforced where messages are judged: a re-approved pin
+    ignores grant-tagged rules allowed before it was approved again."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    old_rule = {**_org_rule(ORG_PEER), "grantedAt": 1}
+    state = {"grants": [_grant()]}
+
+    def responder(conn, message):
+        if message.get("type") == "policy.set":
+            return {"id": message["id"], "type": "policy.set.result", "ok": False,
+                    "error": {"code": "INTERNAL", "message": "write refused (test)"}}
+        return _org_responder(state)(conn, message)
+
+    server = FakeServer(responder=responder, policy={"version": 1, "default": "deny", "rules": [old_rule]})
+    link = await _connected(server)
+    try:
+        await _until(lambda: link._org_status == org_peers.STATUS_OK)
+        _pin_org()
+        conn = server.opened[0]
+        state["grants"] = [_grant("g_1", OTHER_ORG_PEER)]
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [ORG_PEER.device_id], "reason": "exposure-withdrawn", "at": 2})
+        assert server.policy["rules"][0]["grantId"] == "g_1"  # the removal could not be written
+
+        state["grants"] = [_grant()]
+        await link._refresh_peers()
+        await _pair(link, conn, tag="lapse")
+        assert trust_store.pin_for(ORG_PEER.device_id)["reapprovedAt"] > 1
+
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:l:1", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: any(a.get("msgKey") == "pa:l:1" for a in conn.acks))
+        (ack,) = [a for a in conn.acks if a.get("msgKey") == "pa:l:1"]
+        assert ack["reason"] == "policy-denied"
+        assert broadcasts == []
+    finally:
+        await link.stop()
+
+
+def test_for_grant_drops_rules_allowed_before_the_re_approval():
+    rule = _org_rule(ORG_PEER)
+    policy = {"version": 1, "default": "deny", "rules": [
+        {**rule, "grantedAt": 100}, {**rule, "to": {"workspace": "proj-a", "paneName": "other"}, "grantedAt": 300},
+        {**rule, "to": {"workspace": "proj-a", "paneName": "untimed"}},
+    ]}
+    kept = pane_policy.for_grant(policy, "g_1", not_before=200)["rules"]
+    assert [r["to"]["paneName"] for r in kept] == ["other"]
+    assert pane_policy.for_grant(policy, "g_1") is policy  # never re-approved: unchanged
+
+
+async def test_dropping_rules_waits_for_a_policy_write_in_progress():
+    import asyncio
+    from agent_team_backend import server_link as sl
+
+    policy = {"version": 1, "default": "deny", "rules": [_org_rule(ORG_PEER)]}
+    server, link = await _link_with({"grants": [_grant()]}, policy=policy)
+    try:
+        conn = server.opened[0]
+        before = len(conn.policy_sets)
+        async with sl.POLICY_WRITE_LOCK:
+            task = asyncio.ensure_future(link._drop_grant_rules({ORG_PEER.device_id: "g_1"}))
+            await asyncio.sleep(0.05)
+            assert len(conn.policy_sets) == before  # held back by the write in progress
+        await task
+        assert len(conn.policy_sets) == before + 1
+        assert server.policy["rules"] == []
+    finally:
+        await link.stop()
