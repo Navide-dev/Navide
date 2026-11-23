@@ -2268,12 +2268,6 @@ onUnmounted(() => {
                   >
                     {{ t('settings.p2p.trust.state-' + device.trustState) }}
                   </span>
-                  <!-- A machine reached through an organization says whose it
-                       is, so a paired one never reads as one of your own. -->
-                  <span v-if="!device.isLocal && device.org" class="dev-tag org-tag" data-org-tag v-truncate>
-                    {{ t(device.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: device.org.orgName }) }}<template
-                      v-if="device.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: device.org.ownerName }) }}</template>
-                  </span>
                   <!-- Asking, not granting. This used to pair the other
                        machine outright once you had typed four characters of
                        its fingerprint — one side deciding, the other finding
@@ -2318,6 +2312,15 @@ onUnmounted(() => {
                     {{ t('settings.p2p.trust.unpair') }}
                   </button>
                 </div>
+                <!-- A machine reached through an organization says whose it
+                     is, so a paired one never reads as one of your own. On its
+                     own line: beside the name it took the name's room. -->
+                <p v-if="!device.isLocal && device.org" class="dev-org">
+                  <span class="dev-tag org-tag" data-org-tag v-truncate>
+                    {{ t(device.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: device.org.orgName }) }}<template
+                      v-if="device.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: device.org.ownerName }) }}</template>
+                  </span>
+                </p>
                 <template v-if="!deviceFolded(device)">
                   <!-- One block per state, each foldable. The pane rows below
                        carry no status pill: the section they are in is the
@@ -2853,12 +2856,9 @@ input:focus {
 .dev-tag.ts-revoked { color: var(--danger-fg); }
 /* Another organization's machine, on the pairing and knock cards. */
 .dev-tag.org-tag { color: var(--accent-fg, var(--text-bright)); align-self: flex-start; }
-/* On a device row the organization gives way before the name does: the name is
-   what identifies the machine, the organization only qualifies it. */
-.dev-head .dev-tag.org-tag {
-  align-self: center; flex: 0 999 auto; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+/* The organization line under a device's name, indented to the name. */
+.dev-org { display: flex; min-width: 0; margin: 2px 0 0 30px; }
+.dev-org .dev-tag.org-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .org-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-muted); border-radius: 6px; }
 .org-facts dt { color: var(--text-secondary); }
 .org-facts dd { margin: 0; }

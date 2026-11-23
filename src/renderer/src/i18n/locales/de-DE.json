@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Gekoppelt (gleiche Organisation)",
         "state-pairing": "Wird verglichen",
         "state-ended": "Kopplung beendet",
-        "revoked-since": "seit {when}"
+        "revoked-since": "seit {when}",
+        "offline-note": "Der andere Rechner ist offline; die Kopplung lässt sich abschließen, sobald er online ist",
+        "act-failed": "Nicht abgeschlossen: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "Beliebiges Konto",
         "any-device": "Beliebiges Gerät",
         "any": "beliebig",
-        "org-note": "Diese Regel gilt auch für Rechner, die über eine Organisation gekoppelt sind"
+        "org-note": "Diese Regel gilt auch für Rechner, die über eine Organisation gekoppelt sind",
+        "grant-note": "Über eine Organisation erlaubt; endet, wenn die Organisationen getrennt werden"
       },
       "account": {
         "tab-login": "Anmelden",

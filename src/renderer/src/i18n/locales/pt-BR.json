@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Pareada (mesma organização)",
         "state-pairing": "Comparando",
         "state-ended": "Pareamento encerrado",
-        "revoked-since": "desde {when}"
+        "revoked-since": "desde {when}",
+        "offline-note": "A outra máquina está offline; o pareamento termina quando ela ficar online",
+        "act-failed": "Não concluído: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "Qualquer conta",
         "any-device": "Qualquer dispositivo",
         "any": "qualquer",
-        "org-note": "Esta regra também vale para máquinas pareadas por meio de uma organização"
+        "org-note": "Esta regra também vale para máquinas pareadas por meio de uma organização",
+        "grant-note": "Permitida por meio de uma organização; deixa de valer se as organizações forem desvinculadas"
       },
       "account": {
         "tab-login": "Entrar",

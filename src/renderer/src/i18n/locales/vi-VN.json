@@ -6911,7 +6911,9 @@
         "knock-paired-same": "Đã ghép đôi (cùng tổ chức)",
         "state-pairing": "Đang so khớp",
         "state-ended": "Đã kết thúc ghép đôi",
-        "revoked-since": "từ {when}"
+        "revoked-since": "từ {when}",
+        "offline-note": "Máy bên kia đang ngoại tuyến; có thể hoàn tất ghép đôi khi máy trực tuyến",
+        "act-failed": "Chưa hoàn tất: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "Bất kỳ tài khoản nào",
         "any-device": "Bất kỳ thiết bị nào",
         "any": "bất kỳ",
-        "org-note": "Quy tắc này cũng áp dụng cho các máy được ghép đôi qua tổ chức"
+        "org-note": "Quy tắc này cũng áp dụng cho các máy được ghép đôi qua tổ chức",
+        "grant-note": "Cho phép qua tổ chức; hết hiệu lực khi các tổ chức bị hủy liên kết"
       },
       "account": {
         "tab-login": "Đăng nhập",

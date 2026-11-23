@@ -6911,7 +6911,9 @@
         "knock-paired-same": "ペアリング済み（同じ組織）",
         "state-pairing": "照合中",
         "state-ended": "ペアリング終了",
-        "revoked-since": "{when} から"
+        "revoked-since": "{when} から",
+        "offline-note": "相手がオフラインです。オンラインになるとペアリングを完了できます",
+        "act-failed": "完了しませんでした：{reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "すべてのアカウント",
         "any-device": "すべてのデバイス",
         "any": "すべて",
-        "org-note": "このルールは組織経由でペアリングしたマシンにも適用されます"
+        "org-note": "このルールは組織経由でペアリングしたマシンにも適用されます",
+        "grant-note": "組織経由でワンクリック許可。組織の接続が解除されると一緒に無効になります"
       },
       "account": {
         "tab-login": "ログイン",

@@ -6911,7 +6911,9 @@
         "knock-paired-same": "페어링됨(같은 조직)",
         "state-pairing": "비교 중",
         "state-ended": "페어링 종료",
-        "revoked-since": "{when}부터"
+        "revoked-since": "{when}부터",
+        "offline-note": "상대 기기가 오프라인입니다. 온라인이 되면 페어링을 완료할 수 있습니다",
+        "act-failed": "완료되지 않았습니다: {reason}"
       }
     },
     "sync": {
@@ -7312,7 +7314,8 @@
         "any-member": "모든 계정",
         "any-device": "모든 기기",
         "any": "모두",
-        "org-note": "이 규칙은 조직을 통해 페어링한 기기에도 적용됩니다"
+        "org-note": "이 규칙은 조직을 통해 페어링한 기기에도 적용됩니다",
+        "grant-note": "조직을 통해 한 번에 허용됨. 조직 연결이 해제되면 함께 무효가 됩니다"
       },
       "account": {
         "tab-login": "로그인",
