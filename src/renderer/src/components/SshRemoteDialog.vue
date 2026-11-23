@@ -145,7 +145,7 @@ async function connect(force = false): Promise<void> {
           <span class="lb">{{ $t('sshRemote.recent-label') }}</span>
           <p v-if="!recent.length" class="muted">{{ $t('sshRemote.recent-empty') }}</p>
           <div v-else class="recent" data-testid="ssh-recent">
-            <button v-for="r in recent" :key="sshTargetLabel(r)" type="button" class="recent-row" data-testid="ssh-recent-row" @click="fill(r)">
+            <button v-for="r in recent" :key="sshTargetLabel(r)" type="button" class="recent-row" data-testid="ssh-recent-row" v-truncate @click="fill(r)">
               {{ sshTargetLabel(r) }}
             </button>
           </div>
