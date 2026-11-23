@@ -109,6 +109,18 @@ describe('CloudOrgPeersSection', () => {
     expect(send).toHaveBeenCalledWith('p2p.pair.confirm', expect.objectContaining({ deviceId: 'dev-1', accept: true }))
   })
 
+  it('shows a same-organization grant as your own members, first, never as a linked organization', async () => {
+    const same = { ...grant, grantId: 'g_same', peerOrg: { ...grant.localOrg }, sameOrg: true, peers: [peer('dev-7')] }
+    await mountWith({ ok: true, payload: { org: { status: 'ok', grants: [grant, same], revokedGrants: [] }, pairings: [] } })
+    const cards = wrapper!.findAll('[data-grant-id]')
+    expect(cards.map((c) => c.attributes('data-grant-id'))).toEqual(['g_same', 'g_1'])
+    const own = cards[0]
+    expect(own.text()).toContain(i18n.global.t('settings.cloud.org.same-org-title', { org: 'Galaxy Studio' }))
+    expect(own.text()).toContain(i18n.global.t('settings.cloud.org.same-org-badge'))
+    expect(own.text()).not.toContain(i18n.global.t('settings.cloud.org.linked'))
+    expect(cards[1].text()).toContain(i18n.global.t('settings.cloud.org.linked'))
+  })
+
   it('shows revoked organization links with their reason, and pairing disabled', async () => {
     await mountWith({
       ok: true,

@@ -2822,6 +2822,7 @@ class ServerLink:
                 "grantId": grant["grantId"],
                 "orgName": grant["peerOrg"]["name"],
                 "ownerName": peer["ownerName"],
+                "sameOrg": grant["sameOrg"],
             }
         try:
             pin = trust_store.pin_for(device_id)
@@ -2833,6 +2834,7 @@ class ServerLink:
                 "grantId": str(pin.get("grantId")),
                 "orgName": str(org.get("orgName") or ""),
                 "ownerName": str(org.get("ownerName") or ""),
+                "sameOrg": org.get("sameOrg") is True,
             }
         return None
 
@@ -2890,7 +2892,7 @@ class ServerLink:
             group = gone.setdefault(
                 pin["grantId"],
                 {"grantId": pin["grantId"], "peerOrg": {"orgId": pin["orgId"], "name": pin["orgName"]},
-                 "revoked": pin["revoked"], "peers": []},
+                 "sameOrg": pin["sameOrg"], "revoked": pin["revoked"], "peers": []},
             )
             group["peers"].append(self._revoked_row(device_id, pin))
         return {
@@ -4441,8 +4443,20 @@ class ServerLink:
         await self._remember_inbound(msg_key)
         await self._ensure_policy()
         # Read again: a revocation can land during the awaits above, and the
-        # rings and rules below must see the pin as it is now.
+        # rings and rules below must see the pin as it is now. A pin that went
+        # away or changed meanwhile is not the one the signature was checked
+        # against, so the message is refused rather than judged without it.
+        first = held
         held = trust_store.pin_for(sender_device)
+        if first is not None and (
+            held is None
+            or held.get("grantId") != first.get("grantId")
+            or held.get("signKey") != first.get("signKey")
+        ):
+            log.info("refusing message %s: the pin for %s changed while it was checked",
+                     msg_key, sender_device)
+            await self._ack(msg_key, "rejected", reason=REASON_NOT_PAIRED)
+            return
         if held is not None and held.get("grantId") and held.get("approved") is not True:
             log.info("refusing message %s: the organisation link for %s was revoked",
                      msg_key, sender_device)
@@ -4452,6 +4466,12 @@ class ServerLink:
         # when it was paired, not the one in the frame, which the relay writes:
         # otherwise a frame claiming this account's member id would match the
         # "my own devices" rule. A frame that disagrees with the pin is refused.
+        #
+        # A pin without a grantId keeps the frame's member id, as before
+        # organisations existed. For an approved pin of this account the self
+        # ring below answers before any rule is read, so that value has no
+        # effect there; for a pin of another account taken outside any grant it
+        # is what the rules see, exactly as it always was.
         if held is not None and held.get("grantId"):
             pinned_member = str(held.get("memberId") or "")
             if not pinned_member or sender_member != pinned_member:

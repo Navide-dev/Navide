@@ -37,6 +37,8 @@ export interface OrgGrant {
   expiresAt?: number
   localOrg?: { orgId: string; name: string }
   peerOrg: { orgId: string; name: string }
+  /** Both sides are one organization: members of your own, not a linked one. */
+  sameOrg?: boolean
   revoked?: { reason: string; at: number }
   peers: OrgPeerRow[]
 }
@@ -91,7 +93,12 @@ onMounted(() => {
 onBeforeUnmount(() => window.clearInterval(timer))
 
 const joined = computed(() => org.value?.status === 'ok')
-const grants = computed(() => (joined.value ? org.value?.grants ?? [] : []))
+const allGrants = computed(() => (joined.value ? org.value?.grants ?? [] : []))
+/** Your own organization's members first, then the linked organizations. */
+const grants = computed(() => [
+  ...allGrants.value.filter((g) => g.sameOrg),
+  ...allGrants.value.filter((g) => !g.sameOrg),
+])
 const revokedGrants = computed(() => org.value?.revokedGrants ?? [])
 const localOrgName = computed(() => grants.value.find((g) => g.localOrg?.name)?.localOrg?.name ?? '')
 
@@ -199,10 +206,15 @@ function initial(name: string): string {
     <SettingsCard v-for="grant in grants" :key="grant.grantId" class="org-card" :data-grant-id="grant.grantId">
       <div class="org-card-head">
         <span class="org-avatar" aria-hidden="true">{{ initial(grant.peerOrg.name) }}</span>
-        <span class="org-name" v-truncate>{{ grant.peerOrg.name }}</span>
+        <span class="org-name" v-truncate>
+          {{ grant.sameOrg ? t('settings.cloud.org.same-org-title', { org: grant.peerOrg.name }) : grant.peerOrg.name }}
+        </span>
         <span class="org-sub">{{ t('settings.cloud.org.machines', { count: grant.peers.filter((p) => p.listed).length }) }}</span>
-        <span class="org-badge ok">{{ t('settings.cloud.org.linked') }}</span>
+        <span class="org-badge ok" :data-same-org="grant.sameOrg ? '' : undefined">
+          {{ grant.sameOrg ? t('settings.cloud.org.same-org-badge') : t('settings.cloud.org.linked') }}
+        </span>
       </div>
+      <p v-if="grant.sameOrg" class="org-hint org-card-hint">{{ t('settings.cloud.org.same-org-hint') }}</p>
       <ul class="org-list">
         <li v-for="row in grant.peers" :key="row.deviceId" class="org-row" :data-device-id="row.deviceId">
           <span class="org-dot" :class="{ on: row.online }" aria-hidden="true"></span>
@@ -267,7 +279,9 @@ function initial(name: string): string {
     <SettingsCard v-for="grant in revokedGrants" :key="'gone:' + grant.grantId" class="org-card" :data-revoked-grant-id="grant.grantId">
       <div class="org-card-head">
         <span class="org-avatar muted" aria-hidden="true">{{ initial(grant.peerOrg.name) }}</span>
-        <span class="org-name" v-truncate>{{ grant.peerOrg.name }}</span>
+        <span class="org-name" v-truncate>
+          {{ grant.sameOrg ? t('settings.cloud.org.same-org-title', { org: grant.peerOrg.name }) : grant.peerOrg.name }}
+        </span>
         <span class="org-badge danger">{{ reasonLabel(grant.revoked?.reason) }}</span>
       </div>
       <div class="org-revoked" data-notice="revoked">
@@ -326,6 +340,9 @@ function initial(name: string): string {
 }
 .org-card {
   margin-bottom: 10px;
+}
+.org-card-hint {
+  padding: 6px var(--space-row-x) 0;
 }
 .org-card-head {
   display: grid;

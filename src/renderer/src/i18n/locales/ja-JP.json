@@ -6904,7 +6904,12 @@
         "refresh": "再読み込み",
         "loading": "読み込み中…",
         "paired-on": "{when} にペアリング",
-        "pairing-elsewhere": "6 桁の照合中です。両方のマシンで確認してください"
+        "pairing-elsewhere": "6 桁の照合中です。両方のマシンで確認してください",
+        "same-org-title": "自分の組織のメンバー · {org}",
+        "same-org-hint": "同じ組織のメンバーが自分で公開したマシンです。ペアリングは引き続き 6 桁の照合で行い、双方が「一致」を押すと完了します。",
+        "same-org-badge": "同じ組織",
+        "same-org-tag": "同じ組織のメンバー · {org}",
+        "knock-paired-same": "ペアリング済み（同じ組織）"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "自分のアカウント",
         "any-member": "すべてのアカウント",
         "any-device": "すべてのデバイス",
-        "any": "すべて"
+        "any": "すべて",
+        "org-note": "このルールは組織経由でペアリングしたマシンにも適用されます"
       },
       "account": {
         "tab-login": "ログイン",

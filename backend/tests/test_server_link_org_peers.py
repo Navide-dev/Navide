@@ -238,7 +238,7 @@ async def test_the_pairing_card_names_the_organisation():
     try:
         assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is True
         (row,) = link.pairing_rows()
-        assert row["org"] == {"grantId": "g_1", "orgName": "北辰設計", "ownerName": "陳怡君"}
+        assert row["org"] == {"grantId": "g_1", "orgName": "北辰設計", "ownerName": "陳怡君", "sameOrg": False}
     finally:
         await link.stop()
 
@@ -694,3 +694,58 @@ async def test_a_revocation_during_authentication_is_seen_before_the_rules(broad
         assert broadcasts == []
     finally:
         await link.stop()
+
+
+async def test_a_pin_forgotten_during_authentication_refuses_the_message(broadcasts, monkeypatch):
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server, link = await _link_with({"grants": [_grant()]}, policy=ALLOW_ALL_POLICY)
+    try:
+        _pin_org()
+        original = link._ensure_policy
+
+        async def unpair_meanwhile():
+            trust_store.forget_device(ORG_PEER.device_id)
+            await original()
+
+        monkeypatch.setattr(link, "_ensure_policy", unpair_meanwhile)
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:gone:1", member_id="m1", peer=ORG_PEER)})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0] == {"msgKey": "pa:gone:1", "state": "rejected", "reason": "not-paired"}
+        assert broadcasts == []
+    finally:
+        await link.stop()
+
+
+
+def _same_org_grant(grant_id: str = "g_same") -> dict:
+    grant = _grant(grant_id)
+    grant["peerOrg"] = dict(grant["localOrg"])
+    return grant
+
+
+async def test_a_same_organisation_grant_is_marked_and_still_lands_in_the_member_ring(broadcasts):
+    """Members of one organisation pair through a grant whose two sides are the
+    same orgId. The view says so; trust is exactly the cross-organisation one:
+    the pin carries the grant and never reaches the own-device ring."""
+    server, link = await _link_with({"grants": [_same_org_grant()]})
+    try:
+        (grant,) = link.network_snapshot()["org"]["grants"]
+        assert grant["sameOrg"] is True
+        await _pair(link, server.opened[0], tag="same")
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin["grantId"] == "g_same"
+        assert pin["org"]["sameOrg"] is True
+        assert pin["memberId"] == ORG_MEMBER
+        assert link._own_device(pin) is False
+        assert link._org_label(ORG_PEER.device_id)["sameOrg"] is True
+    finally:
+        await link.stop()
+
+
+def test_parse_marks_same_organisation_grants_only_when_both_ids_match():
+    (same,) = org_peers.parse({"grants": [_same_org_grant()]})
+    (linked,) = org_peers.parse({"grants": [_grant()]})
+    (blank,) = org_peers.parse({"grants": [{"grantId": "g", "peers": []}]})
+    assert (same["sameOrg"], linked["sameOrg"], blank["sameOrg"]) == (True, False, False)

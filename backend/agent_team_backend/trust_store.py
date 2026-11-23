@@ -1800,6 +1800,7 @@ def _pin_org_fields(org: dict[str, str]) -> dict[str, str]:
         "orgId": str(org.get("orgId") or "")[:200],
         "orgName": str(org.get("orgName") or "")[:200],
         "ownerName": str(org.get("ownerName") or "")[:200],
+        "sameOrg": org.get("sameOrg") is True,
     }
 
 
@@ -1893,6 +1894,7 @@ def org_pins() -> list[dict[str, Any]]:
                     "orgId": str(org.get("orgId") or ""),
                     "orgName": str(org.get("orgName") or ""),
                     "ownerName": str(org.get("ownerName") or ""),
+                    "sameOrg": org.get("sameOrg") is True,
                     "approved": pin.get("approved") is True,
                     "pairedAt": pin.get("at"),
                     "revoked": dict(revoked) if revoked else None,

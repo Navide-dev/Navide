@@ -6904,7 +6904,12 @@
         "refresh": "Làm mới",
         "loading": "Đang tải…",
         "paired-on": "Đã ghép đôi lúc {when}",
-        "pairing-elsewhere": "Đang so sánh sáu chữ số — hãy kiểm tra trên cả hai máy"
+        "pairing-elsewhere": "Đang so sánh sáu chữ số — hãy kiểm tra trên cả hai máy",
+        "same-org-title": "Thành viên tổ chức của bạn · {org}",
+        "same-org-hint": "Các máy mà thành viên trong chính tổ chức của bạn tự chọn chia sẻ. Ghép đôi vẫn dùng phép so sánh sáu chữ số và chỉ hoàn tất khi cả hai bên đều bấm “Khớp”.",
+        "same-org-badge": "Cùng tổ chức",
+        "same-org-tag": "Thành viên tổ chức của bạn · {org}",
+        "knock-paired-same": "Đã ghép đôi (cùng tổ chức)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "Tài khoản của tôi",
         "any-member": "Bất kỳ tài khoản nào",
         "any-device": "Bất kỳ thiết bị nào",
-        "any": "bất kỳ"
+        "any": "bất kỳ",
+        "org-note": "Quy tắc này cũng áp dụng cho các máy được ghép đôi qua tổ chức"
       },
       "account": {
         "tab-login": "Đăng nhập",

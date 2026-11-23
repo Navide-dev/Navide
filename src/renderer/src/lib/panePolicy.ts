@@ -98,6 +98,20 @@ export function makeRule(input: {
   }
 }
 
+/**
+ * Whether a rule can also let a machine paired through an organization in.
+ *
+ * Shown, not restricted: such a rule is the user's own, and the format denies
+ * by default. A rule tagged with a grant is that organization pairing's own;
+ * one naming this account's member is not reachable by an organization
+ * machine (it is judged by the member its grant named). Everything else —
+ * a wildcard member, or another account's member — may be.
+ */
+export function mayApplyToOrgMachines(rule: PolicyRule, ownMemberId: string): boolean {
+  if (rule.grantId) return false
+  return rule.from.memberId === ANY || rule.from.memberId !== text(ownMemberId)
+}
+
 export function sameRule(a: PolicyRule, b: PolicyRule): boolean {
   return (
     a.from.memberId === b.from.memberId &&
