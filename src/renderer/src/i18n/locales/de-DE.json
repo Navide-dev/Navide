@@ -6874,7 +6874,7 @@
         "manage": "Auf org.navide.dev verwalten",
         "manage-failed": "Die Organisationsseite konnte nicht geöffnet werden: {reason}",
         "not-joined": "Noch in keiner Organisation. Sobald du einer beitrittst oder eine erstellst, erscheinen hier Rechner, die verbundene Organisationen freigeben.",
-        "not-exposed": "Dieser Rechner ist für die Organisation noch nicht freigegeben. Richte das auf org.navide.dev ein.",
+        "not-exposed": "Noch in keiner Organisation, oder dieser Rechner ist für keine freigegeben. Auf org.navide.dev kannst du das ansehen und einrichten.",
         "machines": "{count} Rechner freigegeben",
         "linked": "Verbunden",
         "owner": "Besitzer {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "Angehalten lassen",
         "rebuild-done": "Der Vertrauenseintrag wurde gelöscht. Koppeln Sie Ihre Geräte erneut, wenn Sie so weit sind.",
         "locked-retrying": "Dies ist möglicherweise vorübergehend – ein gesperrter Schlüsselbund oder ein weggeklickter Berechtigungsdialog sieht von hier aus genauso aus. Es wird weiter versucht; wenn es sich klärt, ist nichts verloren.",
-        "approve-trust-unavailable": "Dieser Rechner kann seinen Vertrauenseintrag derzeit nicht lesen, daher wurde keine Regel geschrieben. Kümmern Sie sich zuerst um die Karte „Navide Cloud ist angehalten“ unten (klicken Sie zum Beispiel auf „Neu beginnen“) und erlauben Sie die Anfrage dann erneut."
+        "approve-trust-unavailable": "Dieser Rechner kann seinen Vertrauenseintrag derzeit nicht lesen, daher wurde keine Regel geschrieben. Kümmern Sie sich zuerst um die Karte „Navide Cloud ist angehalten“ unten (klicken Sie zum Beispiel auf „Neu beginnen“) und erlauben Sie die Anfrage dann erneut.",
+        "state-revoked": "Organisationsverbindung aufgehoben"
       },
       "link": {
         "pause": "Ausschalten",

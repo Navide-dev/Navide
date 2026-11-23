@@ -144,7 +144,9 @@ interface NetworkPane {
 }
 
 interface NetworkDevice {
-  /** self | trusted | pending | blocked — where this device stands with this
+  /** Set for a machine reached through an organization grant. */
+  org?: OrgLabel
+  /** self | trusted | pending | blocked | revoked — where this device stands with this
    *  machine. The list said nothing about it, so an unvouched device looked
    *  exactly like a vouched one while the card above asked you to confirm it. */
   trustState?: string
@@ -2266,6 +2268,12 @@ onUnmounted(() => {
                   >
                     {{ t('settings.p2p.trust.state-' + device.trustState) }}
                   </span>
+                  <!-- A machine reached through an organization says whose it
+                       is, so a paired one never reads as one of your own. -->
+                  <span v-if="!device.isLocal && device.org" class="dev-tag org-tag" data-org-tag v-truncate>
+                    {{ t(device.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: device.org.orgName }) }}<template
+                      v-if="device.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: device.org.ownerName }) }}</template>
+                  </span>
                   <!-- Asking, not granting. This used to pair the other
                        machine outright once you had typed four characters of
                        its fingerprint — one side deciding, the other finding
@@ -2842,6 +2850,7 @@ input:focus {
 .dev-tag.ts-trusted { color: var(--success-fg); }
 .dev-tag.ts-pending { color: var(--attention-fg); }
 .dev-tag.ts-blocked { color: var(--danger-fg); }
+.dev-tag.ts-revoked { color: var(--danger-fg); }
 /* Another organization's machine, on the pairing and knock cards. */
 .dev-tag.org-tag { color: var(--accent-fg, var(--text-bright)); align-self: flex-start; }
 .org-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-muted); border-radius: 6px; }

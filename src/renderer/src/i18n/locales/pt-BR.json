@@ -6874,7 +6874,7 @@
         "manage": "Gerenciar em org.navide.dev",
         "manage-failed": "Não foi possível abrir o site da organização: {reason}",
         "not-joined": "Você ainda não está em uma organização. Ao entrar ou criar uma, as máquinas compartilhadas pelas organizações vinculadas aparecem aqui.",
-        "not-exposed": "Esta máquina ainda não está compartilhada com a organização. Configure em org.navide.dev.",
+        "not-exposed": "Você ainda não está em uma organização, ou esta máquina não está compartilhada com nenhuma. Veja e configure em org.navide.dev.",
         "machines": "{count} máquinas compartilhadas",
         "linked": "Vinculada",
         "owner": "Proprietário {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "Manter parado",
         "rebuild-done": "O registro de confiança foi limpo. Pareie seus dispositivos de novo quando quiser.",
         "locked-retrying": "Isto pode ser temporário: um chaveiro bloqueado ou uma caixa de permissão dispensada têm a mesma aparência daqui. Ainda há novas tentativas; se resolver, nada terá sido perdido.",
-        "approve-trust-unavailable": "Esta máquina não consegue ler o registro de confiança agora, então nenhuma regra foi gravada. Resolva primeiro o cartão “O Navide Cloud está parado” abaixo (por exemplo, pressione “Recomeçar”) e depois permita a solicitação de novo."
+        "approve-trust-unavailable": "Esta máquina não consegue ler o registro de confiança agora, então nenhuma regra foi gravada. Resolva primeiro o cartão “O Navide Cloud está parado” abaixo (por exemplo, pressione “Recomeçar”) e depois permita a solicitação de novo.",
+        "state-revoked": "Vínculo de organização revogado"
       },
       "link": {
         "pause": "Desativar",

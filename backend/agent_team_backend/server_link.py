@@ -2742,6 +2742,7 @@ class ServerLink:
         if changed:
             log.info("organisation grants no longer back %d pinned device(s)", len(changed))
             await self._announce_trust_notices()
+            await self._drop_grant_rules(self._grants_of(changed))
 
     async def _on_grant_revoked(self, payload: Any) -> None:
         """``org.grant.revoked``: downgrade that grant's pins, keep them."""
@@ -2777,6 +2778,7 @@ class ServerLink:
         if changed:
             log.info("grant %s revoked (%s): downgraded %d pin(s)", grant_id, reason, len(changed))
             await self._announce_trust_notices()
+            await self._drop_grant_rules({device: grant_id for device in changed})
         # Off the local copy before asking again, so a refresh that fails
         # cannot leave the revoked grant (or devices) available to pair through.
         self._drop_from_grants(grant_id, device_ids)
@@ -2805,6 +2807,59 @@ class ServerLink:
             self._pairing_grants[device_id] = found[0]["grantId"]
         else:
             self._pairing_grants.pop(device_id, None)
+
+    def _org_pin_revoked(self, device_id: str) -> bool:
+        try:
+            pin = trust_store.pin_for(device_id)
+        except trust_store.TrustStoreLocked:
+            return False
+        return bool(pin and pin.get("grantId") and pin.get("approved") is not True)
+
+    async def _drop_grant_rules(self, downgraded: dict[str, str]) -> None:
+        """Remove the one-click rules of pins a grant no longer backs.
+
+        *downgraded* is device id -> the grant its pin was paired through. A
+        rule tagged with that grant and naming that device goes (spec 3.4.3:
+        allowing it again is a new decision); rules for other devices of the
+        same grant, and untagged rules, stay. Written back through set_policy,
+        so the document is signed again. Never raises.
+        """
+        policy = self._policy
+        if not downgraded or not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
+            return
+
+        def lapsed(rule: Any) -> bool:
+            if not isinstance(rule, dict) or not rule.get("grantId"):
+                return False
+            source = rule.get("from") if isinstance(rule.get("from"), dict) else {}
+            return downgraded.get(str(source.get("deviceId") or "")) == rule.get("grantId")
+
+        kept = [rule for rule in policy["rules"] if not lapsed(rule)]
+        if len(kept) == len(policy["rules"]):
+            return
+        document = {k: v for k, v in policy.items() if k != POLICY_SIGNATURE_FIELD}
+        document["rules"] = kept
+        try:
+            reply = await self.set_policy(document)
+        except Exception as err:  # noqa: BLE001 - re-pairing tries again
+            log.warning("could not drop the rules of revoked organisation pins: %s", err)
+            return
+        if not reply.get("ok"):
+            log.warning("could not drop the rules of revoked organisation pins: %s", reply.get("error"))
+        else:
+            log.info("dropped %d rule(s) of revoked organisation pins", len(policy["rules"]) - len(kept))
+
+    @staticmethod
+    def _grants_of(device_ids: list[str]) -> dict[str, str]:
+        out = {}
+        for device_id in device_ids:
+            try:
+                grant_id = str((trust_store.pin_for(device_id) or {}).get("grantId") or "")
+            except trust_store.TrustStoreLocked:
+                continue
+            if grant_id:
+                out[device_id] = grant_id
+        return out
 
     def _org_peer(self, device_id: str) -> tuple[dict, dict] | None:
         return org_peers.find(self._org_grants, device_id)
@@ -3074,6 +3129,15 @@ class ServerLink:
             # device, opposite stories.
             device_id = str(row.get("deviceId") or "")
             row["trustState"] = self._trust_state(device_id, is_local=bool(row.get("isLocal")))
+            # Another organisation's machine (or a member of this one), said
+            # on the row so it never reads as one of this account's own; a pin
+            # its grant no longer backs reads as revoked rather than pending.
+            if not row.get("isLocal"):
+                org_label = self._org_label(device_id)
+                if org_label is not None:
+                    row["org"] = org_label
+                    if row["trustState"] == "pending" and self._org_pin_revoked(device_id):
+                        row["trustState"] = "revoked"
             # Whether this row can be paired from here, without waiting for the
             # other machine to send anything. True needs three things: it is
             # undecided, the directory advertises a key to pin, and that key is
@@ -4160,6 +4224,11 @@ class ServerLink:
         if pairing is None:
             return False
         self._pairing_grants.pop(device_id, None)
+        if held is not None and held.get("grantId") and held.get("approved") is not True:
+            # Re-pairing a pin a grant had dropped: its old one-click rules
+            # must not come back with it, even if dropping them at the time of
+            # the downgrade could not be written.
+            await self._drop_grant_rules({device_id: str(held.get("grantId"))})
         try:
             await asyncio.to_thread(
                 trust_store.pin_paired_device,

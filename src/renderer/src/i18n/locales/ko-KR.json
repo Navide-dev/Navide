@@ -6874,7 +6874,7 @@
         "manage": "org.navide.dev에서 관리",
         "manage-failed": "조직 사이트를 열 수 없습니다: {reason}",
         "not-joined": "아직 조직에 가입하지 않았습니다. 조직에 가입하거나 만들면 연결된 조직이 공개한 기기가 여기에 표시됩니다.",
-        "not-exposed": "이 기기는 아직 조직에 공개되지 않았습니다. org.navide.dev에서 설정하세요.",
+        "not-exposed": "아직 조직에 가입하지 않았거나 이 기기가 조직에 공개되지 않았습니다. org.navide.dev에서 확인하고 설정할 수 있습니다.",
         "machines": "기기 {count}대 공개",
         "linked": "연결됨",
         "owner": "소유자 {name}",
@@ -7438,7 +7438,8 @@
         "rebuild-cancel": "중지 상태 유지",
         "rebuild-done": "신뢰 기록을 지웠어요. 준비되면 기기를 다시 페어링하세요.",
         "locked-retrying": "일시적인 문제일 수 있어요. 키체인이 잠겼거나 권한 대화 상자를 닫은 경우도 여기서는 똑같이 보여요. 계속 재시도 중이며, 해결되면 잃은 것은 없어요.",
-        "approve-trust-unavailable": "이 컴퓨터가 지금 신뢰 기록을 읽을 수 없어서 규칙을 쓰지 않았어요. 먼저 아래의 “Navide Cloud가 중지됨” 카드를 처리한 뒤(예: “처음부터 다시” 누르기) 이 요청을 다시 허용하세요."
+        "approve-trust-unavailable": "이 컴퓨터가 지금 신뢰 기록을 읽을 수 없어서 규칙을 쓰지 않았어요. 먼저 아래의 “Navide Cloud가 중지됨” 카드를 처리한 뒤(예: “처음부터 다시” 누르기) 이 요청을 다시 허용하세요.",
+        "state-revoked": "조직 연결이 해제됨"
       },
       "link": {
         "pause": "끄기",
