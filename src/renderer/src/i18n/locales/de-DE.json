@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "Organisation gelöscht",
         "reason-lapsed": "Organisationsverbindung abgelaufen",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "Organisationsverbindung aufgehoben",
-        "revoked-body": "Die Kopplungen mit allen Rechnern dieser Organisation sind wieder „nicht bestätigt“; die Einträge bleiben unten erhalten. Ihre Nachrichten werden jetzt als not-paired abgewiesen. Zum Wiederherstellen die Organisationen auf teams.navide.dev erneut verbinden und dann erneut sechsstellig koppeln.",
+        "revoked-body": "Die Kopplungen mit allen Rechnern dieser Organisation sind wieder „nicht bestätigt“, und ihre Nachrichten werden nicht mehr zugestellt. Die Einträge bleiben unten erhalten. Zum Wiederherstellen die Organisationen auf teams.navide.dev erneut verknüpfen und dann wieder mit sechs Ziffern koppeln.",
         "repair-hint": "Organisationen auf teams.navide.dev erneut verbinden, dann erneut sechsstellig koppeln",
         "pair": "Koppeln",
         "unpair": "Kopplung aufheben",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "Rechner, die Mitglieder deiner eigenen Organisation selbst freigegeben haben. Gekoppelt wird weiterhin per sechsstelligem Vergleich – fertig erst, wenn beide Seiten „Stimmt überein“ drücken.",
         "same-org-badge": "Gleiche Organisation",
         "same-org-tag": "Mitglied deiner Organisation · {org}",
-        "knock-paired-same": "Gekoppelt (gleiche Organisation)"
+        "knock-paired-same": "Gekoppelt (gleiche Organisation)",
+        "state-pairing": "Wird verglichen",
+        "state-ended": "Kopplung beendet",
+        "revoked-since": "seit {when}"
       }
     },
     "sync": {

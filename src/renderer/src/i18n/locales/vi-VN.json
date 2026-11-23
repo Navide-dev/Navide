@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "Tổ chức đã bị xóa",
         "reason-lapsed": "Liên kết tổ chức đã hết hạn",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "Đã thu hồi liên kết tổ chức",
-        "revoked-body": "Ghép đôi với mọi máy của tổ chức này đã trở về “chưa phê duyệt”; lịch sử vẫn giữ bên dưới. Tin nhắn họ gửi giờ bị từ chối với lý do not-paired. Để khôi phục, hãy liên kết lại các tổ chức trên teams.navide.dev rồi ghép đôi sáu chữ số lần nữa.",
+        "revoked-body": "Ghép đôi với mọi máy của tổ chức này đã trở về “chưa phê duyệt” và tin nhắn họ gửi sẽ không còn được chuyển tới. Lịch sử vẫn giữ bên dưới. Để khôi phục, hãy liên kết lại các tổ chức trên teams.navide.dev rồi ghép đôi lại bằng sáu chữ số.",
         "repair-hint": "Liên kết lại các tổ chức trên teams.navide.dev rồi ghép đôi sáu chữ số lần nữa",
         "pair": "Ghép đôi",
         "unpair": "Hủy ghép đôi",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "Các máy mà thành viên trong chính tổ chức của bạn tự chọn chia sẻ. Ghép đôi vẫn dùng phép so sánh sáu chữ số và chỉ hoàn tất khi cả hai bên đều bấm “Khớp”.",
         "same-org-badge": "Cùng tổ chức",
         "same-org-tag": "Thành viên tổ chức của bạn · {org}",
-        "knock-paired-same": "Đã ghép đôi (cùng tổ chức)"
+        "knock-paired-same": "Đã ghép đôi (cùng tổ chức)",
+        "state-pairing": "Đang so khớp",
+        "state-ended": "Đã kết thúc ghép đôi",
+        "revoked-since": "từ {when}"
       }
     },
     "sync": {

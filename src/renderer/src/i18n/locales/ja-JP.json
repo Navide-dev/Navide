@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "組織が削除されました",
         "reason-lapsed": "組織の接続が失効しました",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "組織の接続が取り消されました",
-        "revoked-body": "この組織のすべてのマシンとのペアリングは「未承認」に戻りました。記録は下に残ります。今後送られてくるメッセージは not-paired として拒否されます。元に戻すには、teams.navide.dev で組織を再接続してから、もう一度 6 桁でペアリングしてください。",
+        "revoked-body": "この組織のすべてのマシンとのペアリングは「未承認」に戻り、そのマシンからのメッセージは届かなくなりました。記録は下に残ります。元に戻すには、teams.navide.dev で組織を再接続してから、もう一度 6 桁でペアリングしてください。",
         "repair-hint": "teams.navide.dev で組織を再接続してから、もう一度 6 桁でペアリングしてください",
         "pair": "ペアリング",
         "unpair": "ペアリング解除",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "同じ組織のメンバーが自分で公開したマシンです。ペアリングは引き続き 6 桁の照合で行い、双方が「一致」を押すと完了します。",
         "same-org-badge": "同じ組織",
         "same-org-tag": "同じ組織のメンバー · {org}",
-        "knock-paired-same": "ペアリング済み（同じ組織）"
+        "knock-paired-same": "ペアリング済み（同じ組織）",
+        "state-pairing": "照合中",
+        "state-ended": "ペアリング終了",
+        "revoked-since": "{when} から"
       }
     },
     "sync": {

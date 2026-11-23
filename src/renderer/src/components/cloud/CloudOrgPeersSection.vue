@@ -62,7 +62,7 @@ interface OrgPairing {
 const POLL_MS = 3000
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 const org = ref<OrgSnapshot | null>(null)
 const pairings = ref<OrgPairing[]>([])
@@ -143,7 +143,7 @@ function when(at: number | null | undefined): string {
   if (!at) return ''
   // Revocations carry milliseconds, pins seconds.
   const ms = at > 10_000_000_000 ? at : at * 1000
-  return new Date(ms).toLocaleString(undefined, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(ms).toLocaleString(locale.value, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
 function reasonLabel(reason: string | undefined): string {
@@ -153,6 +153,7 @@ function reasonLabel(reason: string | undefined): string {
 
 function stateLabel(row: OrgPeerRow): string {
   if (row.trustState === 'revoked') return reasonLabel(row.revoked?.reason)
+  if (row.trustState !== 'trusted' && pairingFor(row.deviceId)) return t('settings.cloud.org.state-pairing')
   if (row.trustState === 'trusted') return t('settings.cloud.org.state-trusted')
   if (row.trustState === 'blocked') return t('settings.cloud.org.state-blocked')
   return t('settings.cloud.org.state-pending')
@@ -160,6 +161,7 @@ function stateLabel(row: OrgPeerRow): string {
 
 function stateTone(row: OrgPeerRow): string {
   if (row.trustState === 'trusted') return 'ok'
+  if (pairingFor(row.deviceId)) return 'accent'
   if (row.trustState === 'revoked') return row.revoked?.reason === 'exposure-withdrawn' ? 'warn' : 'danger'
   return 'muted'
 }
@@ -187,7 +189,12 @@ function initial(name: string): string {
 <template>
   <SettingsSection :label="t('settings.cloud.org.title')">
     <div class="org-head">
-      <p class="org-hint">
+      <p v-if="!loaded" class="org-hint">{{ t('settings.cloud.org.loading') }}</p>
+      <p v-else-if="!joined" class="org-hint" data-notice="not-joined">{{ t('settings.cloud.org.not-joined') }}</p>
+      <p v-else-if="!grants.length && !revokedGrants.length" class="org-hint" data-notice="not-exposed">
+        {{ t('settings.cloud.org.not-exposed') }}
+      </p>
+      <p v-else class="org-hint">
         {{ localOrgName ? t('settings.cloud.org.intro', { org: localOrgName }) : t('settings.cloud.org.intro-generic') }}
       </p>
       <button type="button" class="org-manage" data-action="manage" @click="manage">
@@ -196,11 +203,6 @@ function initial(name: string): string {
     </div>
     <p v-if="manageError" class="org-note" data-notice="manage-failed">{{ manageError }}</p>
 
-    <p v-if="!loaded" class="org-note">{{ t('settings.cloud.org.loading') }}</p>
-    <p v-else-if="!joined" class="org-note" data-notice="not-joined">{{ t('settings.cloud.org.not-joined') }}</p>
-    <p v-else-if="!grants.length && !revokedGrants.length" class="org-note" data-notice="not-exposed">
-      {{ t('settings.cloud.org.not-exposed') }}
-    </p>
     <p v-if="error" class="org-note danger" data-notice="error">{{ error }}</p>
 
     <SettingsCard v-for="grant in grants" :key="grant.grantId" class="org-card" :data-grant-id="grant.grantId">
@@ -285,9 +287,9 @@ function initial(name: string): string {
         <span class="org-badge danger">{{ reasonLabel(grant.revoked?.reason) }}</span>
       </div>
       <div class="org-revoked" data-notice="revoked">
-        <p class="org-revoked-title">⚠ {{ t('settings.cloud.org.revoked-title') }}</p>
-        <p class="org-device-sub">
-          {{ t('settings.cloud.org.revoked-on', { when: when(grant.revoked?.at), reason: reasonLabel(grant.revoked?.reason) }) }}
+        <p class="org-revoked-title">
+          {{ reasonLabel(grant.revoked?.reason) }}
+          <span v-if="grant.revoked?.at" class="org-revoked-when">{{ t('settings.cloud.org.revoked-since', { when: when(grant.revoked.at) }) }}</span>
         </p>
         <p class="org-device-sub">{{ t('settings.cloud.org.revoked-body') }}</p>
       </div>
@@ -298,7 +300,7 @@ function initial(name: string): string {
             <span class="org-device-name" v-truncate>{{ row.deviceName || row.deviceId }}</span>
             <span class="org-device-sub">{{ [row.ownerName ? t('settings.cloud.org.owner', { name: row.ownerName }) : '', row.pairedAt ? t('settings.cloud.org.paired-on', { when: when(row.pairedAt) }) : ''].filter(Boolean).join(' · ') }}</span>
           </span>
-          <span class="org-badge danger" data-state="revoked">{{ reasonLabel(row.revoked?.reason) }}</span>
+          <span class="org-badge" data-state="revoked">{{ t('settings.cloud.org.state-ended') }}</span>
           <button type="button" class="org-btn" data-action="pair" disabled :title="t('settings.cloud.org.repair-hint')">
             {{ t('settings.cloud.org.pair') }}
           </button>
@@ -343,6 +345,10 @@ function initial(name: string): string {
 }
 .org-card-hint {
   padding: 6px var(--space-row-x) 0;
+}
+.org-card-head > .org-badge {
+  grid-column: 4;
+  justify-self: end;
 }
 .org-card-head {
   display: grid;
@@ -427,6 +433,10 @@ function initial(name: string): string {
   color: var(--success-fg, #3fb950);
   border-color: currentColor;
 }
+.org-badge.accent {
+  color: var(--accent-fg, var(--text-primary));
+  border-color: currentColor;
+}
 .org-badge.warn {
   color: var(--warning-fg, #d29922);
   border-color: currentColor;
@@ -491,5 +501,14 @@ function initial(name: string): string {
   font-weight: 600;
   color: var(--danger-fg, #f85149);
   margin: 0 0 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.org-revoked-when {
+  font-weight: 400;
+  font-size: var(--font-row-desc);
+  color: var(--text-secondary);
 }
 </style>

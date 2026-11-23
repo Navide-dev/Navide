@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "Organisation supprimée",
         "reason-lapsed": "Lien d’organisation expiré",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "Lien d’organisation révoqué",
-        "revoked-body": "Les appairages avec toutes les machines de cette organisation sont repassés à « non approuvé » ; l’historique reste ci-dessous. Leurs messages sont désormais refusés comme not-paired. Pour rétablir, reliez à nouveau les organisations sur teams.navide.dev, puis refaites l’appairage à six chiffres.",
+        "revoked-body": "Les appairages avec toutes les machines de cette organisation sont repassés à « non approuvé » et leurs messages ne sont plus remis. L’historique reste ci-dessous. Pour rétablir, reliez à nouveau les organisations sur teams.navide.dev, puis appairez de nouveau avec six chiffres.",
         "repair-hint": "Reliez à nouveau les organisations sur teams.navide.dev, puis refaites l’appairage à six chiffres",
         "pair": "Appairer",
         "unpair": "Dissocier",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "Machines que des membres de votre propre organisation ont choisi de partager. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
         "same-org-badge": "Même organisation",
         "same-org-tag": "Membre de votre organisation · {org}",
-        "knock-paired-same": "Appairée (même organisation)"
+        "knock-paired-same": "Appairée (même organisation)",
+        "state-pairing": "Comparaison en cours",
+        "state-ended": "Appairage terminé",
+        "revoked-since": "depuis le {when}"
       }
     },
     "sync": {

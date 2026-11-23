@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "Organization deleted",
         "reason-lapsed": "Organization link expired",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "Organization link revoked",
-        "revoked-body": "Pairings with every machine of this organization are back to “not approved”; the records stay below. Messages they send are now refused as not-paired. To restore, link the organizations again on teams.navide.dev, then pair with six digits again.",
+        "revoked-body": "Pairings with every machine of this organization are back to “not approved”, and messages from them are no longer delivered. The records stay below. To restore, link the organizations again on teams.navide.dev, then pair with six digits again.",
         "repair-hint": "Link the organizations again on teams.navide.dev, then pair with six digits again",
         "pair": "Pair",
         "unpair": "Unpair",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "Machines that members of your own organization chose to share. Pairing still uses the six-digit comparison and is done only when both sides press Match.",
         "same-org-badge": "Same organization",
         "same-org-tag": "Member of your organization · {org}",
-        "knock-paired-same": "Paired (same organization)"
+        "knock-paired-same": "Paired (same organization)",
+        "state-pairing": "Comparing",
+        "state-ended": "Pairing ended",
+        "revoked-since": "since {when}"
       }
     },
     "sync": {

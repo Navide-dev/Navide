@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "조직이 삭제됨",
         "reason-lapsed": "조직 연결이 만료됨",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "조직 연결이 해제됨",
-        "revoked-body": "이 조직의 모든 기기와의 페어링이 「미승인」으로 돌아갔고 기록은 아래에 남아 있습니다. 이후 이 기기들이 보내는 메시지는 not-paired로 거부됩니다. 복구하려면 teams.navide.dev에서 조직을 다시 연결한 뒤 6자리 페어링을 다시 진행하세요.",
+        "revoked-body": "이 조직의 모든 기기와의 페어링이 「미승인」으로 돌아갔고, 이 기기들이 보내는 메시지는 더 이상 전달되지 않습니다. 기록은 아래에 남아 있습니다. 복구하려면 teams.navide.dev에서 조직을 다시 연결한 뒤 6자리 페어링을 다시 진행하세요.",
         "repair-hint": "teams.navide.dev에서 조직을 다시 연결한 뒤 6자리 페어링을 다시 진행하세요",
         "pair": "페어링",
         "unpair": "페어링 해제",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "같은 조직 멤버가 직접 공개한 기기입니다. 페어링은 여전히 6자리 비교로 진행되며, 양쪽이 모두 「일치」를 눌러야 완료됩니다.",
         "same-org-badge": "같은 조직",
         "same-org-tag": "같은 조직 멤버 · {org}",
-        "knock-paired-same": "페어링됨(같은 조직)"
+        "knock-paired-same": "페어링됨(같은 조직)",
+        "state-pairing": "비교 중",
+        "state-ended": "페어링 종료",
+        "revoked-since": "{when}부터"
       }
     },
     "sync": {

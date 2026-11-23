@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "組織已刪除",
         "reason-lapsed": "組織連結已失效",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "組織連結已撤銷",
-        "revoked-body": "這個組織所有機器的配對已一起改回「未核准」，紀錄保留在下面。之後它們送來的訊息會以 not-paired 拒收。要恢復，得先在 teams.navide.dev 重新互連，再走一次六碼配對。",
+        "revoked-body": "這個組織所有機器的配對已一起改回「未核准」，它們送來的訊息不會再送達。紀錄保留在下面。要恢復，先在 teams.navide.dev 重新互連，再走一次六碼配對。",
         "repair-hint": "先在 teams.navide.dev 重新互連，再走一次六碼配對",
         "pair": "配對",
         "unpair": "解除配對",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "和你同組織的成員自己選擇公開的機器。配對一樣走六碼比對，兩邊都按「一致」才算完成。",
         "same-org-badge": "同組織",
         "same-org-tag": "同組織成員 · {org}",
-        "knock-paired-same": "已配對（同組織成員）"
+        "knock-paired-same": "已配對（同組織成員）",
+        "state-pairing": "比對中",
+        "state-ended": "配對已結束",
+        "revoked-since": "自 {when} 起"
       }
     },
     "sync": {
