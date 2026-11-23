@@ -6904,7 +6904,12 @@
         "refresh": "重新整理",
         "loading": "讀取中…",
         "paired-on": "曾於 {when} 配對",
-        "pairing-elsewhere": "六碼比對進行中，請在兩台機器上核對"
+        "pairing-elsewhere": "六碼比對進行中，請在兩台機器上核對",
+        "same-org-title": "本組織成員 · {org}",
+        "same-org-hint": "和你同組織的成員自己選擇公開的機器。配對一樣走六碼比對，兩邊都按「一致」才算完成。",
+        "same-org-badge": "同組織",
+        "same-org-tag": "同組織成員 · {org}",
+        "knock-paired-same": "已配對（同組織成員）"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "我的帳號",
         "any-member": "任何帳號",
         "any-device": "任何裝置",
-        "any": "不限"
+        "any": "不限",
+        "org-note": "這條規則也適用於透過組織配對的機器"
       },
       "account": {
         "tab-login": "登入",

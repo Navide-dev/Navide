@@ -6904,7 +6904,12 @@
         "refresh": "Aktualisieren",
         "loading": "Wird geladen…",
         "paired-on": "Gekoppelt am {when}",
-        "pairing-elsewhere": "Sechsstelliger Vergleich läuft – auf beiden Rechnern prüfen"
+        "pairing-elsewhere": "Sechsstelliger Vergleich läuft – auf beiden Rechnern prüfen",
+        "same-org-title": "Mitglieder deiner Organisation · {org}",
+        "same-org-hint": "Rechner, die Mitglieder deiner eigenen Organisation selbst freigegeben haben. Gekoppelt wird weiterhin per sechsstelligem Vergleich – fertig erst, wenn beide Seiten „Stimmt überein“ drücken.",
+        "same-org-badge": "Gleiche Organisation",
+        "same-org-tag": "Mitglied deiner Organisation · {org}",
+        "knock-paired-same": "Gekoppelt (gleiche Organisation)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "Mein Konto",
         "any-member": "Beliebiges Konto",
         "any-device": "Beliebiges Gerät",
-        "any": "beliebig"
+        "any": "beliebig",
+        "org-note": "Diese Regel gilt auch für Rechner, die über eine Organisation gekoppelt sind"
       },
       "account": {
         "tab-login": "Anmelden",

@@ -92,13 +92,17 @@ def parse(payload: Any) -> list[dict[str, Any]]:
             )
             if len(peers) >= MAX_PEERS_PER_GRANT:
                 break
+        local_org, peer_org = _org(raw.get("localOrg")), _org(raw.get("peerOrg"))
         grants.append(
             {
                 "grantId": grant_id,
                 "version": _int(raw.get("version")),
                 "expiresAt": _int(raw.get("expiresAt")),
-                "localOrg": _org(raw.get("localOrg")),
-                "peerOrg": _org(raw.get("peerOrg")),
+                "localOrg": local_org,
+                "peerOrg": peer_org,
+                # Both sides in one organisation: members of your own
+                # organisation, not a linked one. Still other accounts.
+                "sameOrg": bool(local_org["orgId"]) and local_org["orgId"] == peer_org["orgId"],
                 "peers": peers,
             }
         )
@@ -130,4 +134,5 @@ def pin_org(grant: dict[str, Any], peer: dict[str, Any]) -> dict[str, str]:
         "orgId": grant["peerOrg"]["orgId"],
         "orgName": grant["peerOrg"]["name"],
         "ownerName": peer["ownerName"],
+        "sameOrg": grant["sameOrg"],
     }

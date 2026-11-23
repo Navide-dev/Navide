@@ -6904,7 +6904,12 @@
         "refresh": "刷新",
         "loading": "读取中…",
         "paired-on": "曾于 {when} 配对",
-        "pairing-elsewhere": "六码比对进行中，请在两台机器上核对"
+        "pairing-elsewhere": "六码比对进行中，请在两台机器上核对",
+        "same-org-title": "本组织成员 · {org}",
+        "same-org-hint": "和你同组织的成员自己选择公开的机器。配对一样走六码比对，两边都按「一致」才算完成。",
+        "same-org-badge": "同组织",
+        "same-org-tag": "同组织成员 · {org}",
+        "knock-paired-same": "已配对（同组织成员）"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "我的账号",
         "any-member": "任何账号",
         "any-device": "任何设备",
-        "any": "不限"
+        "any": "不限",
+        "org-note": "这条规则也适用于通过组织配对的机器"
       },
       "account": {
         "tab-login": "登录",

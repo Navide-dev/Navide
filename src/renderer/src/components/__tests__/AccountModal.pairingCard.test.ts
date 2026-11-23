@@ -118,6 +118,12 @@ describe('the pairing card for another organization', () => {
     expect(card().find('.pair-code').text()).toBe('482 913')
   })
 
+  it('says "member of your organization" for a same-organization pairing', async () => {
+    await mountWith({ ...EXCHANGE, org: { ...ORG, orgName: 'Galaxy Studio', sameOrg: true } })
+    expect(card().find('[data-org-tag]').text()).toBe(t('settings.cloud.org.same-org-tag', { org: 'Galaxy Studio' }))
+    expect(card().text()).not.toContain(t('settings.cloud.org.from-org', { org: 'Galaxy Studio' }))
+  })
+
   it('adds nothing for one of your own machines', async () => {
     await mountWith(EXCHANGE)
     expect(card().find('[data-org-tag]').exists()).toBe(false)
@@ -166,6 +172,12 @@ describe('a knock from another organization', () => {
     expect(wrapper!.find('[data-org-facts]').text()).toContain(t('settings.cloud.org.owner', { name: 'Chen' }))
     expect(wrapper!.text()).toContain(t('settings.cloud.org.allow-one'))
     expect(wrapper!.find('[data-org-hint]').exists()).toBe(true)
+  })
+
+  it('says "member of your organization" on a same-organization knock', async () => {
+    await mountKnock({ grantId: 'g_same', orgName: 'Galaxy Studio', ownerName: 'Chen', sameOrg: true } as never)
+    expect(wrapper!.find('[data-org-tag]').text()).toBe(t('settings.cloud.org.same-org-tag', { org: 'Galaxy Studio' }))
+    expect(wrapper!.find('[data-org-facts]').text()).toContain(t('settings.cloud.org.knock-paired-same'))
   })
 
   it('looks exactly as before for a knock with no organization', async () => {

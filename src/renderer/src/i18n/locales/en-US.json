@@ -6904,7 +6904,12 @@
         "refresh": "Refresh",
         "loading": "Loading…",
         "paired-on": "Paired on {when}",
-        "pairing-elsewhere": "Six-digit comparison in progress — check both machines"
+        "pairing-elsewhere": "Six-digit comparison in progress — check both machines",
+        "same-org-title": "Members of your organization · {org}",
+        "same-org-hint": "Machines that members of your own organization chose to share. Pairing still uses the six-digit comparison and is done only when both sides press Match.",
+        "same-org-badge": "Same organization",
+        "same-org-tag": "Member of your organization · {org}",
+        "knock-paired-same": "Paired (same organization)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "My account",
         "any-member": "Any account",
         "any-device": "Any device",
-        "any": "any"
+        "any": "any",
+        "org-note": "This rule also applies to machines paired through an organization"
       },
       "account": {
         "tab-login": "Sign In",

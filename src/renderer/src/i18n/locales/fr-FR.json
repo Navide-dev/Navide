@@ -6904,7 +6904,12 @@
         "refresh": "Actualiser",
         "loading": "Chargement…",
         "paired-on": "Appairée le {when}",
-        "pairing-elsewhere": "Comparaison à six chiffres en cours — vérifiez sur les deux machines"
+        "pairing-elsewhere": "Comparaison à six chiffres en cours — vérifiez sur les deux machines",
+        "same-org-title": "Membres de votre organisation · {org}",
+        "same-org-hint": "Machines que des membres de votre propre organisation ont choisi de partager. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
+        "same-org-badge": "Même organisation",
+        "same-org-tag": "Membre de votre organisation · {org}",
+        "knock-paired-same": "Appairée (même organisation)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "Mon compte",
         "any-member": "N’importe quel compte",
         "any-device": "N’importe quel appareil",
-        "any": "n’importe lequel"
+        "any": "n’importe lequel",
+        "org-note": "Cette règle s’applique aussi aux machines appairées via une organisation"
       },
       "account": {
         "tab-login": "Se connecter",

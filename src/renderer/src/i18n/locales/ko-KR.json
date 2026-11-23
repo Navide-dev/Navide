@@ -6904,7 +6904,12 @@
         "refresh": "새로 고침",
         "loading": "불러오는 중…",
         "paired-on": "{when}에 페어링",
-        "pairing-elsewhere": "6자리 비교 진행 중 — 두 기기에서 확인하세요"
+        "pairing-elsewhere": "6자리 비교 진행 중 — 두 기기에서 확인하세요",
+        "same-org-title": "내 조직 멤버 · {org}",
+        "same-org-hint": "같은 조직 멤버가 직접 공개한 기기입니다. 페어링은 여전히 6자리 비교로 진행되며, 양쪽이 모두 「일치」를 눌러야 완료됩니다.",
+        "same-org-badge": "같은 조직",
+        "same-org-tag": "같은 조직 멤버 · {org}",
+        "knock-paired-same": "페어링됨(같은 조직)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "내 계정",
         "any-member": "모든 계정",
         "any-device": "모든 기기",
-        "any": "모두"
+        "any": "모두",
+        "org-note": "이 규칙은 조직을 통해 페어링한 기기에도 적용됩니다"
       },
       "account": {
         "tab-login": "로그인",

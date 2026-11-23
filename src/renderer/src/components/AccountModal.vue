@@ -198,6 +198,8 @@ interface OrgLabel {
   grantId: string
   orgName: string
   ownerName: string
+  /** A member of your own organization rather than of a linked one. */
+  sameOrg?: boolean
 }
 
 /** A device that tried to reach a pane here and was refused. */
@@ -1556,7 +1558,7 @@ onUnmounted(() => {
                    same as pairing one of your own machines. -->
               <template v-if="row.org">
                 <span class="dev-tag org-tag" data-org-tag>
-                  {{ t('settings.cloud.org.from-org', { org: row.org.orgName }) }}
+                  {{ t(row.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: row.org.orgName }) }}
                 </span>
                 <dl class="org-facts" data-org-facts>
                   <dt>{{ t('settings.cloud.org.field-org') }}</dt><dd>{{ row.org.orgName }}</dd>
@@ -1741,13 +1743,13 @@ onUnmounted(() => {
                 </span>
               </div>
               <span v-if="req.org" class="dev-tag org-tag" data-org-tag>
-                {{ t('settings.cloud.org.from-org', { org: req.org.orgName }) }}
+                {{ t(req.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: req.org.orgName }) }}
               </span>
               <p class="req-what">
                 {{ t('settings.p2p.trust.wants', { workspace: req.workspace, pane: req.paneName }) }}
               </p>
               <p v-if="req.org" class="pend-facts" data-org-facts>
-                <span class="ok-text">{{ t('settings.cloud.org.knock-paired') }}</span>
+                <span class="ok-text">{{ t(req.org.sameOrg ? 'settings.cloud.org.knock-paired-same' : 'settings.cloud.org.knock-paired') }}</span>
                 <span v-if="req.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: req.org.ownerName }) }}</span>
               </p>
               <div class="req-acts">

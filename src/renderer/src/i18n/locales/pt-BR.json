@@ -6904,7 +6904,12 @@
         "refresh": "Atualizar",
         "loading": "Carregando…",
         "paired-on": "Pareada em {when}",
-        "pairing-elsewhere": "Comparação de seis dígitos em andamento — confira nas duas máquinas"
+        "pairing-elsewhere": "Comparação de seis dígitos em andamento — confira nas duas máquinas",
+        "same-org-title": "Membros da sua organização · {org}",
+        "same-org-hint": "Máquinas que membros da sua própria organização escolheram compartilhar. O pareamento continua usando a comparação de seis dígitos e só termina quando os dois lados tocam em “Coincidem”.",
+        "same-org-badge": "Mesma organização",
+        "same-org-tag": "Membro da sua organização · {org}",
+        "knock-paired-same": "Pareada (mesma organização)"
       }
     },
     "sync": {
@@ -7304,7 +7309,8 @@
         "my-account": "Minha conta",
         "any-member": "Qualquer conta",
         "any-device": "Qualquer dispositivo",
-        "any": "qualquer"
+        "any": "qualquer",
+        "org-note": "Esta regra também vale para máquinas pareadas por meio de uma organização"
       },
       "account": {
         "tab-login": "Entrar",

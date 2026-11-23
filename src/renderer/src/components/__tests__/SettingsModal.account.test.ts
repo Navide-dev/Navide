@@ -443,3 +443,16 @@ describe('the cross-device page after the re-audit', () => {
     expect(SETTINGS).not.toContain('p2p-tabs')
   })
 })
+
+describe('rule list discloses rules that also reach organization machines', () => {
+  it('shows the note on a rule row, from the shared helper, in every language', async () => {
+    expect(SETTINGS).toMatch(/v-if="mayApplyToOrgMachines\(rule, policyMemberId\)"[\s\S]{0,120}settings\.p2p\.policy\.org-note/)
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    for (const locale of ['de-DE', 'en-US', 'es-ES', 'fr-FR', 'ja-JP', 'ko-KR', 'pt-BR', 'ru-RU', 'vi-VN', 'zh-CN', 'zh-TW']) {
+      const messages = JSON.parse(readFileSync(resolve(__dirname, `../../i18n/locales/${locale}.json`), 'utf8'))
+      expect(messages.settings.p2p.policy['org-note'], locale).toBeTruthy()
+      expect(messages.settings.p2p.policy['org-note'], locale).not.toMatch(/禁止|限制/)
+    }
+  })
+})

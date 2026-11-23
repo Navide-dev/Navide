@@ -4,6 +4,7 @@ import {
   addRule,
   allowsOwnDevices,
   makeRule,
+  mayApplyToOrgMachines,
   ownDevicesRule,
   readPolicy,
   removeRuleAt,
@@ -154,5 +155,20 @@ describe('a rule tied to an organization grant', () => {
     const { grantId: _drop, ...untagged } = tagged
     expect(sameRule(readPolicy(raw).rules[0], untagged as never)).toBe(false)
     expect(addRule(readPolicy(raw), untagged as never).rules).toHaveLength(2)
+  })
+})
+
+describe('mayApplyToOrgMachines', () => {
+  const rule = (memberId: string, deviceId: string, grantId?: string) => ({
+    ...makeRule({ memberId, deviceId, workspace: 'w', paneName: 'p' }),
+    ...(grantId ? { grantId } : {}),
+  })
+
+  it('flags wildcard members and other accounts, not this account or a grant-tagged rule', () => {
+    expect(mayApplyToOrgMachines(rule(ANY, ANY), MEMBER)).toBe(true)
+    expect(mayApplyToOrgMachines(rule('someone-else', 'dev-x'), MEMBER)).toBe(true)
+    expect(mayApplyToOrgMachines(rule(MEMBER, ANY), MEMBER)).toBe(false)
+    expect(mayApplyToOrgMachines(ownDevicesRule(MEMBER), MEMBER)).toBe(false)
+    expect(mayApplyToOrgMachines(rule('m-org', 'dev-org', 'g_1'), MEMBER)).toBe(false)
   })
 })

@@ -93,6 +93,7 @@ import {
   addRule as addPolicyRuleTo,
   allowsOwnDevices,
   makeRule as makePolicyRule,
+  mayApplyToOrgMachines,
   readPolicy,
   removeRuleAt as removePolicyRuleAt,
   withOwnDevices,
@@ -4506,6 +4507,12 @@ watch(activeTab, (tab) => {
                   <li v-for="(rule, index) in policyDoc.rules" :key="index" class="policy-rule">
                     <span class="policy-rule-from">
                       {{ policyMemberLabel(rule.from.memberId) }} · {{ policyDeviceLabel(rule.from.deviceId) }}
+                      <!-- Disclosed rather than narrowed: the rule is the user's,
+                           and it may also let in a machine paired through an
+                           organization. -->
+                      <small v-if="mayApplyToOrgMachines(rule, policyMemberId)" class="policy-org-note" data-org-note>
+                        {{ $t('settings.p2p.policy.org-note') }}
+                      </small>
                     </span>
                     <span class="policy-rule-to">
                       <span :class="{ 'policy-any': isAnyField(rule.to.workspace) }">
@@ -6244,6 +6251,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .policy-section-label { margin: 14px 0 6px; font-size: var(--font-2xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .policy-empty { margin: 0; }
 .policy-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.policy-org-note { display: block; font-size: var(--font-row-desc); color: var(--text-secondary); }
 .policy-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-muted); }
 .policy-rule-from, .policy-rule-to {
   flex: 1; min-width: 0; font-size: var(--font-xs); color: var(--text-bright);
