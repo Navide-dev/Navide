@@ -241,6 +241,9 @@ def test_rescan_binds_the_digest_of_the_stored_bytes() -> None:
         def get(self, key: str) -> bytes:
             return stored
 
+        def open_stream(self, key: str) -> io.BytesIO:
+            return io.BytesIO(stored)
+
     stored = _zip({"frontend/a.js": "1"})
     row = ExtensionVersion(extension_id=1, version="1.0.0", manifest=MANIFEST, package_digest="f" * 64,
                            package_key="k", target="universal")

@@ -4,7 +4,19 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const packageDirectory = join(repositoryRoot, 'dist-plugins/navide-plans')
+// navide.plans is built in its own repository; the build stages the pinned
+// version, as the official Registry signed it, for this host's target.
+const pinned = /'navide\.plans': '([^']+)'/.exec(
+  readFileSync(join(repositoryRoot, 'src/main/plugins/officialPluginVersions.ts'), 'utf8'),
+)
+if (!pinned) throw new Error('src/main/plugins/officialPluginVersions.ts pins no navide.plans version.')
+const packageDirectory = join(
+  repositoryRoot,
+  'dist-plugins/official-artifacts/factory-resources/navide.plans',
+  pinned[1],
+  `${process.platform}-${process.arch}`,
+  'package',
+)
 const backendDirectory = join(packageDirectory, 'backend')
 const fixtureDirectory = join(repositoryRoot, 'dist-test-fixtures/plans/backend')
 const suffix = process.platform === 'win32' ? '.exe' : ''

@@ -38,7 +38,7 @@ Every value in `host/env.sh` can be overridden from the environment, or from a f
 VM_DIR="$HOME/Virtual Machines.localized"       # the .vmwarevm bundles
 LINUX_VMX=... WINDOWS_VMX=...                     # default: the two bundles under VM_DIR
 LINUX_SNAPSHOT=pre-navide-0.2.13                  # every round starts from, and is reverted to, these
-WINDOWS_SNAPSHOT=installed-clean-updated
+WINDOWS_SNAPSHOT=clean-base-0246
 LINUX_GUEST= WINDOWS_GUEST=                       # empty: ask `vmrun getGuestIPAddress` (needs VMware Tools in the guest)
 LINUX_USER=navide WINDOWS_USER=navide             # test accounts
 SSH_KEY="$HOME/.ssh/navide_vm_ed25519"            # the key those accounts accept
@@ -106,16 +106,23 @@ BelowNormal, and then any Normal-priority load starves the app.
 VMware Fusion runs no macOS guest on Apple silicon (its arm64 guest types are Linux, Windows and ESXi only), so the
 macOS VM is a [tart](https://tart.run) VM on Apple's Virtualization.framework. Install it on the VM host with
 `brew install cirruslabs/cli/tart` (Fair Source license: free for small internal use). Its images come only from
-`ghcr.io/cirruslabs`. There are no snapshots: `MACOS_BASE` (`navide-macos-clean`) is never booted by a round, and
+`ghcr.io/cirruslabs`. There are no snapshots: `MACOS_BASE` (`base-macos`, shared with other projects on the VM host) is never booted by a round, and
 `vm.sh macos revert` deletes the round's VM (`MACOS_VM`, `navide-macos-run`) and clones the base again. The clone is an
 APFS copy-on-write clone, so it takes seconds and no extra disk until the guest writes.
 
 ```bash
-./macos-base.sh            # once: clone the cirruslabs vanilla image into navide-macos-clean, put SSH_KEY in,
-                           # install Python (python.org) and Claude Code, shut it down
+./macos-base.sh            # once: clone the cirruslabs vanilla image into base-macos, write SSH_KEY into the
+                           # powered-off disk (no password), install Python (python.org) and Claude Code,
+                           # shut it down from inside
 ./macos-smoke.sh <dir with the .dmg> <evidence dir>
 #   revert -> start -> macos-up.sh -> guest/macsmoke.py (wizard, first pane) -> collect -> stop -> revert, timed
 ```
+
+A cold-start check (quit the app, start it again) runs `guest/restorecheck.py <root> before` while the first pane is
+up and `guest/restorecheck.py <root> cold-1` (`cold-2`, ...) after each start, with the app up. It writes
+`restore-<label>.json`: the workspace's project row from `wm/.agent-team/navide.db` (pane names, origin, spawn status
+only), the `restore.*` warnings from the app's `logs/errors.jsonl`, and the window's `ui_diagnostics`. Collect those
+files with the rest; without them a pane missing after a restart cannot be told apart from one never recorded.
 
 The test account is the image's own `admin`, which logs on to the desktop by itself, so `open -a` over ssh starts
 the app in that session. `tart run --no-graphics` runs detached on the VM host (`~/vm-retest-tart/run.pid` there),

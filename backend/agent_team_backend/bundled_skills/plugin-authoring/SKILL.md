@@ -21,10 +21,18 @@ memory.
 
 ## 1. Start from the smallest thing that works
 
+The SDK packages are not on npm yet; run the CLI from the GitHub Release
+`plugin-packages-1.0.0` (a bare `npx navide-plugin` or `npm install
+@navide/plugin-sdk` fails with 404):
+
 ```text
-npx navide-plugin init acme-hello --id acme.hello              # no build step
-npx navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
+npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello              # no build step
+npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
 ```
+
+In a `--template vue` project, run `npm install $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz`
+before `npm install`, so `package.json` names the tarballs.
 
 The first writes a frontend-only plugin that validates and packages as written
 (the `--template vue` one is a buildable Vue view + Python backend + agent tool +
@@ -71,17 +79,17 @@ simply missing at runtime.
 
 | Want | Manifest / API | Copy from (Navide repo) |
 |---|---|---|
-| A panel beside the panes | view `location`: `left`, `right`, `top` or `bottom` | `plugins/navide-git` (`left`) |
+| A panel beside the panes | view `location`: `left`, `right`, `top` or `bottom` | [navide-git](https://github.com/Navide-dev/navide-git) (`left`) |
 | A full tab in the stage tab bar | view `location: "main"` | the `init` scaffold |
-| A separate window | view `location: "window"` | `plugins/navide-mini-ide` |
-| Read or write workspace files | `permissions.system: ["fs"]`, `fs.*` capabilities; narrow with `permissions.scopes.fs` | `plugins/navide-plans` (scoped `fs`) |
-| Run a command | `permissions.shell: "allowlist"` (git, gh, glab) or `{"mode": "allowlist", "executables": ["npm"]}` for other executables, then `shell.run` | `plugins/navide-git`; spec, "Declared executables" |
+| A separate window | view `location: "window"` | [navide-mini-ide](https://github.com/Navide-dev/navide-mini-ide) |
+| Read or write workspace files | `permissions.system: ["fs"]`, `fs.*` capabilities; narrow with `permissions.scopes.fs` | [navide-plans](https://github.com/Navide-dev/navide-plans) (scoped `fs`) |
+| Run a command | `permissions.shell: "allowlist"` (git, gh, glab) or `{"mode": "allowlist", "executables": ["npm"]}` for other executables, then `shell.run` | [navide-git](https://github.com/Navide-dev/navide-git); spec, "Declared executables" |
 | Call a web API from the view | `permissions.network: {"hosts": ["api.example.com"]}`, then `fetch` in the view | spec, "Network hosts" |
-| Drive an AI CLI pane | `permissions.system: ["aiCli"]` | `plugins/navide-git` |
-| Open real web pages | `permissions.system: ["web"]` (disclosed as high risk) | `plugins/navide-browser` |
+| Drive an AI CLI pane | `permissions.system: ["aiCli"]` | [navide-git](https://github.com/Navide-dev/navide-git) |
+| Open real web pages | `permissions.system: ["web"]` (disclosed as high risk) | [navide-browser](https://github.com/Navide-dev/navide-browser) |
 | Remember settings or view state | `createPluginViewState(key, fallback)` from `@navide/plugin-sdk` (keeps state across reloads), or `storage.get` / `storage.set`; no permission to declare | spec, "SDK interface" and "Host-managed storage partitions" |
-| Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | `plugins/navide-plans` |
-| A tool agents can call | `backend.methods` + `backend.agentTools`; with no backend, `contributes.agentTools` (`view` instead of `method`) served by the view with `onAgentToolCall` | `plugins/navide-browser`; spec, "Agent tools" |
+| Logic that outlives the view | `backend` (one native executable, Backend Wire v1) | [navide-plans](https://github.com/Navide-dev/navide-plans) |
+| A tool agents can call | `backend.methods` + `backend.agentTools`; with no backend, `contributes.agentTools` (`view` instead of `method`) served by the view with `onAgentToolCall` | [navide-browser](https://github.com/Navide-dev/navide-browser); spec, "Agent tools" |
 
 The capability catalog with every method, its schema and the permission it
 needs is `docs/plugin-contracts/capabilities-v1.json`.

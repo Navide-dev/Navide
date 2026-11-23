@@ -70,6 +70,62 @@ class TestGetStatus:
         assert result == {"ok": False, "error": err}
 
     @pytest.mark.asyncio
+    async def test_non_repo_dir_never_starts_git(self, tmp_path, monkeypatch):
+        # A home-folder workspace is read again on every git.changed, timer and
+        # focus, from each window's status bar, badges and Git pane. With no
+        # repository marker on it or above it, git's answer is already known:
+        # spawning `git rev-parse` for it cost a process each time (Windows).
+        monkeypatch.delenv("GIT_DIR", raising=False)
+        (tmp_path / "notes.txt").write_text("x")
+        # A repository below the folder does not make the folder one.
+        (tmp_path / "repo").mkdir()
+        init_repo(tmp_path / "repo")
+        calls: list[list[str]] = []
+
+        async def counting(args, cwd, env=None):
+            calls.append(args)
+            return 0, "", ""
+
+        monkeypatch.setattr(git_service, "_run", counting)
+        for _ in range(3):
+            result = await git_service.get_status(str(tmp_path))
+            assert result["is_git_repo"] is False
+            (tmp_path / "notes.txt").write_text("y")
+        assert calls == []
+
+    @pytest.mark.asyncio
+    async def test_non_repo_dir_becomes_a_repo_after_git_init(self, tmp_path):
+        assert (await git_service.get_status(str(tmp_path)))["is_git_repo"] is False
+        init_repo(tmp_path)
+        assert (await git_service.get_status(str(tmp_path)))["is_git_repo"] is True
+
+    @pytest.mark.asyncio
+    async def test_subdir_of_a_repo_is_still_read_by_git(self, tmp_path):
+        init_repo(tmp_path)
+        sub = tmp_path / "a" / "b"
+        sub.mkdir(parents=True)
+        assert (await git_service.get_status(str(sub)))["is_git_repo"] is True
+
+    @pytest.mark.asyncio
+    async def test_bare_repo_or_git_dir_env_still_asks_git(self, tmp_path, monkeypatch):
+        # Repositories without a `.git` entry are git's to judge, not ours.
+        bare = tmp_path / "bare.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], check=True, capture_output=True)
+        calls: list[str] = []
+
+        async def counting(args, cwd, env=None):
+            calls.append(cwd)
+            return 128, "", "fatal: not a git repository"
+
+        monkeypatch.setattr(git_service, "_run", counting)
+        await git_service.get_status(str(bare))
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        monkeypatch.setenv("GIT_DIR", str(bare))
+        await git_service.get_status(str(plain))
+        assert calls == [str(bare), str(plain)]
+
+    @pytest.mark.asyncio
     async def test_non_git_dir_under_a_translated_locale(self, tmp_path, monkeypatch):
         # Telling "not a repository" from other failures reads git's message,
         # which a translated locale would reword.

@@ -194,12 +194,12 @@ import {
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
 import { activityMeansWorking, allSlotsFinished, backgroundWorkPending, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, quietTurnEndDone, TURN_END_QUIET_FALLBACK_MS, turnCompleteDone,turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { composerClearKeys, createMessagingTurnGate, createPaneSessionPersistence, KICKOFF_ECHO_WAIT_MS, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
-import { noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
+import { isBlankedCopy, noteScreenRoute, takeScreenRoute } from './lib/routedBlockCredits'
 import { createParkedDelivery, ROLE_TURN_START_MS, waitForQueuedTurn, waitForRoleTurn, waitUntilTurnEnds, type QueuedTurnOutcome, type RoleTurnOutcome } from './lib/pipelineDelivery'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
 import { resolveDragBatch, reorderBatchByIds, withFoldedSubtree } from './lib/paneBatchDrag'
-import { AGENT_SPECS, type PaneArgContext } from '@navide/plugin-shell'
+import { AGENT_SPECS, REMOTE_AGENT_KEY, REMOTE_AGENT_SPEC, type PaneArgContext } from '@navide/plugin-shell'
 import {
   orderedAgentKeys,
   isAgentEnabled,
@@ -216,27 +216,35 @@ import {
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
 import { failedInjectReleasesHold } from './lib/deliveryHold'
+import { newInjectId, sendChunkWithRetry } from './lib/injectChunkSend'
 import { RESUME_CONSUME_WAIT_MS, resumeBootHold, resumeUnconfirmed } from './lib/resumeBoot'
 import {
   awaitEcho, awaitInputUnblocked, createInputBlockTracker, needsInputWait, PROBE_SESSION_GONE
 } from './lib/ptyInputBlock'
 import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, rolelessPaneAwaitsKickoff,
-  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome,
+  runKickoffAttempts, submitHeldCopy, terminalKickoffOutcome, type ReportedKickoff,
 } from './lib/spawnKickoff'
+import { answerStartupPrompt, decideStartupPrompt, readContinueNotice, readStartupPrompt, settleStartupPrompts, waitStartupPromptGone } from './lib/startupPrompts'
 import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { awaitLateSubmit, awaitTurnAfterFailure, busyLines, newBusyLine, type LateSubmit } from './lib/submitStall'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink, injectFailedMessage } from './lib/uiDiagnostics'
+import { notePaneRecordWrite, workspaceCheckGaveUp } from './lib/restoreDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
+import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
+import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
+import { sshFailureReason, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { acceptStartupTrust } from './lib/startupTrust'
 import { clearUpdatePrompt, updatePromptState, type UpdatePromptOutcome } from './lib/updatePrompt'
+import { claudeComposerText, clearLeftoverPrompt, composerOwner } from './lib/claudeComposer'
+import { leftoverToast } from './lib/leftoverToast'
 import { quickClassify } from './lib/quick-classify'
 import type { DirLister } from '@navide/plugin-shell'
 import {
@@ -289,6 +297,7 @@ import {
   resolveReadySpawnGroupId,
   runGroupCreatedAt,
   groupPeers,
+  initialRunGroups,
   savedGroupToRecreate,
 } from './lib/runGroups'
 import { createRunSlotPanes } from './lib/runSlotPanes'
@@ -296,6 +305,8 @@ import { stopFailedRunPanes as stopFailedRunPanesFor } from './lib/failedRunStop
 import {
   ALL_SCOPE_RESTORE_CONCURRENCY,
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
+  COLD_RESTORE_SETTLE_TIMEOUT_MS,
+  COLD_RESTORE_STARTING_LIMIT,
   INTERRUPTED_RESUME_LIMIT,
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
@@ -313,6 +324,7 @@ import {
   stripPinnedSessionId,
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
+  waitUntil,
   wasInterruptedAtLaunch,
   wasLiveAtLastLaunch,
   type RestoreScope,
@@ -321,9 +333,10 @@ import {
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
 import { isRepeatCrash, planBackendRestartResume, type LostPane } from './lib/backendRestartResume'
+import { requestAgentPush } from './lib/agentPushRequest'
 import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
-import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
+import { cliPermissionKey, launchBypassState, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
 import { useLayoutStore } from './layout/useLayoutStore'
 import { RAIL_SIZE } from './layout/slots'
@@ -352,6 +365,7 @@ import {
 } from './lib/welcomeTour'
 import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
+import { leaveLimitMenuAndResume } from './lib/claudeLimitMenu'
 import {
   LOOP_RESUME_SETTING_KEY,
   DEFAULT_LOOP_RESUME,
@@ -519,11 +533,14 @@ const AgentSignInConfirmDialog = defineAsyncComponent(() => import('./components
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const ArenaStartDialog = defineAsyncComponent(() => import('./components/ArenaStartDialog.vue'))
+const RemoteDevcontainerDialog = defineAsyncComponent(() => import('./components/RemoteDevcontainerDialog.vue'))
+const SshRemoteDialog = defineAsyncComponent(() => import('./components/SshRemoteDialog.vue'))
 const ArenaPanel = defineAsyncComponent(() => import('./components/ArenaPanel.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
+const ShippedLogPanel = defineAsyncComponent(() => import('./components/ShippedLogPanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 // Plan P2: the status bar's Navide plugins item and its Stop popover.
@@ -1537,6 +1554,19 @@ function roleLabel(key: string): string {
 // disabled agent's existing panes still resolve their label.
 const agentSpecs: AgentSpec[] = AGENT_SPECS
 
+/** A live pane's spec by key: agentSpecs, plus the remote container pane's
+ *  stub, which is no vendor and so is in no list a menu or setting reads. */
+function paneAgentSpec(agentKey: string | undefined): AgentSpec | undefined {
+  return agentSpecs.find((s) => s.agentKey === agentKey)
+    ?? (agentKey === REMOTE_AGENT_KEY ? REMOTE_AGENT_SPEC : undefined)
+}
+
+/** The key whose screen shapes (permission box, update menu) a pane shows: a
+ *  remote pane draws the TUI of the CLI it runs in the container. */
+function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget } | undefined): string | undefined {
+  return pane?.remote?.cli ?? pane?.agentKey
+}
+
 // The subset (+order) the user chose in Settings → CLI Agents, fed to the manual
 // spawn UI. Only non-terminal specs are filtered/ordered; terminal is kept as-is
 // (ControlPane filters it out of the dropdown itself). Reactive via
@@ -1579,6 +1609,13 @@ function skipFlagFor(agentKey: string, spec?: AgentSpec): string {
     globalYolo: yoloEnabled.value,
     mode: parseCliPermissionMode(settingsGet<string | null>(cliPermissionKey(agentKey), null))
   })
+}
+
+/** Whether this pane's CLI was launched with its bypass flag, for the header.
+ *  Sign-in and remote container panes are left out: neither runs the flag. */
+function paneBypassState(p: ActivePane): 'on' | 'off' | null {
+  if (p.isLogin || p.remote) return null
+  return launchBypassState(p.command, paneAgentSpec(p.agentKey)?.skipPermissionFlag)
 }
 
 const autoAnswerEnabled = makeStickyBool('agentTeam.autoAnswer', false)
@@ -1982,6 +2019,17 @@ interface ActivePane {
    *  — an authorization URL, a pasted code — is never handed to another pane,
    *  a chat or the editor's AI Chat, and it writes no log file. */
   isLogin?: boolean
+  /** A remote container pane (Settings → Experimental → Remote container
+   *  panes): the CLI runs over ssh in this container. It never takes part in
+   *  account switching or quota failover, and every respawn (rebuild,
+   *  reconnect, restore) goes back to the same container. Persisted on the
+   *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
+  remote?: RemoteTarget
+  /** An SSH Remote terminal pane (same experimental switch): its shell runs
+   *  on this host over ssh. Runtime only — such a pane is not restored. */
+  sshRemote?: SshRemoteTarget
+  /** An SSH pane's last exit code (255: ssh lost or never made the link). */
+  sshExitCode?: number | null
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -2040,6 +2088,9 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the backend saw this pane's CLI up for minutes without it
+   *  ever reaching Navide's tool server (mcp_connect_watch). Not persisted. */
+  mcpNeverConnected?: boolean
   /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
    *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
    *  Not persisted. */
@@ -2865,6 +2916,8 @@ function unregisterPaneMessaging(paneId: string, opts: { keepPersisted?: boolean
   pushReadyPanes.delete(paneId)
   pushCooldownUntil.delete(paneId)
   pushUnclearAt.delete(paneId)
+  paneInjectedAt.delete(paneId)
+  leftoverStash.delete(paneId)
   backend.send('agent_msg.unregister', { pane_id: paneId }).catch(() => { /* best effort */ })
   if (!opts.keepPersisted) dropPersistedMessagingName(paneId)
 }
@@ -2902,7 +2955,7 @@ async function deliverAgentMessage(
   paneId: string,
   text: string,
   shouldAbort?: () => boolean,
-): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
+): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true } | { timedOut: true }> {
   if (acp.owns(paneId)) return acp.deliver(paneId, text)
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
@@ -2922,6 +2975,7 @@ async function deliverAgentMessage(
     foregroundBusy?: boolean
     commandRefused?: string
     updatePrompt?: 'skipped' | 'blocked'
+    injectTimeout?: boolean
   } = {}
   // Sampled before typing: our own message's user record is the signal that
   // would confirm the resume, so asking afterwards could answer "confirmed" on
@@ -2959,6 +3013,9 @@ async function deliverAgentMessage(
     if (failedInjectReleasesHold(outcome.leftInComposer === true)) {
       paneRefs[paneId]?.clearDeliveredPending?.()
     }
+    // The backend did not answer in time: worth another go from the queue,
+    // which bounds how many (INJECT_TIMEOUT_RETRY_LIMIT).
+    if (outcome.injectTimeout) return { timedOut: true }
     return false
   }
   // A resumed CLI that has not spoken since its spawn may still be repainting,
@@ -3163,14 +3220,31 @@ function messagingHoldKey(
   // A quiet program is still a program: an editor, a pager, a REPL, an ssh
   // session or a sudo password prompt prints nothing and reads idle, and would
   // take the line (and its Enter) as its own input. The backend knows who is in
-  // front of the tty; polled by refreshTerminalPrompts().
-  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'mid-turn'
+  // front of the tty; polled by refreshTerminalPrompts(). Its own key, not
+  // 'mid-turn': a sender told "printing" waits, one told "a program has the
+  // tty" (a password prompt, an editor) knows someone has to finish it.
+  if (pane.agentKey === TERMINAL_AGENT_KEY && terminalAtPrompt.get(paneId) === false) return 'foreground'
   const lastActive = paneLastActiveAt.get(paneId) ?? 0
   const inFlight = isTurnInFlight(lastActive, paneTurnCompleteAt.get(paneId) ?? 0, now, {
     inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
   })
   if (inFlight) return 'mid-turn'
   if (now - lastActive < 2000) return 'settling'
+  // Last, as it reads the screen: a Claude Code box still showing the
+  // person's own line (hasDraft stops counting a minute after the last key)
+  // or a collapsed paste of theirs. injectText leaves both alone, so the
+  // message would be typed after them and sent with them.
+  if (!opts.ignoreTyping && paneScreenAgentKey(pane) === 'claude') {
+    const box = claudeComposerText(paneVisibleScreen(paneId))
+    if (box) {
+      const typist = paneRefs[paneId]
+      const owner = composerOwner(box, {
+        draft: (typist?.draftText as (() => string) | undefined)?.() ?? '',
+        navideTypedLast: paneNavideTypedLast(paneId),
+      })
+      if (owner === 'user' || owner === 'user-paste') return 'typing'
+    }
+  }
   return null
 }
 
@@ -3198,7 +3272,7 @@ function deliveryHoldKey(paneId: string, opts: { ignoreTyping?: boolean } = {}):
   const key = messagingHoldKey(paneId, opts)
   if (key !== 'mid-turn' && key !== 'settling') return key
   const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
-  const spec = agentSpecs.find((s) => s.agentKey === agentKey)
+  const spec = paneAgentSpec(agentKey)
   return spec?.acceptsMidTurnInput === true ? null : key
 }
 
@@ -3214,6 +3288,23 @@ const pushCooldownUntil = new Map<string, number>()
  *  Read by messagingHoldKey(); cleared on activity newer than the push, on a
  *  fresh push_state, and on unregister. */
 const pushUnclearAt = new Map<string, number>()
+
+/** When injectText last typed into each pane, so a collapsed paste in the box
+ *  can be told apart: ours if typed after the person's last key. */
+const paneInjectedAt = new Map<string, number>()
+
+/** The last prompt injectText cleared out of each pane's input box, kept for
+ *  the toast's Restore (lib/leftoverToast.ts). One per pane, newest wins. */
+const leftoverStash = new Map<string, string>()
+
+function notePaneInjected(paneId: string): void {
+  paneInjectedAt.set(paneId, Date.now())
+}
+
+/** Whether injectText typed into the pane after the person's last key. */
+function paneNavideTypedLast(paneId: string): boolean {
+  return (paneInjectedAt.get(paneId) ?? 0) > ((paneRefs[paneId]?.lastUserKeyAt as number | undefined) ?? 0)
+}
 
 /** pushTarget() dep: the channel that could take a message for this pane right
  *  now, or null. Applies the gates that channel still answers to — every
@@ -3245,23 +3336,21 @@ function pushTargetForMessaging(paneId: string): { kind: string } | null {
  *
  *  `unclear` is the backend saying the CLI may still be holding our text: the
  *  message must go back in the queue rather than be typed in on top of itself.
+ *  An answer that never came back is `lost`: the push may have landed, so the
+ *  queue asks again under the same `pushId` rather than typing it in.
  */
-async function pushDeliverAgentMessage(paneId: string, text: string): Promise<PushOutcome> {
-  let reason = 'push-request-failed'
-  let unclear = false
-  try {
-    const resp = await backend.send<{ ok?: boolean; reason?: string; unclear?: boolean }>(
-      'agent_msg.push',
-      { pane_id: paneId, text },
-    )
-    if (resp.ok && resp.payload?.ok) return 'landed'
-    reason = resp.payload?.reason || resp.error?.message || reason
-    unclear = !!resp.payload?.unclear
-  } catch {
-    /* the backend never answered — treat it as an ordinary refusal */
-  }
+async function pushDeliverAgentMessage(paneId: string, text: string, pushId: string): Promise<PushOutcome> {
+  const resp = await requestAgentPush(
+    (type, payload) => backend.send<{ ok?: boolean; reason?: string; unclear?: boolean }>(type, payload),
+    paneId,
+    text,
+    pushId,
+  )
+  if (!resp) return 'lost'
+  if (resp.ok && resp.payload?.ok) return 'landed'
+  const reason = resp.payload?.reason || resp.error?.message || 'push-request-failed'
   pushCooldownUntil.set(paneId, Date.now() + pushCooldownMs(reason))
-  if (unclear) {
+  if (resp.payload?.unclear) {
     pushUnclearAt.set(paneId, Date.now())
     return 'unclear'
   }
@@ -3619,6 +3708,13 @@ function standaloneTaskDeps(): StandaloneTaskInjectionDeps {
       return pane ? sendSessionMarkerBootstrap(pane, tag) : Promise.resolve(false)
     },
     dismissStartupDialog: (id) => dismissStartupDialog(id, DISMISS_TIMEOUT_MS),
+    // The pane path's own launch-prompt hold, so both decide and report alike.
+    holdForStartupPrompt: (id, report) => {
+      const agentKey = panes.value.find((p) => p.id === id)?.agentKey
+      return agentKey
+        ? holdKickoffForStartupPrompt(agentKey, id, STARTUP_PROMPT_WATCH_MS, report)
+        : Promise.resolve(false)
+    },
     waitForStartupActivity: (id) => waitForStartupActivity(id),
     waitForQuiet: (id, quietMs, timeoutMs) => waitForQuiet(id, quietMs, timeoutMs),
     waitForPromptReady: async (id, timeoutMs) => {
@@ -3693,7 +3789,10 @@ async function createStandaloneRequestedPane(
     profileId: req.profileId,
   })
   if (!paneId) return null
-  void sendQuiet<ProjectPayload>('manual_pane.spawn', {
+  // Still not awaited (the spawn answers its caller first), but a record that
+  // never reached the project document is recorded: the pane would be missing
+  // after the next restart with nothing to say why (lib/restoreDiagnostics.ts).
+  void notePaneRecordWrite(sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: workspacePath,
     pane_id: paneId,
     agent: req.agentKey,
@@ -3715,7 +3814,7 @@ async function createStandaloneRequestedPane(
     // '' here would otherwise become the "last position" of the conversation.
     spawned_by: resumeSpawnedBy,
     ...(req.profileId ? { profile_id: req.profileId } : {}),
-  })
+  }), { workspacePath, name: req.name, paneId }, recordDiagnostic)
   void sendQuiet('project.rename_pane', {
     workspace_path: workspacePath,
     pane_id: paneId,
@@ -3817,6 +3916,96 @@ function kickoffPacing(paneId: string): { awaitReady: (timeoutMs: number) => Pro
   }
 }
 
+// How long a new pane's first screen is watched for a launch prompt, how long
+// a task held behind one waits for it to be answered, and the pause each key
+// into Claude's dialog needs (it ignores keys for 500 ms after it arms).
+const STARTUP_PROMPT_WATCH_MS = 15_000
+const STARTUP_PROMPT_HOLD_MS = 10 * 60_000
+const STARTUP_PROMPT_KEY_SETTLE_MS = 700
+
+function startupPromptDeps(agentKey: string, paneId: string) {
+  return {
+    agentKey,
+    readScreen: () => {
+      try {
+        return (paneRefs[paneId]?.readScreenTail?.(STARTUP_PROMPT_SCREEN_LINES) as unknown as string) ?? ''
+      } catch {
+        return ''
+      }
+    },
+    navideDirs: () => ((paneRefs[paneId]?.navideDirs as unknown as string[] | undefined) ?? []),
+    workspace: () => panes.value.find((p) => p.id === paneId)?.workspacePath ?? '',
+    awaiting: () => paneRefs[paneId]?.displayStatus === 'awaiting',
+    ready: () => promptReadyNow({
+      status: paneRefs[paneId]?.displayStatus as string | undefined,
+      cleanBytes: paneCleanBytes(paneId),
+      quietMs: Date.now() - Number((paneRefs[paneId]?.lastRawActivityAt as unknown as number | undefined) ?? 0),
+      quietNeededMs: PROMPT_READY_QUIET_MS,
+    }),
+    alive: () => paneAlive(paneId),
+    send: async (keys: string) => {
+      const sid = paneRefs[paneId]?.sessionId
+      if (!sid) return false
+      await backend.send('terminal.input', { terminal_session_id: sid as string, data: keys })
+      return true
+    },
+    sleep,
+    now: Date.now,
+    settleMs: STARTUP_PROMPT_KEY_SETTLE_MS,
+    // A trust dialog's wrapped folder is read only against the pane's width.
+    cols: () => Number(paneRefs[paneId]?.terminalSize?.()?.cols ?? 0),
+  }
+}
+
+/** Watch a new pane's first screen for a launch prompt before its task is
+ *  typed (lib/startupPrompts.ts). Every answer Navide gives and every prompt
+ *  it leaves alone is recorded in ui_diagnostics and the error ledger. A
+ *  prompt it leaves alone is reported to cli_open_agent as
+ *  "blocked-by-prompt" with the prompt and its options, and the task waits
+ *  until somebody answers it. False when the kickoff ended here. */
+async function holdKickoffForStartupPrompt(
+  agentKey: string,
+  paneId: string,
+  timeoutMs: number,
+  report: (kickoff: ReportedKickoff, reason?: string, extra?: Record<string, unknown>) => void,
+): Promise<boolean> {
+  const deps = startupPromptDeps(agentKey, paneId)
+  const watch = await settleStartupPrompts({
+    ...deps,
+    timeoutMs,
+    record: (entry) => {
+      recordDiagnostic({
+        level: 'warn',
+        code: entry.answered ? 'spawn.startup-prompt-answered' : 'spawn.startup-prompt-held',
+        message: entry.answered
+          ? `answered a launch prompt by rule ${entry.rule} (folder ${entry.folder}): ${entry.why}`
+          : `left a launch prompt for a person${entry.folder ? ` (folder ${entry.folder})` : ''}: ${entry.why}`,
+        paneId,
+      })
+      pipelineLog(`${entry.answered ? '✓ answered' : '⏸ held on'} launch prompt (pane ${paneId.slice(0, 8)}): ${entry.why}`)
+    },
+  })
+  if (watch.outcome === 'clear') return paneAlive(paneId)
+  const screen = deps.readScreen()
+  report('blocked-by-prompt', watch.why, {
+    prompt: awaitingPromptText(screen),
+    options: parseMenuOptions(screen),
+    folder: watch.prompt?.folder ?? '',
+  })
+  if (await waitStartupPromptGone(deps, STARTUP_PROMPT_HOLD_MS)) return true
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (pane && paneAlive(paneId)) {
+    pane.kickoffStatus = 'failed'
+    recordDiagnostic({
+      level: 'warn',
+      code: 'spawn.startup-prompt-unanswered',
+      message: `the launch prompt was not answered within ${STARTUP_PROMPT_HOLD_MS / 60_000} min; the task was not typed`,
+      paneId,
+    })
+  }
+  return false
+}
+
 /** Wait for a freshly created pane's CLI to reach its prompt, then inject its
  *  task. Slow by nature: a cold CLI can take tens of seconds to print its
  *  first byte.
@@ -3869,14 +4058,23 @@ async function kickoffRequestedPane(
       await dismissStartupDialog(paneId, DISMISS_TIMEOUT_MS)
       await waitForStartupActivity(paneId)
     }
+    // A launch prompt the task must not be typed into: answered when it is on
+    // the allowlist, otherwise reported and the task held (lib/startupPrompts).
+    if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, STARTUP_PROMPT_WATCH_MS, emitKickoffVerdict))) return false
     // A resumed CLI reloads its transcript before it prints or listens —
     // observed 20-30s of silence on a real claude session — so the deadline a
     // fresh banner fits in would type the kickoff into a CLI not yet reading.
     const promptReadyTimeoutMs = opts.resume
       ? KICKOFF_PROMPT_READY_TIMEOUT_RESUME_MS
       : KICKOFF_PROMPT_READY_TIMEOUT_MS
-    const promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
+    let promptReady = await waitForPromptReady(paneId, promptReadyTimeoutMs)
     if (!paneAlive(paneId)) return false
+    // A prompt that showed up late never lets the gate open: look once more.
+    if (!promptReady) {
+      if (!(await holdKickoffForStartupPrompt(pane.agentKey, paneId, 1_000, emitKickoffVerdict))) return false
+      promptReady = await waitForPromptReady(paneId, PROMPT_READY_QUIET_MS + 1_000)
+      if (!paneAlive(paneId)) return false
+    }
     // Sampled once, with the gate's answer: a pane that has printed nothing is
     // still initialising and is not typed into (runKickoffAttempts); one that
     // is printing but never read idle+quiet is typed into as before.
@@ -4145,6 +4343,27 @@ function spawnGateContextFor(parentPaneId: string) {
  *  by open workspace — mirrors handleUiInvokeRequest's ownership check. The
  *  gate runs here because only this window knows the pane counts, chain depth
  *  and name collisions it needs. */
+/** For a terminal just opened over MCP that is not on screen, where it went
+ *  and how to show it; null otherwise. A terminal is usually there for the
+ *  user to type into (a password, a prefilled command), and one that landed
+ *  on another tab, behind a plugin tab or in a background workspace read as
+ *  "it never opened" (0.2.46). Agent panes keep their placement rules and get
+ *  no note: their user reads the result, not the pane. */
+function terminalPlacementNote(paneId: string): string | null {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane || pane.agentKey !== TERMINAL_AGENT_KEY) return null
+  const otherWorkspace = normWs(pane.workspacePath) !== normWs(currentWorkspace.value)
+  const behindPlugin = activePluginMainKey.value !== null
+  if (!otherWorkspace && !behindPlugin && tabFilteredPaneIds.value.has(paneId)) return null
+  const tab = pane.runGroupId ? (runGroups.value.find((g) => g.id === pane.runGroupId)?.name ?? pane.runGroupId) : 'manual'
+  const where = otherWorkspace
+    ? `workspace ${pane.workspacePath}, which is not the one on screen`
+    : behindPlugin
+      ? `tab "${tab}", which a plugin tab is covering`
+      : `tab "${tab}", which is not the tab on screen`
+  return `terminal "${pane.messagingName ?? paneId}" opened in ${where} — call ui_invoke ui.pane.focus {"paneId": "${paneId}"} to show it to the user`
+}
+
 async function handleMcpSpawnRequest(ev: {
   request_id: string
   requester_pane_id: string
@@ -4269,6 +4488,8 @@ async function handleMcpSpawnRequest(ev: {
   // after this and reports a failure by message instead.
   const child = panes.value.find((p) => p.id === paneId)
   const childName = child?.messagingName ?? gate.name
+  const placement = terminalPlacementNote(paneId)
+  const advisories = placement ? [...(gate.advisories ?? []), placement] : gate.advisories
   if (cross) {
     // Disclosed in this window as well as in the backend's action record: an
     // agent of another project opened a pane here (DESIGN-C §5). The toast
@@ -4288,12 +4509,23 @@ async function handleMcpSpawnRequest(ev: {
     // next and judged as the kickoff verdict; a pane whose task did not land
     // stays open (Windows VM 0.2.38: killing it reported a launched pane as
     // 建立失敗).
-    report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+    report({ ok: true, paneId, name: childName, advisories })
     const standaloneEvidence: StandaloneKickoffEvidence = {}
+    // One verdict per request: a launch prompt reported as blocked-by-prompt
+    // is the answer, and the verdict judged below is then dropped, as on the
+    // pane path.
+    const reportStandalone = createKickoffReporter({
+      requestId: ev.request_id,
+      paneId,
+      send: (payload) => {
+        backend.send('agent_spawn.kickoff', payload).catch(() => { /* the tool call times out and says so */ })
+      },
+    })
     try {
       await injectStandaloneTask(paneId, gate.task, 'mcp-task', standaloneTaskDeps(), {
         resume: !!(ev.session_id ?? '').trim(),
         evidence: standaloneEvidence,
+        report: reportStandalone,
         ...(ev.submit === false ? { prefill: true } : {}),
       })
     } catch { /* judged below on whatever evidence was recorded */ }
@@ -4304,12 +4536,7 @@ async function handleMcpSpawnRequest(ev: {
     // 'sent'. Hard-coding 'unverified' here reported every external spawn as
     // failed, the task already running (Linux VM 0.2.38).
     const verdict = standaloneKickoffVerdict(standaloneEvidence, { task: gate.task, prefill: ev.submit === false })
-    backend.send('agent_spawn.kickoff', {
-      request_id: ev.request_id,
-      pane_id: paneId,
-      kickoff: verdict.kickoff,
-      ...(verdict.reason ? { reason: verdict.reason } : {}),
-    }).catch(() => { /* the tool call times out and says so */ })
+    reportStandalone(verdict.kickoff, verdict.reason)
     return
   }
   // Shut the injection window before the caller learns this pane's name, not
@@ -4317,7 +4544,7 @@ async function handleMcpSpawnRequest(ev: {
   // own task yet.
   if (child) child.kickoffStatus = 'pending'
   notifyRestore.toast(i18n.global.t('msg.spawn-toast', { parent: parentName, child: childName }))
-  report({ ok: true, paneId, name: childName, advisories: gate.advisories })
+  report({ ok: true, paneId, name: childName, advisories })
 
   void kickoffRequestedPane(paneId, parentName, gate.task, ev.request_id, {
     resume: !!(ev.session_id ?? '').trim(),
@@ -4575,6 +4802,9 @@ onUnmounted(() => {
 // clear what the hook raised. The box itself is its own wait in both cases
 // (applyScreenWatch), so the pane is no longer AWAITING once the box is gone.
 const AWAITING_SCREEN_LINES = 25
+// A launch dialog in a narrow pane wraps to forty-odd rows; its title, which
+// names the folder, has to be read with its menu (lib/startupPrompts.ts).
+const STARTUP_PROMPT_SCREEN_LINES = 120
 // Between the steps of a free-text or multi-select answer (lib/paneAnswerKeys).
 const ANSWER_STEP_GAP_MS = 60
 // How long cli_set_model waits for claude's /model picker to show, and then
@@ -4708,7 +4938,8 @@ function pollStuckPanes(): void {
 
 function pollAwaitingPanes(): void {
   for (const pane of panes.value) {
-    if (!pane.realized || !hasAwaitingPattern(pane.agentKey)) continue
+    const screenKey = paneScreenAgentKey(pane) ?? pane.agentKey
+    if (!pane.realized || !hasAwaitingPattern(screenKey)) continue
     const ref = paneRefs[pane.id]
     if (!ref?.readScreenTail) continue
     // Contained per pane: this shares a tick with messaging.pump and
@@ -4717,8 +4948,8 @@ function pollAwaitingPanes(): void {
     // A badge must never take messaging down with it.
     try {
       const screen = ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string
-      const boxOnScreen = matchAwaitingInput(pane.agentKey, screen)
-        || updatePromptHolds(pane.id, pane.agentKey)
+      const boxOnScreen = matchAwaitingInput(screenKey, screen)
+        || updatePromptHolds(pane.id, screenKey)
       // The safety net under a held permission wait (see holdOutlivedBox): the
       // box is no longer on screen, so nothing is left to hold for.
       const held = ref.awaitingHeld?.() as { since: number } | undefined
@@ -4732,7 +4963,7 @@ function pollAwaitingPanes(): void {
         ),
         boxOnScreen,
       })) ref.releaseNeedsInputHold?.()
-      applyScreenWatch(ref, pane.agentKey, boxOnScreen)
+      applyScreenWatch(ref, screenKey, boxOnScreen)
     } catch {
       /* leave this pane's badge as-is and carry on with the rest */
     }
@@ -4752,7 +4983,7 @@ function paneVisibleScreen(paneId: string): string {
 }
 
 function updatePromptOnScreen(paneId: string): boolean {
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   return updatePromptState(agentKey, paneVisibleScreen(paneId)) !== 'none'
 }
 
@@ -4768,7 +4999,7 @@ function updatePromptHolds(paneId: string, agentKey: string): boolean {
  *  its skip key, never Enter (lib/updatePrompt.ts). 'blocked' holds the pane
  *  as awaiting at once, so a queued message waits instead of retrying. */
 async function paneClearUpdatePrompt(paneId: string): Promise<UpdatePromptOutcome> {
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   const outcome = await clearUpdatePrompt({
     agentKey,
     readScreen: () => paneVisibleScreen(paneId),
@@ -4919,6 +5150,9 @@ async function injectText(
      *  skipped and nothing landed ('skipped'), or the pane is held on it
      *  ('blocked'). No Enter went into it either way. */
     updatePrompt?: 'skipped' | 'blocked'
+    /** A content chunk's request kept timing out (a stalled backend, not a
+     *  refusal): the injection was given up and the box cleared. */
+    injectTimeout?: boolean
   },
   // Told `true` while the payload is written but the PTY is not reading it
   // (the message is held on `pty-blocked`), `false` once the wait ends either
@@ -5020,27 +5254,39 @@ async function injectText(
   // because the PTY would not take them (0 from a backend too old to say) — or
   // null when a send threw or was refused.
   let wroteBytes = false
+  // Tags every chunk so a resend after a request timeout is written once
+  // (lib/injectChunkSend.ts).
+  const injectId = newInjectId()
   const sendChunks = async (): Promise<number | null> => {
     let pending = 0
     for (let i = 0; i < chunks.length; i++) {
-      try {
-        const resp = await backend.send<{ ok?: boolean; pending?: number; error?: string; refusal?: { message?: string } }>(
-          'terminal.input', { terminal_session_id: sessionId, data: chunks[i], ...shellGuard },
-        )
-        // A refusal is a normal answer (envelope ok) whose payload says ok: false.
-        if (resp.payload?.ok === false) {
-          noteShellRefusal(resp.payload)
-          return null
+      const sent = await sendChunkWithRetry(
+        () => backend.send<{ ok?: boolean; pending?: number; error?: string; refusal?: { message?: string } }>(
+          'terminal.input', { terminal_session_id: sessionId, data: chunks[i], inject_id: injectId, seq: i, ...shellGuard },
+        ),
+        { aborted: () => aborted() },
+      )
+      if (!sent.ok) {
+        console.error(`[injectText] content send failed at chunk ${i + 1}/${chunks.length}:`, sent.error)
+        if (sent.timedOut) {
+          // The backend may still write it: clear the box on the way out, and
+          // tell the caller this was a timeout, not a refusal.
+          wroteBytes = true
+          if (evidence) evidence.injectTimeout = true
         }
-        wroteBytes = true
-        pending = resp.payload?.pending ?? 0
-        // Nothing pending means nothing blocked, whatever the tracker still
-        // says: an unblocked event lost on the way must not wedge it.
-        if (pending === 0) inputBlocks.onUnblocked(sessionId)
-      } catch (err) {
-        console.error(`[injectText] content send failed at chunk ${i + 1}/${chunks.length}:`, err)
         return null
       }
+      const resp = sent.resp
+      // A refusal is a normal answer (envelope ok) whose payload says ok: false.
+      if (resp.payload?.ok === false) {
+        noteShellRefusal(resp.payload)
+        return null
+      }
+      wroteBytes = true
+      pending = resp.payload?.pending ?? 0
+      // Nothing pending means nothing blocked, whatever the tracker still
+      // says: an unblocked event lost on the way must not wedge it.
+      if (pending === 0) inputBlocks.onUnblocked(sessionId)
     }
     return pending
   }
@@ -5128,11 +5374,42 @@ async function injectText(
       if (evidence) evidence.updatePrompt = 'blocked'
       return false
     }
+    // A prompt an interrupt put back in Claude Code's box would be submitted
+    // with ours by the Enter: empty the box first. Never a line the person at
+    // the keyboard is writing (lib/claudeComposer.ts). Their restored prompt
+    // is kept and offered back; one of our own envelopes is only recorded.
+    const target = panes.value.find((p) => p.id === paneId)
+    if (paneId !== undefined && paneScreenAgentKey(target) === 'claude') {
+      await clearLeftoverPrompt({
+        readScreen: renderedScreen,
+        draftText: () => (paneRefs[paneId]?.draftText as (() => string) | undefined)?.() ?? '',
+        lastSubmitted: () => (paneRefs[paneId]?.lastSubmittedPrompt as (() => string) | undefined)?.() ?? '',
+        navideTypedLast: () => paneNavideTypedLast(paneId),
+        cols: paneRefs[paneId]?.terminalSize?.()?.cols ?? 80,
+        send: async (keys) => { await backend.send('terminal.input', { terminal_session_id: sessionId, data: keys }) },
+        sleep,
+        onCleared: ({ text: cleared, owner, diagnostic }) => {
+          recordDiagnostic({ level: 'warn', code: 'inject.cleared-leftover', message: diagnostic, paneId })
+          if (owner !== 'restored') return
+          leftoverStash.set(paneId, cleared)
+          const toast = leftoverToast(target?.messagingName || target?.agentLabel || '', {
+            restore: () => {
+              const kept = leftoverStash.get(paneId)
+              if (kept === undefined) return
+              if (paneRefs[paneId]?.insertText?.(kept)) leftoverStash.delete(paneId)
+            },
+            copy: () => { void navigator.clipboard.writeText(leftoverStash.get(paneId) ?? cleared).catch(() => {}) },
+          })
+          notifyRestore.toast(toast.message, toast.opts)
+        },
+      })
+    }
     const preBytes = cleanBytes()
     bytesBeforeSend = preBytes
     sentAt = Date.now()
     const screenBefore = renderedScreen()
     const ackPending = await sendChunks()
+    if (paneId !== undefined && wroteBytes) notePaneInjected(paneId)
     if (ackPending === null) return giveUp()
     if (paneId === undefined || preBytes < 0) {
       // Nothing observable — keep the old fixed-gap fallback and fire once.
@@ -6617,8 +6894,9 @@ function checkPaneUsageLimit(
   // And the failover authority: it attributes the hit to the account the pane
   // was on, verifies the text against the vendor's declared notice and
   // decides — by the persisted policy — whether anything follows. The text
-  // goes along as evidence; the backend, not this poll, judges it.
-  void quotaFailover.report({
+  // goes along as evidence; the backend, not this poll, judges it. Never for a
+  // remote pane: its quota belongs to the account signed in in the container.
+  if (!pane.remote) void quotaFailover.report({
     agentKey: pane.agentKey,
     paneId: pane.id,
     workspacePath: pane.workspacePath,
@@ -6711,7 +6989,7 @@ function raiseFromQuotaReading(pane: ActivePane, watcher: PaneHealthWatcher, now
   watcher.limitProfileId = pane.profileId ?? null
   // The reading itself is the signal here (no text): the backend checks its
   // own snapshot of the slot before trusting it.
-  void quotaFailover.report({
+  if (!pane.remote) void quotaFailover.report({
     agentKey: pane.agentKey,
     paneId: pane.id,
     workspacePath: pane.workspacePath,
@@ -7000,6 +7278,43 @@ const continueInFlight = new Set<string>()
  *  watcher, no re-arm, no done-marker instruction: this is a manual nudge, not
  *  an unattended loop. injectPane clears the flag, which hides the button; a
  *  failed injection restores it so the click can be retried. */
+/** After a hot account switch: leave Claude's "You've hit your limit" menu if
+ *  the pane is parked on it, then (when wanted) type the continue text so the
+ *  original task carries on under the new account. */
+async function leaveLimitMenuAfterSwitch(paneId: string, resume: boolean): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  const ref = paneRefs[paneId]
+  if (!pane?.realized || pane.agentKey !== 'claude' || pane.isLogin || !ref?.sessionId) return
+  if (continueInFlight.has(paneId)) return
+  continueInFlight.add(paneId)
+  try {
+    const screen = (): string => (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? ''
+    const outcome = await leaveLimitMenuAndResume({
+      read: screen,
+      write: (data) => { void backend.send('terminal.input', { terminal_session_id: ref.sessionId as string, data }) },
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      resume: resume
+        ? async () => {
+          // Same gate every other unsolicited injection passes.
+          if (messagingHoldKey(paneId) !== null) return false
+          await acquireInjectionSlot()
+          try {
+            return await injectPane(paneId, settingsGet(LOOP_RESUME_SETTING_KEY, DEFAULT_LOOP_RESUME), 'failover-continue', true)
+          } finally {
+            releaseInjectionSlot()
+          }
+        }
+        : undefined,
+    })
+    if (outcome === 'menu-stuck' || outcome === 'resume-failed') {
+      console.warn(`[failover-continue] pane ${paneId}: ${outcome}`)
+      pane.resumeContinueAvailable = true
+    }
+  } finally {
+    continueInFlight.delete(paneId)
+  }
+}
+
 async function continueRestoredPane(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane?.resumeContinueAvailable) return
@@ -7418,6 +7733,64 @@ function watchStartupTrust(paneId: string, agentKey: string, folder: string): vo
   startupTrustWatches.set(paneId, watch)
 }
 
+/** Why the workspace trust dialog live on this pane is left to a person: it
+ *  names a folder other than the pane's own workspace, or none
+ *  (lib/startupPrompts.ts). '' when there is no such dialog, or Enter may
+ *  answer it. */
+function heldWorkspaceTrust(paneId: string): string {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return ''
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen(), deps.cols())
+  if (prompt?.kind !== 'workspace-trust') return ''
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  return decision.action === 'block' ? decision.why : ''
+}
+
+/** The one answer Navide gives a workspace trust dialog live on this pane
+ *  outside the kickoff's watch (lib/startupPrompts.ts): decided against the
+ *  pane's workspace, the cursor moved onto the trust option, and answered only
+ *  once the dialog has left the screen — a bare Enter landed on Claude Code
+ *  2.1.329's "No, exit", and a dialog still drawn after it was answered a
+ *  second time by the kickoff's watch, which then reported blocked-by-prompt.
+ *  'none' when no workspace trust dialog is on screen. */
+async function answerWorkspaceTrust(paneId: string): Promise<{ outcome: 'none' | 'answered' } | { outcome: 'held'; why: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return { outcome: 'none' }
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const prompt = readStartupPrompt(pane.agentKey, deps.readScreen(), deps.cols())
+  if (prompt?.kind !== 'workspace-trust') return { outcome: 'none' }
+  const decision = decideStartupPrompt(prompt, { navideDirs: [], workspace: pane.workspacePath })
+  if (decision.action === 'block') return { outcome: 'held', why: decision.why }
+  if (await answerStartupPrompt(pane.agentKey, prompt, decision.choose, deps)) return { outcome: 'answered' }
+  return { outcome: 'held', why: 'the trust option did not take on the trust dialog' }
+}
+
+/** Role injection's hold on a trust dialog left to a person: recorded, then
+ *  wait for whoever answers it. False when it was not answered in time. */
+async function waitHeldWorkspaceTrust(pane: ActivePane, why: string, tag: string): Promise<boolean> {
+  recordDiagnostic({
+    level: 'warn',
+    code: 'spawn.startup-prompt-held',
+    message: `left a launch prompt for a person: ${why}`,
+    paneId: pane.id,
+  })
+  pipelineLog(`${tag} ⏸ startup trust dialog left for a person: ${why}`)
+  return waitStartupPromptGone(startupPromptDeps(pane.agentKey, pane.id), STARTUP_PROMPT_HOLD_MS)
+}
+
+/** Enter on the informational launch screen live on this pane, when it is one
+ *  of lib/startupPrompts' CONTINUE_NOTICES; false (nothing pressed) otherwise. */
+async function pressContinueNotice(paneId: string): Promise<boolean> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane) return false
+  const deps = startupPromptDeps(pane.agentKey, paneId)
+  const rule = readContinueNotice(pane.agentKey, deps.readScreen())
+  if (!rule || !(await deps.send('\r'))) return false
+  pipelineLog(`✓ dismissed informational launch screen ${rule} (pane ${paneId.slice(0, 8)})`)
+  return true
+}
+
 async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_MS): Promise<boolean> {
   if (paneAcceptsStartupTrust(paneId)) return (await startupTrustWatches.get(paneId)) ?? false
   const deadline = Date.now() + timeoutMs
@@ -7431,14 +7804,26 @@ async function dismissStartupDialog(paneId: string, timeoutMs = DISMISS_TIMEOUT_
     if (updatePromptOnScreen(paneId)) return (await paneClearUpdatePrompt(paneId)) === 'skipped'
     const buf = (ref.cleanBuffer as unknown as string) ?? ''
     if (TRUST_DIALOG_PATTERNS.some((re) => re.test(buf))) {
-      if (ref.sessionId) {
-        await backend.send('terminal.input', {
-          terminal_session_id: ref.sessionId as string,
-          data: '\r'
-        })
+      // Trust only the pane's own workspace. Any other folder, or a menu whose
+      // cursor cannot be read, is reported (the kickoff's blocked-by-prompt)
+      // and left alone.
+      const trust = await answerWorkspaceTrust(paneId)
+      if (trust.outcome === 'held') {
+        pipelineLog(`⏸ left the startup trust dialog alone (pane ${paneId.slice(0, 8)}): ${trust.why}`)
+        return false
       }
-      pipelineLog(`✓ dismissed startup dialog (pane ${paneId.slice(0, 8)})`)
-      return true
+      if (trust.outcome === 'answered') {
+        pipelineLog(`✓ answered startup trust dialog (pane ${paneId.slice(0, 8)})`)
+        return true
+      }
+      // An informational screen Enter only dismisses (lib/startupPrompts
+      // CONTINUE_NOTICES) is dismissed as before.
+      if (await pressContinueNotice(paneId)) return true
+      // Anything else not read as a trust dialog: nothing is pressed. A bare
+      // Enter here landed on "No, exit", or trusted a folder that is not the
+      // pane's own; the kickoff's watch reports whatever is left.
+      pipelineLog(`⏸ left a startup dialog it could not read alone (pane ${paneId.slice(0, 8)})`)
+      return false
     }
     const bytes = paneCleanBytes(paneId)
     if (bytes !== lastSize) {
@@ -7512,7 +7897,7 @@ function paneParkedOnPrompt(paneId: string): boolean {
   if (!ref) return false
   if ((ref.displayStatus as string | undefined) === 'awaiting') return true
   if (paneScreenBlocked(paneId)) return true
-  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  const agentKey = paneScreenAgentKey(panes.value.find((p) => p.id === paneId))
   if (!agentKey || !ref.readScreenTail) return false
   try {
     return matchAwaitingInput(agentKey, ref.readScreenTail(AWAITING_SCREEN_LINES) as unknown as string)
@@ -7837,7 +8222,15 @@ function scheduleInjection(pane: ActivePane): void {
     pipelineLog(`${tag} watching for startup dialog (up to ${DISMISS_TIMEOUT_MS / 1000}s)`)
     const dismissed = await dismissStartupDialog(pane.id, DISMISS_TIMEOUT_MS)
     if (!paneAlive(pane.id)) return
-    if (!dismissed) {
+    const heldTrust = dismissed ? '' : heldWorkspaceTrust(pane.id)
+    if (heldTrust && !(await waitHeldWorkspaceTrust(pane, heldTrust, tag))) {
+      pane.injectionStatus = 'failed'
+      setPrepStatus(pane, 'failed')
+      syncViews()
+      return
+    }
+    if (!paneAlive(pane.id)) return
+    if (!dismissed && !heldTrust) {
       pipelineLog(`${tag} no dialog detected — proceeding`)
       // Dump the buffer head so we can diagnose unrecognised CLI startup
       // screens. Trim to ~300 chars and replace whitespace runs for one-line
@@ -7893,15 +8286,25 @@ function scheduleInjection(pane: ActivePane): void {
     }
     if (!dismissed && !paneAcceptsStartupTrust(pane.id)) {
       const lateBuf = ((paneRefs[pane.id]?.cleanBuffer as unknown as string) ?? '')
-      if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
-        pipelineLog(`${tag} late startup dialog detected — dismissing`)
-        const r = paneRefs[pane.id]
-        if (r?.sessionId) {
-          await backend.send('terminal.input', {
-            terminal_session_id: r.sessionId as string,
-            data: '\r'
-          })
+      const lateHeld = TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) ? heldWorkspaceTrust(pane.id) : ''
+      if (lateHeld) {
+        if (!(await waitHeldWorkspaceTrust(pane, lateHeld, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
         }
+        if (!paneAlive(pane.id)) return
+      } else if (TRUST_DIALOG_PATTERNS.some((re) => re.test(lateBuf)) && !updatePromptOnScreen(pane.id)) {
+        pipelineLog(`${tag} late startup dialog detected — dismissing`)
+        const trust = await answerWorkspaceTrust(pane.id)
+        if (trust.outcome === 'held' && !(await waitHeldWorkspaceTrust(pane, trust.why, tag))) {
+          pane.injectionStatus = 'failed'
+          setPrepStatus(pane, 'failed')
+          syncViews()
+          return
+        }
+        if (trust.outcome === 'none') await pressContinueNotice(pane.id)
         await waitForQuiet(pane.id, 2000, 2500)
         if (!paneAlive(pane.id)) return
       }
@@ -8213,6 +8616,10 @@ interface SpawnInternal {
   isLogin?: boolean
   /** With `isLogin`: a claude sign-in inside `profileId`'s own config dir. */
   accountDirLogin?: boolean
+  /** Remote container target; see ActivePane.remote. */
+  remote?: RemoteTarget
+  /** SSH Remote terminal target; see ActivePane.sshRemote. */
+  sshRemote?: SshRemoteTarget
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8306,7 +8713,7 @@ async function sendSessionMarkerBootstrap(pane: ActivePane, tag: string): Promis
 }
 
 async function spawnPane(opts: SpawnInternal): Promise<string | null> {
-  const spec = agentSpecs.find((s) => s.agentKey === opts.agentKey)
+  const spec = paneAgentSpec(opts.agentKey)
   if (!spec) return null
   const id = crypto.randomUUID()
   // Specs with a per-pane argument (aider's private chat-history file) need the
@@ -8393,8 +8800,10 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   // Login panes get NO marker: they sit at an interactive sign-in wizard, and
   // the marker bootstrap (dismissStartupDialog + pasted marker + Enter) would
   // inject input into it. No marker also means no session overlay for them.
+  // A remote pane gets none either: its session file is in the container,
+  // where the backend's marker reader cannot look.
   const sessionMarker =
-    !opts.isResume && !opts.isLogin && SESSION_MARKER_AGENTS.has(opts.agentKey)
+    !opts.isResume && !opts.isLogin && !opts.remote && SESSION_MARKER_AGENTS.has(opts.agentKey)
       ? `at-pane:${id}`
       : ''
   const pane: ActivePane = {
@@ -8402,7 +8811,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     realized: true,
     restoring: opts.restoring,
     agentKey: opts.agentKey,
-    agentLabel: spec.label,
+    // A remote pane is named after the CLI it runs, as before it had a key of its own.
+    agentLabel: (opts.remote && agentSpecs.find((s) => s.agentKey === opts.remote!.cli)?.label) || spec.label,
     customName: opts.customName,
     nameLocked: opts.nameLocked,
     autoName: opts.autoName,
@@ -8432,6 +8842,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     openedById: opts.openedById,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
     isLogin: opts.isLogin || opts.loginProfileId ? true : undefined,
+    remote: opts.remote,
+    sshRemote: opts.sshRemote,
   }
   acp.claim(id, opts)
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
@@ -8439,6 +8851,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
   if (
     opts.agentKey === FOLLOW_SWITCH_AGENT &&
     !opts.isLogin &&
+    !opts.remote &&
     (!opts.profileId || !followDirSignedIn(opts.profileId))
   ) {
     accountFollow.add(id)
@@ -8598,6 +9011,8 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       loginProfileId: opts.loginProfileId,
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
+      ...(opts.remote ? { remote: opts.remote } : {}),
+      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote } } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -9285,9 +9700,17 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   })
   delete paneRefs[paneId]
   unregisterPaneMessaging(paneId)
-  // Only a real close releases a chat-channel binding; rebuild and idle-reclaim
-  // keep the seat, and workspace close / teardown restore the pane later.
-  if (markRemoved && !keepInList) useChannels(backend).paneClosed(paneId)
+  // Only a real close parks a chat-channel binding (kept dormant for the chat to wake
+  // back or unlink); rebuild and idle-reclaim keep the seat, and workspace close /
+  // teardown restore the pane later.
+  if (markRemoved && !keepInList) {
+    useChannels(backend).paneClosed(paneId, {
+      paneName: pane?.customName || pane?.autoName || pane?.messagingName || '',
+      workspacePath: pane?.workspacePath ?? '',
+      sessionId: pane?.pinnedSessionId ?? '',
+      agent: pane?.agentKey ?? '',
+    })
+  }
   turnTextGate.delete(paneId)
   workerTurnTextGate.delete(paneId)
   workerTurnTextAt.delete(paneId)
@@ -9568,6 +9991,46 @@ async function onBackendRestartPaneAction(action: PaneRebuildAnnouncementAction)
   announcements.dropBackendRestartPane(action.paneId)
 }
 
+/** Reconnect a pane whose Navide tools never connected or were dropped.
+ *  Only while the pane is idle. A claude pane is first told
+ *  `/mcp reconnect navide` (non-interactive): its CLI dials the tool server
+ *  again in place, keeping the conversation and its background processes.
+ *  Otherwise — another CLI, a held pane, or the command not going in — the
+ *  same-session rebuild (a fresh CLI on the same conversation dials anew); a
+ *  pane nobody typed in has no transcript to resume, so it reopens fresh. The
+ *  busy case is answered here, and every other failure keeps its toast. */
+async function reconnectPaneMcp(paneId: string): Promise<void> {
+  if (paneRefs[paneId]?.displayStatus !== 'idle') {
+    notifyRestore.toast(i18n.global.t('pane.terminal.mcp-reconnect-busy'), { type: 'info' })
+    return
+  }
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (pane?.agentKey === 'claude' && messagingHoldKey(paneId) === null) {
+    if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return
+  }
+  await rebuildPaneViaResume(paneId, { freshWhenNoTranscript: true })
+}
+
+/** Claude Code's in-place reconnect of Navide's server (wiring SERVER_NAME). */
+const MCP_RECONNECT_COMMAND = '/mcp reconnect navide'
+
+/** ui.pane.reconnectMcp: only the in-place half of reconnectPaneMcp, for the
+ *  backend's automatic retry and a commander's ui_invoke (2026-11-22: neither
+ *  the pane nor its commander could type /mcp). Never the rebuild — that ends
+ *  the CLI's background work and stays the user's click. The reason goes back
+ *  so the backend counts only a try that went in. */
+async function reconnectPaneMcpInPlace(paneId: string): Promise<{ sent: boolean; reason?: string; status?: string; hold?: string }> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.realized) return { sent: false, reason: 'not-open' }
+  const status = paneRefs[paneId]?.displayStatus as string | undefined
+  if (status !== 'idle') return { sent: false, reason: 'busy', status }
+  if (pane.agentKey !== 'claude') return { sent: false, reason: 'unsupported-cli' }
+  const hold = messagingHoldKey(paneId)
+  if (hold !== null) return { sent: false, reason: 'held', hold }
+  if (await injectPane(paneId, MCP_RECONNECT_COMMAND, 'mcp-reconnect', true)) return { sent: true }
+  return { sent: false, reason: 'inject-failed' }
+}
+
 /** Failure outcomes of `rebuildPaneViaResume` — success resolves undefined.
  *  Existing batch callers only compare `=== 'busy'`; the other tokens let
  *  the account-switch restart aggregate silent failures into one toast. */
@@ -9617,6 +10080,12 @@ async function rebuildPaneViaResume(
   if (!pane?.realized) return 'missing-pane'
   // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
   if (acp.owns(paneId)) return 'no-session'
+  // A remote container pane has no local transcript to resume: the rebuild is
+  // a fresh CLI in the same container (the reconnect banner's path too).
+  if (pane.remote) {
+    await rebuildPaneClean(paneId)
+    return undefined
+  }
   // A sign-in pane has no session to resume. Restarting one whose CLI ended
   // opens the ordinary CLI in its place; rebuildPaneClean carries no sign-in.
   if (loginPaneRestartable(pane, paneRefs[paneId]?.status as string | undefined)) {
@@ -10246,6 +10715,8 @@ const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
  *  on, optionally taking the other panes that ran out on the same account. */
 async function onQuotaSwitchAccount(paneId: string): Promise<void> {
   if (!followSwitchFlag.value) return
+  // A remote pane signs in inside its container; no account here is its own.
+  if (panes.value.find((p) => p.id === paneId)?.remote) return
   const inputs = panes.value.map(followPaneInput)
   const self = inputs.find((p) => p.id === paneId)
   if (!self) return
@@ -10345,7 +10816,7 @@ function paneAccountFixed(p: ActivePane): boolean {
  *  that is working; a declined or failed rebuild leaves the flag as it was. */
 async function toggleAccountPin(paneId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
-  if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
+  if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT || pane.remote) return
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
   if (pane.isLogin) return
   if (paneAccountFixed(pane)) {
@@ -10491,6 +10962,7 @@ async function fixDescendantsToAccount(paneId: string): Promise<void> {
 async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
+  if (pane?.remote) return
   if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
   await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
 }
@@ -10648,6 +11120,10 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     model: pane.model,
     effort: pane.effort,
     muted: isPaneMuted(paneId),
+    // A remote pane reconnects to the same container.
+    remote: pane.remote,
+    // An SSH Remote pane reconnects to the same host.
+    sshRemote: pane.sshRemote,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -10669,6 +11145,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       isResume: false,
       model: snap.model,
       effort: snap.effort,
+      remote: snap.remote,
+      sshRemote: snap.sshRemote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -10676,7 +11154,11 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       rekeyLineage(paneId, newId)
       setPaneMuted(paneId, false)
       if (snap.muted) setPaneMuted(newId, true)
-      if (snap.origin !== 'pipeline') {
+      // An SSH Remote pane has no record (it is not restored); writing one
+      // here would bring it back after a restart as a LOCAL shell.
+      if (snap.sshRemote) {
+        // nothing to record
+      } else if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
           pane_id: newId,
@@ -11348,7 +11830,23 @@ quotaFailover.initQuotaFailover(backend, {
         }
         if (loopFailoverResumeArmed.has(pane.id)) pane.resumeContinueAvailable = false
         else if (pane.loopActive) pane.resumeContinueAvailable = true
+        // The pane's next request already uses the new account: a pane parked on
+        // Claude's limit menu leaves it and carries on with its task. A loop pane
+        // only leaves the menu; its own resume (or Continue button) goes on.
+        if (ev.switchMode === 'hot' && ev.state === 'committed' && !ev.needsLogin) {
+          void leaveLimitMenuAfterSwitch(pane.id, !loopFailoverResumeArmed.has(pane.id) && !pane.loopActive)
+        }
       }
+    }
+    // Panes the swap could not reach (their credential comes from the
+    // environment) are named one by one, so nobody reads them as switched.
+    for (const paneId of ev.overriddenPanes ?? []) {
+      const pane = panes.value.find((p) => p.id === paneId && p.realized)
+      if (!pane) continue
+      notifyRestore.toast(
+        i18n.global.t('announce.quota.pane-not-switched', { pane: pane.customName || pane.autoName || pane.agentKey }),
+        { type: 'error' },
+      )
     }
   },
   onIncidentReady: (incident: FailoverIncident) => releaseQuotaGate(incident.id),
@@ -11984,6 +12482,8 @@ registerCommand('ui.pane.create', async (args) => {
   for (const advisory of spawnAdvisoriesFor(gateCtx)) {
     recordDiagnostic({ level: 'warn', code: 'spawn.advisory', message: advisory, paneId })
   }
+  const placement = terminalPlacementNote(paneId)
+  if (placement) recordDiagnostic({ level: 'warn', code: 'spawn.placement', message: placement, paneId })
   void sendQuiet<ProjectPayload>('manual_pane.spawn', {
     workspace_path: currentWorkspace.value,
     pane_id: paneId,
@@ -12191,6 +12691,15 @@ registerCommand('ui.pane.interrupt', async (args) => {
   })
   return advisories.length ? { sent, status, advisories } : { sent, status }
 })
+// A pane whose navide MCP dropped cannot reconnect itself, and cli_send cannot
+// type a slash command for it: this is the backend's automatic retry and a
+// commander's way in. In place only, idle panes only (reconnectPaneMcpInPlace).
+registerCommand('ui.pane.reconnectMcp', async (args) => {
+  const paneId = (args as { paneId?: string } | undefined)?.paneId
+  if (!paneId) throw new Error(`ui.pane.reconnectMcp requires ${PANE_ID_HINT}`)
+  if (!panes.value.some((p) => p.id === paneId)) throw new Error(`ui.pane.reconnectMcp: pane "${paneId}" not found`)
+  return reconnectPaneMcpInPlace(paneId)
+})
 // cli_set_model: switch a running pane's model. claude through its /model
 // picker's `s` (setModelViaPicker), codex by typing `/model <id>`
 // (lib/liveModelSwitch), else — and whenever the picker falls back — a resume
@@ -12382,6 +12891,7 @@ registerCommand('ui.pane.sendKeys', async (args) => {
     screen: (ref.readScreenTail?.(AWAITING_SCREEN_LINES) as string | undefined) ?? '',
     answer: a.answer,
     expected: a.expected,
+    navideDirs: (ref.navideDirs as unknown as string[] | undefined) ?? [],
   })
   if (!resolved.ok) {
     return { ok: false, sent: false, error: resolved.error, ...(resolved.errorCode ? { error_code: resolved.errorCode } : {}) }
@@ -13279,7 +13789,9 @@ const channelAccountDeps: ChannelAccountDeps = {
     defaultProfileId: (agentKey) => cliProfilesApi.defaultProfileId(agentKey),
     aliasFor: (agentKey, profileId) => cliProfilesApi.aliasFor(agentKey, profileId),
     profilesForAgent: (agentKey) => cliProfilesApi.profilesForAgent(agentKey),
+    orderedSlotIds: (agentKey) => cliProfilesApi.orderedSlotIds(agentKey),
     signedOut: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.signedIn === false,
+    email: (agentKey, profileId) => cliProfilesApi.identityFor(agentKey, profileId)?.email ?? null,
   },
   usage: (agentKey, profileId) => {
     const snap = accountUsageFor(agentKey, profileId)
@@ -13289,6 +13801,8 @@ const channelAccountDeps: ChannelAccountDeps = {
 }
 
 async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
+  // The backend refuses these first; this keeps the renderer from moving one.
+  if (panes.value.find((p) => p.id === String(args.paneId ?? ''))?.remote) return { status: 'refused', code: 'REMOTE_PANE' }
   const ctx = switchToastContext(args, callerPaneId)
   const outcome = await runAgentPaneAccountSwitch(args, {
     accounts: cliProfilesApi,
@@ -13736,6 +14250,17 @@ interface ProjectPane {
   /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
    *  Absent on records written before the field existed. */
   last_live_launch?: string
+  /** A remote container pane's target; `{}` or absent for a local pane. */
+  remote?: Partial<RemoteTarget>
+}
+
+/** A saved pane's remote target, or undefined for a local pane. */
+function savedRemoteTarget(saved: { remote?: Partial<RemoteTarget> }): RemoteTarget | undefined {
+  const r = saved.remote
+  return r && typeof r.host === 'string' && r.host && typeof r.container === 'string' && r.container && r.network
+    && (r.cli === 'claude' || r.cli === 'codex')
+    ? { host: r.host, container: r.container, network: r.network, cli: r.cli }
+    : undefined
 }
 
 const HISTORY_ORIGINS: readonly SpawnHistoryEntry['origin'][] = ['manual', 'pipeline', 'mcp']
@@ -13928,6 +14453,8 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     formerPaneIds: [saved.pane_id],
     replacePaneId: opts.replacePaneId,
     restoring: opts.restoring,
+    // The backend's record of a remote pane: it goes back to its container.
+    remote: savedRemoteTarget(saved),
   })
   if (!paneId) return null
   if (opts.shouldPersist && !opts.shouldPersist(paneId)) {
@@ -14168,6 +14695,9 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
       }
       return
     }
+    // Out of retries: the window goes on as if the workspace were new, with
+    // none of its panes. Say so, or a missing restore leaves no trace.
+    recordDiagnostic(workspaceCheckGaveUp(path, workspaceCheckRetries + 1))
   } else {
     workspaceCheckRetries = 0
   }
@@ -14882,6 +15412,8 @@ function deferredPaneStillCurrent(
 const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
 /** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
 const scheduledRestoreIds = new Set<string>()
+/** Placeholder id → the pane id it was realized as, read once by realizeRestoredPaneSettled. */
+const realizedPaneIds = new Map<string, string>()
 /** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
 const wakeClaims = new WakeClaims()
 
@@ -14989,19 +15521,27 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // Only this batch. A resume under 'single'/'page'/'tab' is already capped by
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
+  //
+  // Every batch below holds its slot until the pane's prep settles, not just
+  // until the spawn ack: an ack-only ceiling still let twenty CLIs boot — and
+  // dial /plan-mcp — together (2026-11-12). This schedules our own restore
+  // only; a restore the user triggers from the UI is left as it was.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   try {
     if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (decision === 'resume' && session.scope === 'auto') {
       // Auto brings back every pane live at the last close: same ceiling as 'all'.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     } else if (interrupted.length > 0) {
       // The interrupted panes ride on top of the scope's pick: same ceiling as
-      // an 'all' restore, so a relaunch never starts more than two at once.
-      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
-    } else {
+      // an 'all' restore.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
+    } else if (trigger !== 'cold') {
       await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    } else {
+      // A cold restore under 'single'/'page'/'tab': a big tab is still a batch.
+      await runWithConcurrency(ids, COLD_RESTORE_STARTING_LIMIT, realizeRestoredPaneSettled)
     }
   } finally {
     for (const id of ids) scheduledRestoreIds.delete(id)
@@ -15011,6 +15551,20 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     notifyRestore.toast(i18n.global.t('reconnect.auto-toast', { count: reconnected }), { type: 'success' })
   }
   if (interruptedKids.length > 0) notifyInterruptedParents(interruptedKids)
+}
+
+/** Realize one placeholder of a restore batch and hold the batch slot until the
+ *  new pane's prep settles (ready, failed or gone), at most
+ *  COLD_RESTORE_SETTLE_TIMEOUT_MS. */
+async function realizeRestoredPaneSettled(paneId: string): Promise<void> {
+  const outcome = await realizeRestoredPane(paneId, true)
+  const newId = realizedPaneIds.get(paneId)
+  realizedPaneIds.delete(paneId)
+  if ((outcome !== 'opened' && outcome !== 'fresh') || !newId) return
+  await waitUntil(() => {
+    const pane = panes.value.find((p) => p.id === newId)
+    return !pane || pane.preparationStatus === 'ready' || pane.preparationStatus === 'failed'
+  }, COLD_RESTORE_SETTLE_TIMEOUT_MS)
 }
 
 /** The placeholders a relaunch resumes by itself in one workspace: the
@@ -15307,6 +15861,7 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    realizedPaneIds.set(paneId, newId)
     const launched = panes.value.find((p) => p.id === newId)
     if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the
@@ -17900,7 +18455,7 @@ backend.on('agent.activity', (raw) => {
     // not text. Same authority, same verification as the pane text path.
     const turnPane = panes.value.find((p) => p.id === ev.pane_id)
     const turnDetail = turnPane ? agentSpecs.find((s) => s.agentKey === turnPane.agentKey)?.quotaExhausted?.turnDetail : undefined
-    if (turnPane && turnDetail && ev.detail === turnDetail) {
+    if (turnPane && turnDetail && ev.detail === turnDetail && !turnPane.remote) {
       void quotaFailover.report({
         agentKey: turnPane.agentKey,
         paneId: turnPane.id,
@@ -18560,6 +19115,70 @@ backend.on('agent_msg.push_state', (raw) => {
   }
 })
 
+// A pane's CLI has been up for minutes without ever reaching Navide's tool
+// server (backend mcp_connect_watch; 2026-11-12 mass restore). Broadcast to
+// every window: only the one holding the pane badges it and tells the user.
+backend.on('mcp.never_connected', (raw) => {
+  const ev = raw as { pane_id?: string; name?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane) return
+  pane.mcpNeverConnected = true
+  const paneId = pane.id
+  const name = ev.name || pane.messagingName || pane.agentLabel
+  const title = i18n.global.t('pane.terminal.mcp-never-connected-title', { name })
+  const body = i18n.global.t('pane.terminal.mcp-never-connected-body', { name })
+  notifyRestore.toast(body, {
+    type: 'error',
+    title,
+    duration: 15000,
+    action: { label: i18n.global.t('pane.terminal.mcp-reconnect'), run: () => { void reconnectPaneMcp(paneId) } },
+  })
+  sysNotify.notifyPaneState(pane.id, 'attention', title, body)
+})
+
+// The same for a pane whose CLI was connected, lost the connection when the
+// backend stalled and stopped retrying (2026-11-15: 65 of 66 panes).
+backend.on('mcp.disconnected', (raw) => {
+  const ev = raw as { pane_id?: string; name?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane) return
+  pane.mcpNeverConnected = true
+  const paneId = pane.id
+  const name = ev.name || pane.messagingName || pane.agentLabel
+  const title = i18n.global.t('pane.terminal.mcp-disconnected-title', { name })
+  const body = i18n.global.t('pane.terminal.mcp-disconnected-body', { name })
+  notifyRestore.toast(body, {
+    type: 'error',
+    title,
+    duration: 15000,
+    action: { label: i18n.global.t('pane.terminal.mcp-reconnect'), run: () => { void reconnectPaneMcp(paneId) } },
+  })
+  sysNotify.notifyPaneState(pane.id, 'attention', title, body)
+})
+
+// A cli_send has sat parked on a restore placeholder for 10 minutes (backend
+// take_overdue_parked). The window holding that unopened pane tells the user
+// and offers to open it; nothing opens by itself.
+backend.on('agent_msg.parked_overdue', (raw) => {
+  const ev = raw as { target?: string; excerpt?: string }
+  const name = (ev?.target ?? '').split('/').pop() ?? ''
+  const pane = panes.value.find((p) => !p.realized && p.messagingName === name)
+  if (!name || !pane) return
+  const paneId = pane.id
+  notifyRestore.toast(i18n.global.t('pane.terminal.parked-overdue-body', { name, excerpt: ev.excerpt ?? '' }), {
+    type: 'info',
+    duration: 20000,
+    action: { label: i18n.global.t('pane.terminal.parked-overdue-open'), run: () => { void realizeRestoredPane(paneId, false, { explicit: true }) } },
+  })
+})
+
+// That pane reached the server after all (a manual /mcp, a rebuild).
+backend.on('mcp.connected', (raw) => {
+  const ev = raw as { pane_id?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (pane) pane.mcpNeverConnected = false
+})
+
 // A sending window withdrew a message before it went in. Every window sees the
 // request; only the one holding that message in a queue has anything to drop,
 // and it reports the cancellation back over the ordinary delivery-report path.
@@ -18857,6 +19476,8 @@ backend.on('terminal.exit', (raw) => {
   // Any other non-zero exit of an agent CLI used to look exactly like the user
   // quitting it. Keep the code for the title-bar badge, and record it.
   pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  // ssh's own failure code: the SSH pane's banner reconnects only on it.
+  if (pane.sshRemote) pane.sshExitCode = typeof ev.exit_code === 'number' ? ev.exit_code : null
   if (pane.exitFault) {
     recordDiagnostic({
       level: 'error',
@@ -19005,6 +19626,21 @@ backend.on('claude.account_dir_notice', (raw) => {
       { type: 'error', duration: 12000 }
     )
   }
+})
+
+// A stopped quota continuation nobody acted on: the backend reminds while it
+// stays open and once more when it expires, so it cannot sit unseen for hours.
+backend.on('quota_failover.stuck', (raw) => {
+  const ev = raw as { agentKey?: string; reason?: string | null; stoppedForSec?: number; final?: boolean; paneIds?: string[] }
+  if (!(ev.paneIds ?? []).some((id) => panes.value.some((p) => p.id === id && p.realized))) return
+  const agent = agentSpecs.find((s) => s.agentKey === ev.agentKey)?.label ?? ev.agentKey ?? ''
+  const reason = ev.reason ?? 'unknown'
+  notifyRestore.toast(
+    ev.final
+      ? i18n.global.t('announce.quota.stuck-expired', { agent, reason })
+      : i18n.global.t('announce.quota.stuck', { agent, reason, minutes: Math.floor((ev.stoppedForSec ?? 0) / 60) }),
+    { type: ev.final ? 'info' : 'error' },
+  )
 })
 
 // CLI account login: the backend harvested a profile's isolated login home
@@ -20011,18 +20647,18 @@ function parseContentBlocks(
     const lastStart = m[1].lastIndexOf(startMarker)
     const inner = lastStart >= 0 ? m[1].slice(lastStart + startMarker.length) : m[1]
     // `content:` consumes everything to end of inner block.
+    // Tolerant fallback: take inner trimmed if no `content:` prefix.
     const cm = inner.match(/(?:^|\n)\s*content:\s*([\s\S]*)$/)
-    if (cm) {
-      // Skip the protocol's own template (`content: <...>`): a TUI that prints
-      // the submitted kickoff in full puts it after the router's floor, and a
-      // `<...>` placeholder is never a worker's real message.
-      const content = cm[1].trim()
-      if (!/^<[^<>]*>$/.test(content)) items.push(content)
-    } else {
-      // Tolerant fallback: take inner trimmed if no `content:` prefix.
-      const trimmed = inner.trim()
-      if (trimmed) items.push(trimmed)
-    }
+    const content = (cm ? cm[1] : inner).trim()
+    // Skip the protocol's own template (`content: <...>`): a TUI that prints
+    // the submitted kickoff in full puts it after the router's floor, and a
+    // `<...>` placeholder is never a worker's real message. The screen can
+    // lose letters or break the line as it reads the template back
+    // ("conte t: <o paragraph …>", 0.2.44 Windows VM), so its shape decides,
+    // not its words: a lone placeholder behind at most a short letters-only
+    // label that no longer reads as `content:`.
+    const body = cm ? content : content.replace(/^[A-Za-z]{1,10}(?:\s+[A-Za-z]{1,10})?:?\s*(?=<)/, '')
+    if ((cm || content) && !/^<[^<>]*>$/.test(body)) items.push(content)
     lastEnd = m.index + m[0].length
   }
   return { items, newCursor: fromCursor + lastEnd }
@@ -20222,7 +20858,9 @@ function queueOrRouteWorkerMsg(router: StageRouter, stageId: string, msg: Pendin
   const key = `${msg.kind}\u0000${msg.fromLabel}\u0000${msg.content.replace(/\s+/g, '')}`
   const credits = (router.screenRoutes ??= new Map())
   if (turnTextSince === undefined) {
-    if (router.routedWorkerMessages.has(key)) {
+    const prefix = `${msg.kind}\u0000${msg.fromLabel}\u0000`
+    if (router.routedWorkerMessages.has(key) || [...router.routedWorkerMessages].some(
+      (k) => k.startsWith(prefix) && isBlankedCopy(msg.content, k.slice(prefix.length)))) {
       pipelineLog(`Stage ${stageId} 🎯 ${msg.kind} from ${msg.fromLabel} skipped — a block already routed`)
       return
     }
@@ -20565,8 +21203,10 @@ async function globalManagerRouterScan(): Promise<void> {
     if (newCursor > cursor) globalRouterCursors.set(wp.id, newCursor)
     const fromLabel = wp.slotLabel || wp.stageId
     const firstSeen = (kind: string, content: string): boolean => {
-      const key = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000${content.replace(/\s+/g, '')}`
-      if (globalRoutedMessages.has(key)) {
+      const prefix = `${wp.id}\u0000${wp.stageId}\u0000${kind}\u0000`
+      const key = `${prefix}${content.replace(/\s+/g, '')}`
+      if (globalRoutedMessages.has(key) || [...globalRoutedMessages].some(
+        (k) => k.startsWith(prefix) && isBlankedCopy(content, k.slice(prefix.length)))) {
         pipelineLog(`🎯 Global: ${kind} from ${fromLabel} skipped — a block already routed`)
         return false
       }
@@ -22272,7 +22912,7 @@ function _loadRunGroups(path: string, project: NonNullable<ProjectPayload['proje
     let legacyRaw: string | null = null
     try { legacyRaw = localStorage.getItem(legacyKey) } catch { legacyRaw = null }
     const parsed = parseLegacyRunGroups(legacyRaw)
-    runGroups.value = parsed ?? [{ id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() }]
+    runGroups.value = initialRunGroups(parsed, project.panes?.length ?? 0, { id: DEFAULT_RUN_GROUP_ID, name: '預設', createdAt: Date.now() })
     if (!isDetachedWindow) {
       void sendQuiet<{ ok: boolean }>('project.set_ui_state', {
         workspace_path: path,
@@ -24304,6 +24944,90 @@ function openArenaStart(workspace?: string, prefill?: ArenaPrefill): void {
   arenaStartOpen.value = true
 }
 
+// ── Remote container panes (Settings → General → Experimental) ──────────────
+const { remoteEnabled: remoteDevcontainerEnabled } = useRemoteDevcontainerPrefs()
+/** Where the dialog's pane goes; null while the dialog is closed. */
+const remoteDialogTarget = ref<{ workspacePath: string; runGroupId?: string } | null>(null)
+
+/** ＋ menu → SSH Remote… (same experimental switch). */
+const sshRemoteDialogOpen = ref(false)
+function openSshRemoteDialog(): void {
+  if (remoteDevcontainerEnabled.value) sshRemoteDialogOpen.value = true
+}
+
+/** The dialog connected (the backend checked the host and trusted it): a
+ *  terminal pane whose shell runs there. */
+async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
+  sshRemoteDialogOpen.value = false
+  const workspacePath = currentWorkspace.value
+  const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
+  await spawnPane({
+    agentKey: 'terminal',
+    roleKey: '',
+    stageId: '',
+    commandOverride: '',
+    workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    autoName: sshTargetLabel(target),
+    sshRemote: target,
+  })
+}
+
+/** An SSH pane's banner asks the backend to check the host again (the same
+ *  check the dialog runs); only a reachable host gets a new shell. */
+async function reconnectSshPane(paneId: string): Promise<string | null> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane?.sshRemote) return 'other'
+  const reply = await backend.send('remote_ssh.connect', { target: { ...pane.sshRemote } }, 20_000)
+  if (!reply.ok) return sshFailureReason(reply.error)
+  await rebuildPaneClean(paneId)
+  return null
+}
+
+function openRemoteDialog(payload: { workspacePath: string; runGroupId?: string }): void {
+  if (!remoteDevcontainerEnabled.value) return
+  remoteDialogTarget.value = { workspacePath: payload.workspacePath || currentWorkspace.value, runGroupId: payload.runGroupId }
+}
+
+/** The dialog's "Open remote pane": a manual pane whose CLI the backend runs
+ *  in the chosen container, recorded like any manual pane so it is restored. */
+async function onRemoteDialogOpen(req: RemoteOpenRequest): Promise<void> {
+  const target = remoteDialogTarget.value
+  remoteDialogTarget.value = null
+  if (!target) return
+  const onScreen = normWs(target.workspacePath) === normWs(currentWorkspace.value)
+  const spawnGroupId = onScreen
+    ? resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, target.runGroupId ?? '')
+    : ''
+  // The user's own choice, recorded app-wide first: the backend connects only
+  // to a target listed there, never to one a workspace's pane record names.
+  if (!await sendQuiet('remote_devcontainer.trust', { remote: req.remote })) return
+  const paneId = await spawnPane({
+    agentKey: REMOTE_AGENT_KEY,
+    roleKey: '',
+    stageId: '',
+    commandOverride: '',
+    workspacePath: target.workspacePath,
+    origin: 'manual',
+    runGroupId: spawnGroupId || undefined,
+    remote: req.remote,
+  })
+  if (!paneId) return
+  const pane = panes.value.find((p) => p.id === paneId)
+  await sendQuiet<ProjectPayload>('manual_pane.spawn', {
+    workspace_path: target.workspacePath,
+    pane_id: paneId,
+    agent: REMOTE_AGENT_KEY,
+    role: '',
+    command: '',
+    session_id: pane?.pinnedSessionId ?? '',
+    run_group_id: spawnGroupId,
+    output_log_file: pane?.outputLogFile ?? '',
+    remote: req.remote,
+  })
+}
+
 function openArenaPanel(runId?: string): void {
   if (!arenaEnabled.value) return
   arenaPanelRunId.value = runId || arenaRuns.value[0]?.id || ''
@@ -25772,6 +26496,20 @@ function paneIsCommander(p: ActivePane): boolean {
     :request="agentSignInConfirm.pending.value"
     @answer="agentSignInConfirm.answer"
   />
+  <RemoteDevcontainerDialog
+    v-if="remoteDialogTarget"
+    :open="!!remoteDialogTarget"
+    :backend="backend"
+    @open="onRemoteDialogOpen"
+    @cancel="remoteDialogTarget = null"
+  />
+  <SshRemoteDialog
+    v-if="sshRemoteDialogOpen"
+    :open="sshRemoteDialogOpen"
+    :backend="backend"
+    @connected="onSshRemoteConnected"
+    @cancel="sshRemoteDialogOpen = false"
+  />
   <ArenaStartDialog
     v-if="arenaStartOpen"
     :open="arenaStartOpen"
@@ -26052,6 +26790,8 @@ function paneIsCommander(p: ActivePane): boolean {
       @agent-open="openAgentIdentity"
       @spawn="onManualSpawn"
       @spawn-acp="onAcpSpawn"
+      @spawn-remote="openRemoteDialog"
+      @spawn-ssh-remote="openSshRemoteDialog"
       @spawn-resume="onManualResume"
       @kill="onKill"
       @minimize="minimizePane"
@@ -26521,6 +27261,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :title="p.messagingName || p.customName || p.autoName || p.agentLabel"
           :auto-named="paneIsAutoNamed(p)"
           :agent-key="p.agentKey"
+          :permission-bypass="paneBypassState(p)"
           :cli-session-id="p.pinnedSessionId"
           :session-home-id="p.sessionHomeId"
           :conversation-log-path="p.outputLogFile"
@@ -26546,6 +27287,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :loop-estimate-weekly="p.loopEstimateWeekly"
           :login-expired="p.loginExpired"
+          :mcp-never-connected="p.mcpNeverConnected"
+          :reconnect-mcp="() => reconnectPaneMcp(p.id)"
           :exit-code="p.exitFault?.code ?? null"
           :stuck-since="p.stuckSince ?? null"
           :stale-config="paneStaleConfig(p)"
@@ -26561,6 +27304,12 @@ function paneIsCommander(p: ActivePane): boolean {
           :account-follow="paneAccountFollow(p)"
           :continue-available="p.resumeContinueAvailable"
           :restoring="p.restoring"
+          :remote="p.remote"
+          :remote-reconnect="() => rebuildPaneClean(p.id)"
+          :remote-close-pane="() => onKill(p.id)"
+          :ssh-remote="p.sshRemote"
+          :ssh-exit-code="p.sshExitCode ?? null"
+          :ssh-reconnect="() => reconnectSshPane(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"
           @minimize="minimizePane(p.id)"
@@ -27503,6 +28252,10 @@ function paneIsCommander(p: ActivePane): boolean {
       :agent-specs="enabledAgentSpecs"
       @close="evolve.closePanel()"
     />
+
+    <!-- Shipped Log panel (opened from the sidebar workspace menus and the
+         Schedule panel's digest job row; shown while a workspace is set) -->
+    <ShippedLogPanel :backend="backend" />
 
     <!-- Notifications popover -->
     <NotifyPanel

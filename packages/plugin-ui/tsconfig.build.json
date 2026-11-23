@@ -12,5 +12,5 @@
       "@navide/plugin-contracts": ["packages/plugin-contracts/dist/index.d.ts"]
     }
   },
-  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**", "src/shared/testing.ts"]
+  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
 }

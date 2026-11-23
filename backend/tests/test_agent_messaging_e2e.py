@@ -47,6 +47,14 @@ class FakeWebSocket:
         self.sent.append(payload)
 
 
+async def _settle() -> None:
+    """Let a fire-and-forget broadcast finish: it hands its sends to a task of
+    its own and to each window concurrently (app._deliver_detached), a few
+    loop steps rather than one."""
+    for _ in range(10):
+        await asyncio.sleep(0)
+
+
 def _window() -> app.Session:
     session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
     app._SESSIONS.add(session)
@@ -94,7 +102,7 @@ async def test_full_cross_workspace_round_trip() -> None:
             "msg_key": "pa:1",
         },
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     # Every window receives the broadcast; the frontend filters on target_pane_id.
     for window in (window_a, window_b):
@@ -112,7 +120,7 @@ async def test_full_cross_workspace_round_trip() -> None:
         "type": "agent_msg.delivered",
         "payload": {"msg_key": "pa:1", "ok": True},
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     assert len(_events(window_a, "agent_msg.delivery_result")) == 1
     assert _events(window_a, "agent_msg.delivery_result")[0]["payload"]["ok"] is True
@@ -147,7 +155,7 @@ async def test_closing_a_window_removes_its_targets() -> None:
             "msg_key": "pa:1",
         },
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     resp = [m for m in window_a.websocket.sent if m.get("id") == "3"][0]  # type: ignore[attr-defined]
     assert resp["payload"]["ok"] is False
@@ -170,7 +178,7 @@ async def test_closing_a_window_removes_its_targets() -> None:
             "msg_key": "pa:2",
         },
     })
-    await asyncio.sleep(0)
+    await _settle()
     expired = [m for m in window_a.websocket.sent if m.get("id") == "4"][0]  # type: ignore[attr-defined]
     assert expired["payload"]["code"] == "unknown-workspace"
 
@@ -190,7 +198,7 @@ async def test_same_workspace_target_is_not_flagged_cross_workspace() -> None:
         "type": "agent_msg.route",
         "payload": {"from_pane_id": "p1", "to": "alpha/b", "content": "hi", "msg_key": "k"},
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     payload = _events(window, "agent_msg.deliver")[0]["payload"]
     assert payload["cross_workspace"] is False
@@ -214,13 +222,13 @@ async def test_single_window_qualified_target_gets_its_own_delivery_result() -> 
         "type": "agent_msg.route",
         "payload": {"from_pane_id": "p1", "to": "alpha/b", "content": "hi", "msg_key": "p1:1"},
     })
-    await asyncio.sleep(0)
+    await _settle()
     await app.handle_message(window, {
         "id": "d",
         "type": "agent_msg.delivered",
         "payload": {"msg_key": "p1:1", "ok": True},
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     results = _events(window, "agent_msg.delivery_result")
     assert len(results) == 1
@@ -356,7 +364,7 @@ async def _report_delivered(
         "type": "agent_msg.delivered",
         "payload": {"msg_key": msg_key, "ok": ok, "reason": reason},
     })
-    await asyncio.sleep(0)
+    await _settle()
 
 
 async def _await_delivery(session: app.Session) -> dict[str, Any]:
@@ -427,6 +435,38 @@ async def test_cli_send_failure_is_reported_all_the_way_back_to_cli_check_messag
     results = _events(window_a, "agent_msg.delivery_result")
     assert len(results) == 1
     assert results[0]["payload"]["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_window_that_answers_before_the_sender_resumes_is_not_lost() -> None:
+    """The deliver broadcast runs in a task of its own (app._deliver_detached),
+    so the receiving window can report back before cli_send resumes from it.
+    That report has to find the message already on record; otherwise it is
+    dropped and the send stays "queued" for good. On Windows the 15.6 ms timer
+    tick made the e2e window win this race every time."""
+    window_a = _window()
+    window_b = _window()
+    await _register(window_a, "pa", "sender", "/ws/alpha")
+    await _register(window_b, "pb", "reviewer", "/ws/beta")
+    reports: list[asyncio.Task[None]] = []
+    fake = window_b.websocket
+    plain_send = fake.send_json  # type: ignore[attr-defined]
+
+    async def answer_at_once(payload: dict[str, Any]) -> None:
+        await plain_send(payload)
+        if payload.get("type") == "agent_msg.deliver":
+            key = payload["payload"]["msg_key"]
+            reports.append(asyncio.create_task(_report_delivered(window_b, key, ok=True)))
+
+    fake.send_json = answer_at_once  # type: ignore[attr-defined]
+
+    sent = await plan_mcp.cli_send("beta/reviewer", "run the tests", _ctx("pa"), wait_for_delivery_s=2.0)
+    await asyncio.gather(*reports)
+
+    assert reports, "the deliver event never reached the window"
+    assert sent["status"] == "delivered"
+    check = await plan_mcp.cli_check_message(sent["msg_key"], _ctx("pa"))
+    assert check["status"] == "delivered"
 
 
 @pytest.mark.asyncio
@@ -610,7 +650,7 @@ async def test_a_reply_carries_the_correlation_id_of_the_cli_send_it_answers() -
             "reply_to": delivered["msg_key"],
         },
     })
-    await asyncio.sleep(0)
+    await _settle()
 
     # Window A saw both halves of the exchange: its own outbound message (every
     # window sees every deliver) and the answer addressed back to it.

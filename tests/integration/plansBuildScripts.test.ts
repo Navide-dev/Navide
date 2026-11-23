@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { parse } from 'yaml'
@@ -18,116 +18,22 @@ function file(root: string, relative: string, content: string): string {
   return path
 }
 
+// navide.plans is built in its own repository; the build stages the pinned
+// version for this host's target under official-artifacts, where the
+// production verifier reads it.
+const pinnedPlans = /'navide\.plans': '([^']+)'/.exec(readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))![1]
+
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'navide-plans-build-'))
   roots.push(root)
-  file(root, 'plugins/navide-plans/backend/plans_backend.py', '# production source\n')
-  file(root, 'backend/agent_team_backend/__init__.py', '# package marker\n')
-  file(root, 'backend/agent_team_backend/path_guard.py', '# shared path guard\n')
-  file(root, 'backend/agent_team_backend/fs_write.py', '# shared write path\n')
-  file(root, 'backend/agent_team_backend/git_security.py', '# shared Git guard\n')
-  file(root, 'backend/agent_team_backend/plan_versions.py', '# shared plan versions\n')
-  file(root, 'backend/navide_plugin_sdk/__init__.py', '# public plugin SDK\n')
-  file(root, 'backend/pyproject.toml', '# build dependencies\n')
-  file(root, 'backend/uv.lock', '# pinned toolchain\n')
-  file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
-  file(root, 'dist-plugins/navide-plans/artifact-files.json', JSON.stringify({ files: ['manifest.json'] }))
-  file(root, 'scripts/build-plans-v2-backend.mjs', readFileSync('scripts/build-plans-v2-backend.mjs', 'utf8'))
-  const uv = file(root, 'bin/uv', `#!/usr/bin/env node
-const fs = require('node:fs');
-const path = require('node:path');
-fs.appendFileSync('build-calls', 'build\\n');
-fs.writeFileSync('build-args', process.argv.slice(2).join('\\n'));
-if (process.env.NAVIDE_TEST_FAIL_BUILD) process.exit(1);
-const destination = process.argv[process.argv.indexOf('--distpath') + 1];
-fs.mkdirSync(destination, { recursive: true });
-fs.writeFileSync(path.join(destination, process.platform === 'win32' ? 'navide-plans.exe' : 'navide-plans'), 'MZproduction-binary');
-`)
-  chmodSync(uv, 0o755)
+  file(root, 'src/main/plugins/officialPluginVersions.ts', readFileSync('src/main/plugins/officialPluginVersions.ts', 'utf8'))
+  mkdirSync(join(root, 'scripts'), { recursive: true })
   return root
 }
 
-function build(root: string, conditional = true, environment: Record<string, string> = {}): void {
-  execFileSync(process.execPath, [join(root, 'scripts/build-plans-v2-backend.mjs'), ...(conditional ? ['--if-needed'] : [])], {
-    cwd: root,
-    env: { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`, ...environment },
-    stdio: 'pipe',
-  })
+function stagedPlans(target = `${process.platform}-${process.arch}`): string {
+  return `dist-plugins/official-artifacts/factory-resources/navide.plans/${pinnedPlans}/${target}/package`
 }
-
-function buildCount(root: string): number {
-  return readFileSync(join(root, 'build-calls'), 'utf8').trim().split('\n').length
-}
-
-// The stub `uv` is a shebang script found through PATH, which Windows'
-// CreateProcess never resolves (only .com/.exe), so the real uv would run and
-// parse the placeholder lock instead.
-// Each build() starts the real build script and its stub uv as two Node
-// processes, up to six times per test: the cost is process startup, which
-// stretches with machine load, not a wait on anything that could race.
-describe.skipIf(isWindows())('Plans backend build cache', { timeout: 30_000 }, () => {
-  it('skips unchanged development builds and rebuilds changed inputs or missing output', () => {
-    const root = fixture()
-    build(root)
-    build(root)
-    expect(buildCount(root)).toBe(1)
-    file(root, 'plugins/navide-plans/backend/plans_backend.py', '# changed production source\n')
-    build(root)
-    expect(buildCount(root)).toBe(2)
-    file(root, 'backend/uv.lock', '# changed toolchain\n')
-    build(root)
-    expect(buildCount(root)).toBe(3)
-    rmSync(join(root, 'dist-plugins/navide-plans/backend'), { recursive: true })
-    build(root)
-    expect(buildCount(root)).toBe(4)
-  })
-
-  it('rebuilds when a core module the backend bundles changes', () => {
-    const root = fixture()
-    build(root)
-    build(root)
-    expect(buildCount(root)).toBe(1)
-    file(root, 'backend/agent_team_backend/path_guard.py', '# changed shared path guard\n')
-    build(root)
-    expect(buildCount(root)).toBe(2)
-    file(root, 'backend/agent_team_backend/__init__.py', '# changed package marker\n')
-    build(root)
-    expect(buildCount(root)).toBe(3)
-    file(root, 'backend/agent_team_backend/fs_write.py', '# changed shared write path\n')
-    build(root)
-    expect(buildCount(root)).toBe(4)
-    file(root, 'backend/agent_team_backend/git_security.py', '# changed shared Git guard\n')
-    build(root)
-    expect(buildCount(root)).toBe(5)
-    file(root, 'backend/agent_team_backend/plan_versions.py', '# changed shared plan versions\n')
-    build(root)
-    expect(buildCount(root)).toBe(6)
-    file(root, 'backend/navide_plugin_sdk/__init__.py', '# changed public plugin SDK\n')
-    build(root)
-    expect(buildCount(root)).toBe(7)
-  })
-
-  it('lets PyInstaller import the shared path guard from the backend source tree', () => {
-    const root = fixture()
-    build(root)
-    const args = readFileSync(join(root, 'build-args'), 'utf8').trim().split('\n')
-    expect(args).toContain('--paths')
-    expect(args[args.indexOf('--paths') + 1]).toBe(join(realpathSync(root), 'backend'))
-  })
-
-  it('rebuilds altered output and never caches a failed build; release builds remain unconditional', () => {
-    const root = fixture()
-    build(root)
-    file(root, 'dist-plugins/navide-plans/backend/navide-plans', 'MZaltered-output')
-    build(root)
-    expect(buildCount(root)).toBe(2)
-    build(root, false)
-    expect(buildCount(root)).toBe(3)
-    expect(() => build(root, false, { NAVIDE_TEST_FAIL_BUILD: '1' })).toThrow()
-    build(root)
-    expect(buildCount(root)).toBe(5)
-  })
-})
 
 // The CI step under test is a /bin/sh script.
 describe.skipIf(isWindows())('production Plans CI fixture exclusion', () => {
@@ -137,16 +43,17 @@ describe.skipIf(isWindows())('production Plans CI fixture exclusion', () => {
   function check(contamination?: 'extra' | 'replacement', fixtures = true): ReturnType<typeof spawnSync> {
     const root = fixture()
     file(root, 'dist-plugins/plans/index.html', '<html>Legacy</html>')
-    file(root, 'dist-plugins/navide-plans/frontend/left/index.html', '<html>Plans</html>')
-    file(root, 'dist-plugins/navide-plans/frontend/window/index.html', '<html>Plans window</html>')
-    file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
-    const production = file(root, 'dist-plugins/navide-plans/backend/navide-plans', 'MZproduction-binary')
+    const staged = stagedPlans()
+    file(root, `${staged}/frontend/left/index.html`, '<html>Plans</html>')
+    file(root, `${staged}/frontend/window/index.html`, '<html>Plans window</html>')
+    file(root, `${staged}/manifest.json`, JSON.stringify({ backend: { entry: 'backend/navide-plans' } }))
+    const production = file(root, `${staged}/backend/navide-plans`, 'MZproduction-binary')
     chmodSync(production, 0o755)
     if (fixtures) {
       const packagedFixture = file(root, 'dist-test-fixtures/plans/backend/navide-plans', 'MZtest-only-fixture')
       file(root, 'dist-test-fixtures/plans/backend/navide-plans-go', 'MZtest-only-go-fixture')
       if (contamination) copyFileSync(packagedFixture, contamination === 'extra'
-        ? join(root, 'dist-plugins/navide-plans/backend/copied-fixture')
+        ? join(root, `${staged}/backend/copied-fixture`)
         : production)
     }
     if (existsSync('scripts/verify-plans-production.mjs')) {
@@ -195,10 +102,12 @@ describe('production Plans verifier on a Windows build', () => {
   function verifyWindowsBuild(entry: string, executable: string): ReturnType<typeof spawnSync> {
     const root = fixture()
     file(root, 'dist-plugins/plans/index.html', '<html>Legacy</html>')
-    file(root, 'dist-plugins/navide-plans/frontend/left/index.html', '<html>Plans</html>')
-    file(root, 'dist-plugins/navide-plans/frontend/window/index.html', '<html>Plans window</html>')
-    file(root, 'dist-plugins/navide-plans/manifest.json', JSON.stringify({ backend: { entry } }))
-    file(root, `dist-plugins/navide-plans/backend/${executable}`, 'MZproduction-binary')
+    // The preloaded platform makes the verifier read a win32 target.
+    const staged = stagedPlans(`win32-${process.arch}`)
+    file(root, `${staged}/frontend/left/index.html`, '<html>Plans</html>')
+    file(root, `${staged}/frontend/window/index.html`, '<html>Plans window</html>')
+    file(root, `${staged}/manifest.json`, JSON.stringify({ backend: { entry } }))
+    file(root, `${staged}/backend/${executable}`, 'MZproduction-binary')
     copyFileSync('scripts/verify-plans-production.mjs', join(root, 'scripts/verify-plans-production.mjs'))
     return spawnSync(process.execPath, [...windowsPlatformPreload(root), join(root, 'scripts/verify-plans-production.mjs')], {
       cwd: root, encoding: 'utf8',
@@ -240,7 +149,10 @@ describe('release workflow verifies the Plans artifact it signs', () => {
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {
-    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./plugins/navide-plans/manifest.json\').version")"')
+    // navide.plans lives in Navide-dev/navide-plans: its version is the pin.
+    const pinned = 'artifact_version="$(node -p "/\'navide\\\\.plans\': \'([^\']+)\'/.exec(require(\'fs\').readFileSync(\'src/main/plugins/officialPluginVersions.ts\', \'utf8\'))[1]")"'
+    expect(verifyStep).toContain(pinned)
+    expect(linuxValidationStep).toContain(pinned)
     expect(verifyStep).toContain(
       'Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans',
     )
@@ -249,9 +161,11 @@ describe('release workflow verifies the Plans artifact it signs', () => {
     )
   })
 
-  it('asserts each release artifact carries the bundled Navide Browser backend at its own version', () => {
-    expect(verifyStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
-    expect(linuxValidationStep).toContain('browser_version="$(node -p "require(\'./plugins/navide-browser/manifest.json\').version")"')
+  it('asserts each release artifact carries the bundled Navide Browser backend at its pinned version', () => {
+    // navide.browser lives in Navide-dev/navide-browser: its version is the pin.
+    const pinned = 'browser_version="$(node -p "/\'navide\\\\.browser\': \'([^\']+)\'/.exec(require(\'fs\').readFileSync(\'src/main/plugins/officialPluginVersions.ts\', \'utf8\'))[1]")"'
+    expect(verifyStep).toContain(pinned)
+    expect(linuxValidationStep).toContain(pinned)
     expect(verifyStep).toContain(
       'test -x "${app_path}/Contents/Resources/official-artifacts/navide.browser/${browser_version}/darwin-arm64/package/backend/navide-browser"',
     )
@@ -261,7 +175,7 @@ describe('release workflow verifies the Plans artifact it signs', () => {
   })
 })
 
-describe('the standalone packaged-Plans gate builds every package it stages', () => {
+describe('the standalone packaged-Plans gate stages every official package from the Registry', () => {
   // release.yml's macOS gate runs `test:packaged-plans` without `--prepared`,
   // so run-artifact-tests.mjs builds the staged packages itself; CI only runs
   // the `--prepared` path after `bun run build` and never reaches this list.
@@ -270,16 +184,19 @@ describe('the standalone packaged-Plans gate builds every package it stages', ()
   const standalone = runner.slice(runner.indexOf('if (!prepared)'), runner.indexOf('stage-official-plugin-artifacts.mjs'))
   const staged = [...stage.matchAll(/directory: 'dist-plugins\/navide-([a-z-]+)'/g)].map((match) => match[1])
 
-  it('stages the four official packages', () => {
-    expect(staged).toEqual(['mini-ide', 'git', 'plans', 'browser'])
+  it('stages no package built here', () => {
+    expect(staged).toEqual([])
   })
 
-  it.each(staged)('builds navide-%s before staging it', (name) => {
-    expect(standalone).toContain(`'build:${name}:v2'`)
-  })
-
-  it('builds the native backends the staged Plans and Browser packages list', () => {
-    expect(standalone).toContain("'build:plans:backend'")
-    expect(standalone).toContain("'build:browser:backend'")
+  it('takes every official plugin from the Registry instead of building it', () => {
+    expect(stage).toContain("{ id: 'navide.git', target: 'universal' }")
+    expect(stage).toContain("{ id: 'navide.mini-ide', target: 'universal' }")
+    expect(stage).toContain("{ id: 'navide.browser', target: hostTarget }")
+    expect(stage).toContain("{ id: 'navide.plans', target: hostTarget }")
+    // A platform package is downloaded by target, as the App's installer asks.
+    expect(stage).toContain('/download?target=${encodeURIComponent(target)}')
+    for (const build of ['build:git:v2', 'build:mini-ide:v2', 'build:browser:v2', 'build:browser:backend', 'build:plans:v2', 'build:plans:backend']) {
+      expect(standalone).not.toContain(`'${build}'`)
+    }
   })
 })

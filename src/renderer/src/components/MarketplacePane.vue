@@ -12,7 +12,7 @@
 // (no v-html), so a package cannot inject markup into the settings window.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { vTruncate } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { InlineText, renderLines } from '../editor/markdownRender'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
@@ -23,6 +23,7 @@ import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
 import PluginSourceBadge from './PluginSourceBadge.vue'
 import type { PluginSource } from '../../../shared/pluginSource'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import MarketplaceScreenshot from './MarketplaceScreenshot.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
 import { useConfirmedExternalLink } from '../composables/useConfirmedExternalLink'
@@ -41,6 +42,7 @@ const flow = usePluginInstallFlow()
 const packFlow = usePackInstallFlow()
 const { locale, t, te } = useI18n()
 const openLink = useConfirmedExternalLink()
+const notify = useNotify()
 const numberFormat = computed(() => new Intl.NumberFormat(locale.value))
 function formatCount(value: number): string {
   return numberFormat.value.format(value)
@@ -64,6 +66,20 @@ const loadMoreError = ref('')
 const categories = ref<MarketplaceCategory[]>([])
 const category = ref('')
 const hideIncompatible = ref(false)
+// The Marketplace website's footer links (the same ones it shows).
+const REPO_URL = 'https://github.com/Navide-dev/Navide'
+const FOOTER_LINKS = [
+  { key: 'docs', url: `${REPO_URL}/blob/main/docs/en-US/build-for-navide.md` },
+  { key: 'discussions', url: `${REPO_URL}/discussions` },
+  { key: 'security', url: `${REPO_URL}/security/policy` },
+] as const
+// Platforms a list card names: "All platforms" for a universal package.
+function cardPlatforms(ext: MarketplaceExtension): string[] {
+  const targets = ext.latest_targets ?? []
+  return targets.length === 0 || targets.includes('universal') ? [] : [...new Set(targets)].sort()
+}
+// The Registry website, for the footer links; absent on an older Host answer.
+const siteUrl = ref('')
 
 const selected = ref<MarketplaceExtension | null>(null)
 const detail = ref<MarketplaceExtensionDetail | null>(null)
@@ -145,6 +161,7 @@ async function search(): Promise<void> {
     if (!res || !Array.isArray(res.items)) throw new Error('no answer from the main process')
     results.value = res.items
     total.value = res.total
+    siteUrl.value = typeof res.site_url === 'string' ? res.site_url : ''
     listState.value = 'ready'
   } catch (err) {
     results.value = []
@@ -232,9 +249,19 @@ function isIncompatible(ext: { compatible?: boolean | null }): boolean {
   return ext.compatible === false
 }
 
+// Each openDetail call takes a fresh token; an answer applies only while its
+// token is still the latest, so a slow earlier request never overwrites the
+// detail the user opened after it. The page still open is compared by its
+// namespace/name: `selected` hands back a reactive proxy, never `ext` itself.
+let detailRequest = 0
 async function openDetail(ext: MarketplaceExtension): Promise<void> {
   const api = pluginsApi()
   if (!api) return
+  const request = ++detailRequest
+  const stale = (): boolean =>
+    request !== detailRequest
+    || selected.value?.namespace !== ext.namespace
+    || selected.value?.name !== ext.name
   selected.value = ext
   detail.value = null
   detailState.value = 'loading'
@@ -242,11 +269,14 @@ async function openDetail(ext: MarketplaceExtension): Promise<void> {
   showCompatibleOnly.value = false
   changelog.value = null
   changelogState.value = 'idle'
-  detailTab.value = 'readme'
+  changelogOpen.value = false
   try {
-    detail.value = await api.marketplaceDetail({ namespace: ext.namespace, name: ext.name })
+    const next = await api.marketplaceDetail({ namespace: ext.namespace, name: ext.name })
+    if (stale()) return
+    detail.value = next
     detailState.value = 'ready'
   } catch (err) {
+    if (stale()) return
     detailError.value = ipcErrorMessage(err)
     detailState.value = 'error'
   }
@@ -314,6 +344,13 @@ const shownVersions = computed(() => {
     ? rows.filter((v) => v.installable && !v.yanked && v.compatible !== false)
     : rows
 })
+// The Status column only when a row has something to say there, so the
+// table fits beside the sidebar.
+const statusColumn = computed(
+  () =>
+    (showCompatibleOnly.value && !installedRow.value) ||
+    shownVersions.value.some((v) => !v.yanked && (!v.installable || v.compatible === false))
+)
 // "Works with" describes one version: the one Install would install, else the
 // Registry's latest. Its platforms and its minimum Navide version, so neither
 // mixes in what only an older version supports.
@@ -416,44 +453,87 @@ watch(detail, async (d) => {
   }
 })
 
-// Detail tabs: README, Changelog (when the package has one) and Versions.
-// Every panel stays rendered (v-show) so switching never refetches; the
-// changelog is fetched the first time its tab opens.
-type DetailTab = 'readme' | 'changelog' | 'versions'
-const detailTab = ref<DetailTab>('readme')
-const detailTabs = computed<DetailTab[]>(() =>
-  detail.value?.has_changelog ? ['readme', 'changelog', 'versions'] : ['readme', 'versions']
-)
-function tabLabel(tab: DetailTab): string {
-  return t(`settings.extensions.marketplace.${tab === 'readme' ? 'readme' : tab}`)
+// The detail page stacks its sections as the Marketplace website does
+// (screenshots, README, versions); the changelog is folded at the end and
+// fetched the first time it is opened.
+const changelogOpen = ref(false)
+function toggleChangelog(): void {
+  changelogOpen.value = !changelogOpen.value
+  if (changelogOpen.value) void loadChangelog()
 }
-function selectTab(tab: DetailTab): void {
-  detailTab.value = tab
-  if (tab === 'changelog') void loadChangelog()
+// "Show compatible versions" filters the table and brings it into view.
+const versionsSection = ref<HTMLElement | null>(null)
+function showCompatibleVersions(): void {
+  showCompatibleOnly.value = true
+  void nextTick(() => versionsSection.value?.scrollIntoView?.({ block: 'start', behavior: 'smooth' }))
 }
-const tabButtons = ref<HTMLButtonElement[]>([])
-// One underline that slides to the selected tab.
-const tabIndicator = ref({ left: 0, width: 0 })
-function measureTab(): void {
-  const index = detailTabs.value.indexOf(detailTab.value)
-  const button = tabButtons.value[index]
-  if (button) tabIndicator.value = { left: button.offsetLeft, width: button.offsetWidth }
+
+// The sensitive capabilities of the version Install would pick, each with
+// the plain-language hint the website shows ("fs: reads and writes files").
+const riskCaps = computed(() => latestVersionInfo.value?.sensitive_capabilities ?? [])
+function capabilityHint(cap: string): string {
+  const key = `settings.extensions.marketplace.capabilityHint.${cap}`
+  return te(key) ? t(key) : ''
 }
-watch([detailTab, detailState, detailTabs], () => void nextTick(measureTab))
-// Arrow keys move between tabs (WAI-ARIA tabs pattern, automatic activation).
-function onTabKeydown(event: KeyboardEvent): void {
-  const tabs = detailTabs.value
-  const index = tabs.indexOf(detailTab.value)
-  const next =
-    event.key === 'ArrowRight' ? (index + 1) % tabs.length
-      : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length
-        : event.key === 'Home' ? 0
-          : event.key === 'End' ? tabs.length - 1
-            : -1
-  if (next < 0) return
-  event.preventDefault()
-  selectTab(tabs[next])
-  void nextTick(() => tabButtons.value[next]?.focus())
+const riskText = computed(() => {
+  const items = riskCaps.value.map((cap) => {
+    const hint = capabilityHint(cap)
+    return hint ? t('settings.extensions.marketplace.riskItem', { cap, hint }) : cap
+  })
+  const list = new Intl.ListFormat(locale.value, { style: 'long', type: 'conjunction' }).format(items)
+  return t('settings.extensions.marketplace.riskBanner', { list })
+})
+
+// The installed package behind this detail page, for the Install card's
+// rollback and Disable/Enable (the same Host calls the Extensions page uses).
+const installedRow = computed(() => (detail.value ? installedById.value.get(idOf(detail.value)) ?? null : null))
+const rowBusy = ref(false)
+async function rollbackInstalled(): Promise<void> {
+  const api = pluginsApi()
+  const row = installedRow.value
+  if (!api || !row?.rollbackKind) return
+  // A kept file version is consented to again with its own disclosure.
+  if (row.rollbackNeedsConsent) {
+    await flow.rollbackWithConsent(row.id)
+    return
+  }
+  const confirmed = await notify.confirm(
+    row.rollbackKind === 'factory'
+      ? t('settings.extensions.rollback.confirmFactory', { id: row.id })
+      : t('settings.extensions.rollback.confirmPrevious', {
+        id: row.id,
+        version: row.rollbackToVersion ?? t('settings.extensions.rollback.previousVersion'),
+      }),
+    { title: t('settings.extensions.rollback.title'), confirmText: t('settings.extensions.rollback.confirm'), danger: true }
+  )
+  if (!confirmed) return
+  rowBusy.value = true
+  pageError.value = null
+  try {
+    await api.rollback(row.id)
+  } catch (err) {
+    pageError.value = { key: 'settings.extensions.marketplace.actionFailed', params: { error: ipcErrorMessage(err) } }
+  } finally {
+    // Redrawn from the Host either way: a rollback can fail after it switched.
+    await refreshInventory()
+    void pluginUpdates.refresh()
+    rowBusy.value = false
+  }
+}
+async function setInstalledDisabled(disabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  const row = installedRow.value
+  if (!api?.setDisabled || !row) return
+  rowBusy.value = true
+  pageError.value = null
+  try {
+    await api.setDisabled(row.id, disabled)
+  } catch (err) {
+    pageError.value = { key: 'settings.extensions.marketplace.actionFailed', params: { error: ipcErrorMessage(err) } }
+  } finally {
+    await refreshInventory()
+    rowBusy.value = false
+  }
 }
 
 async function loadChangelog(): Promise<void> {
@@ -570,6 +650,9 @@ watch(
                   <template #label>{{ $t('settings.extensions.marketplace.publisher') }}</template>
                   <template #value><strong>{{ reveal(detail.publisher) }}</strong></template>
                 </i18n-t>
+                <span v-if="detail.verified_domain" class="mkt-badge mkt-badge--ok mkt-verified-domain">
+                  ✓ {{ $t('settings.extensions.marketplace.verifiedDomain', { domain: detail.verified_domain }) }}
+                </span>
                 <span v-if="detail.latest_version">{{ $t('settings.extensions.marketplace.versionLabel', { version: detail.latest_version }) }}</span>
                 <span v-if="prereleaseCandidate" class="mkt-badge mkt-badge--warn mkt-prerelease-note">
                   {{ $t('settings.extensions.marketplace.prereleaseAvailable', { version: prereleaseCandidate }) }}
@@ -596,87 +679,12 @@ watch(
                   }}
                 </span>
               </div>
+              <div v-if="detail.categories.length" class="mkt-tags mkt-categories mkt-head-tags">
+                <span v-for="c in detail.categories" :key="c" class="mkt-tag">{{ categoryLabel({ slug: c, label: c }) }}</span>
+              </div>
             </div>
           </div>
           <p v-if="detail.description" class="mkt-desc">{{ reveal(detail.description) }}</p>
-          <div class="mkt-actions">
-            <button
-              v-if="isPack(detail)"
-              class="mkt-pack-install nv-btn nv-btn--primary"
-              :disabled="packFlow.busy.value || flow.busy.value"
-              @click="packFlow.start(detail.namespace, detail.name)"
-            >
-              {{ $t('settings.extensions.pack.install', { count: detail.extension_pack?.length ?? 0 }) }}
-            </button>
-            <template v-else-if="installedById.get(idOf(detail))">
-              <button
-                v-if="updatesById.get(idOf(detail))"
-                class="ext-update nv-btn nv-btn--primary"
-                :disabled="flow.busy.value"
-                @click="flow.install(detail.namespace, detail.name, updatesById.get(idOf(detail))?.latestVersion)"
-              >
-                {{
-                  $t('settings.extensions.marketplace.updateTo', {
-                    version: updatesById.get(idOf(detail))?.latestVersion ?? '',
-                  })
-                }}
-              </button>
-              <span class="mkt-badge mkt-badge--ok mkt-installed">
-                {{
-                  $t('settings.extensions.marketplace.installedVersion', {
-                    version: installedById.get(idOf(detail))?.packageVersion ?? '',
-                  })
-                }}
-              </span>
-              <!-- Built-in Navide plugins are disabled in Extensions, never removed. -->
-              <button
-                v-if="!idOf(detail).startsWith('navide.')"
-                class="ext-uninstall nv-btn nv-btn--ghost mkt-btn-danger-ghost"
-                :disabled="flow.busy.value"
-                @click="flow.uninstall(idOf(detail))"
-              >
-                {{ $t('settings.extensions.marketplace.uninstall') }}
-              </button>
-            </template>
-            <button
-              v-else-if="installableVersionInfo"
-              class="ext-install nv-btn nv-btn--primary"
-              :class="{ 'is-working': isInstalling(idOf(detail)) }"
-              :disabled="flow.busy.value || latestIncompatible"
-              :aria-busy="isInstalling(idOf(detail))"
-              @click="installFrom(detail.namespace, detail.name, installableVersionInfo.version)"
-            >
-              <span v-if="isInstalling(idOf(detail))" class="mkt-spinner" aria-hidden="true"></span>
-              <!-- Name the version when it is not the one the header shows, and
-                   say so when it is a pre-release. -->
-              <template v-if="isInstalling(idOf(detail))">{{ $t('settings.extensions.marketplace.installing') }}</template>
-              <template v-else>{{
-                installableVersionInfo.channel === 'pre-release'
-                  ? $t('settings.extensions.marketplace.installPrerelease', { version: installableVersionInfo.version })
-                  : installableVersionInfo.version === detail.latest_version
-                    ? $t('settings.extensions.install')
-                    : $t('settings.extensions.marketplace.installVersion', { version: installableVersionInfo.version })
-              }}</template>
-            </button>
-            <button
-              v-if="!isPack(detail) && !installedById.get(idOf(detail)) && prereleaseOffer"
-              class="mkt-install-prerelease nv-btn nv-btn--ghost"
-              :disabled="flow.busy.value || prereleaseBusy"
-              @click="installPrereleaseOffer"
-            >
-              {{ $t('settings.extensions.marketplace.installPrerelease', { version: prereleaseOffer.version }) }}
-            </button>
-            <label v-if="hasPrereleases" class="mkt-prerelease-toggle">
-              <input
-                type="checkbox"
-                class="nv-check"
-                :checked="detail.gets_prereleases === true"
-                :disabled="prereleaseBusy || flow.busy.value"
-                @change="setPrerelease(($event.target as HTMLInputElement).checked, $event.target as HTMLInputElement)"
-              />
-              {{ $t('settings.extensions.getPrereleases') }}
-            </label>
-          </div>
           <p
             v-if="latestUnavailable"
             class="mkt-unavailable mkt-callout mkt-callout--risk"
@@ -713,12 +721,17 @@ watch(
             <button
               v-if="detail.latest_compatible_version && !showCompatibleOnly"
               class="mkt-show-compatible nv-btn nv-btn--sm"
-              @click="showCompatibleOnly = true; selectTab('versions')"
+              @click="showCompatibleVersions"
             >
               {{ $t('settings.extensions.marketplace.showCompatible') }}
             </button>
           </div>
         </header>
+
+        <p v-if="riskCaps.length" class="mkt-callout mkt-callout--risk mkt-risk-banner" role="note">
+          <span class="mkt-risk-icon" aria-hidden="true">⚠</span>
+          <span>{{ riskText }}</span>
+        </p>
 
         <section v-if="isPack(detail)" class="mkt-block mkt-pack-members">
           <h4>{{ $t('settings.extensions.pack.membersTitle') }}</h4>
@@ -768,36 +781,23 @@ watch(
         </section>
         <div class="mkt-detail-body">
           <div class="mkt-detail-main">
-            <div class="mkt-tabs" role="tablist" :aria-label="$t('settings.extensions.marketplace.detailTabs')" @keydown="onTabKeydown">
-              <button
-                v-for="tab in detailTabs"
-                :id="`mkt-tab-${tab}`"
-                :key="tab"
-                ref="tabButtons"
-                class="mkt-tab"
-                :class="{ 'mkt-tab--active': detailTab === tab, 'mkt-changelog-toggle': tab === 'changelog' }"
-                role="tab"
-                :aria-selected="detailTab === tab"
-                :aria-controls="`mkt-panel-${tab}`"
-                :tabindex="detailTab === tab ? 0 : -1"
-                @click="selectTab(tab)"
-              >
-                {{ tabLabel(tab) }}
-              </button>
-              <span
-                class="mkt-tab-indicator"
-                aria-hidden="true"
-                :style="{ width: `${tabIndicator.width}px`, transform: `translateX(${tabIndicator.left}px)` }"
-              ></span>
-            </div>
+            <section v-if="detail.latest_version && detail.screenshots?.length" class="mkt-block mkt-screenshots">
+              <h4 class="mkt-section-label">{{ $t('settings.extensions.marketplace.screenshots') }}</h4>
+              <div class="mkt-shot-grid">
+                <MarketplaceScreenshot
+                  v-for="(path, i) in detail.screenshots"
+                  :key="path"
+                  :namespace="detail.namespace"
+                  :name="detail.name"
+                  :version="detail.latest_version"
+                  :path="path"
+                  :label="$t('settings.extensions.marketplace.screenshotLabel', { n: i + 1 })"
+                />
+              </div>
+            </section>
 
-            <section
-              id="mkt-panel-readme"
-              v-show="detailTab === 'readme'"
-              class="mkt-panel mkt-block"
-              role="tabpanel"
-              aria-labelledby="mkt-tab-readme"
-            >
+            <section class="mkt-block mkt-readme-block">
+              <h4 class="mkt-section-label">{{ $t('settings.extensions.marketplace.readme') }}</h4>
               <div v-if="readmeLines.length" class="mkt-readme">
                 <template v-for="(line, i) in readmeLines" :key="i">
                   <pre v-if="line.kind === 'codeblock'" class="mkt-code"><code>{{ line.text }}</code></pre>
@@ -813,38 +813,8 @@ watch(
               <p v-else class="nv-hint mkt-no-readme">{{ $t('settings.extensions.marketplace.noReadme') }}</p>
             </section>
 
-            <section
-              v-if="detail.has_changelog"
-              id="mkt-panel-changelog"
-              v-show="detailTab === 'changelog'"
-              class="mkt-panel mkt-block mkt-changelog"
-              role="tabpanel"
-              aria-labelledby="mkt-tab-changelog"
-            >
-              <p v-if="changelogState === 'loading' || changelogState === 'idle'" class="nv-loading">{{ $t('settings.extensions.marketplace.loadingDetail') }}</p>
-              <p v-else-if="changelogState === 'error'" class="ext-error">{{ $t('settings.extensions.marketplace.changelogFailed') }}</p>
-              <div v-else-if="changelogLines.length" class="mkt-readme">
-                <template v-for="(line, i) in changelogLines" :key="i">
-                  <pre v-if="line.kind === 'codeblock'" class="mkt-code"><code>{{ line.text }}</code></pre>
-                  <component :is="line.level <= 2 ? 'h3' : 'h4'" v-else-if="line.kind === 'heading'" class="mkt-md-h">
-                    <InlineText :text="line.text" />
-                  </component>
-                  <div v-else-if="line.kind === 'bullet'" class="mkt-md-li mkt-md-li--bullet"><InlineText :text="line.text" /></div>
-                  <div v-else-if="line.kind === 'ordered'" class="mkt-md-li"><span class="mkt-md-marker">{{ line.marker }}</span> <InlineText :text="line.text" /></div>
-                  <blockquote v-else-if="line.kind === 'quote'" class="mkt-md-quote"><InlineText :text="line.text" /></blockquote>
-                  <p v-else-if="line.kind === 'paragraph'" class="mkt-md-p"><InlineText :text="line.text" /></p>
-                </template>
-              </div>
-              <p v-else class="nv-hint">{{ $t('settings.extensions.marketplace.noChangelog') }}</p>
-            </section>
-
-            <section
-              id="mkt-panel-versions"
-              v-show="detailTab === 'versions'"
-              class="mkt-panel mkt-block"
-              role="tabpanel"
-              aria-labelledby="mkt-tab-versions"
-            >
+            <section id="mkt-versions" ref="versionsSection" class="mkt-block mkt-versions-block">
+              <h4 class="mkt-section-label">{{ $t('settings.extensions.marketplace.versions') }}</h4>
               <button
                 v-if="showCompatibleOnly"
                 class="mkt-show-all nv-btn nv-btn--ghost nv-btn--sm"
@@ -860,8 +830,10 @@ watch(
                       <th>{{ $t('settings.extensions.marketplace.column.published') }}</th>
                       <th>{{ $t('settings.extensions.marketplace.column.target') }}</th>
                       <th>{{ $t('settings.extensions.marketplace.column.channel') }}</th>
+                      <th>{{ $t('settings.extensions.marketplace.column.trust') }}</th>
+                      <th>{{ $t('settings.extensions.marketplace.column.capabilities') }}</th>
                       <th class="mkt-num">{{ $t('settings.extensions.marketplace.column.downloads') }}</th>
-                      <th>{{ $t('settings.extensions.marketplace.column.status') }}</th>
+                      <th v-if="statusColumn">{{ $t('settings.extensions.marketplace.column.status') }}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -870,7 +842,13 @@ watch(
                       :key="`${v.version}-${v.target}`"
                       :class="{ 'mkt-yanked': v.yanked, 'mkt-other-target': !v.installable || v.compatible === false }"
                     >
-                      <td><code>{{ v.version }}</code></td>
+                      <td>
+                        <code>{{ v.version }}</code>
+                        <!-- Yanked is marked on the version, as on the website. -->
+                        <span v-if="v.yanked" class="mkt-badge mkt-badge--warn mkt-yanked-tag">
+                          {{ $t('settings.extensions.marketplace.yanked') }}
+                        </span>
+                      </td>
                       <td class="mkt-muted">{{ formatDate(v.published_at) }}</td>
                       <td class="mkt-muted">{{ v.target }}</td>
                       <td>
@@ -881,11 +859,26 @@ watch(
                           {{ $t('settings.extensions.marketplace.channelStable') }}
                         </span>
                       </td>
-                      <td class="mkt-muted mkt-num">{{ formatCount(v.download_count) }}</td>
                       <td>
-                        <span v-if="v.yanked" class="mkt-badge mkt-badge--warn">
-                          {{ $t('settings.extensions.marketplace.yanked') }}
+                        <span v-if="v.trust_tier === 'signed-verified'" class="mkt-quiet mkt-quiet--ok mkt-row-trust">
+                          ✓ {{ $t('settings.extensions.marketplace.signedShort') }}
                         </span>
+                        <span v-else class="mkt-badge mkt-badge--warn mkt-row-trust">{{ $t('settings.extensions.trust.unsigned') }}</span>
+                      </td>
+                      <td>
+                        <span class="mkt-row-caps">
+                          <span
+                            v-for="cap in v.capabilities"
+                            :key="cap"
+                            class="mkt-pack-cap"
+                            :class="{ 'mkt-pack-cap--sensitive': v.sensitive_capabilities.includes(cap) }"
+                          >{{ cap }}</span>
+                          <span v-if="!v.capabilities.length" class="mkt-muted">—</span>
+                        </span>
+                      </td>
+                      <td class="mkt-muted mkt-num">{{ formatCount(v.download_count) }}</td>
+                      <td v-if="statusColumn">
+                        <span v-if="v.yanked"></span>
                         <span v-else-if="!v.installable" class="mkt-other-target-reason">
                           {{ $t('settings.extensions.marketplace.otherTarget', { target: v.target }) }}
                         </span>
@@ -906,9 +899,155 @@ watch(
                 </table>
               </div>
             </section>
+
+            <section v-if="detail.has_changelog" class="mkt-block mkt-changelog">
+              <button
+                class="mkt-changelog-toggle mkt-section-label"
+                :aria-expanded="changelogOpen"
+                aria-controls="mkt-changelog-body"
+                @click="toggleChangelog"
+              >
+                <span class="mkt-disclosure-caret" :class="{ 'mkt-disclosure-caret--open': changelogOpen }" aria-hidden="true">▸</span>
+                {{ $t('settings.extensions.marketplace.changelog') }}
+              </button>
+              <div v-if="changelogOpen" id="mkt-changelog-body">
+              <p v-if="changelogState === 'loading' || changelogState === 'idle'" class="nv-loading">{{ $t('settings.extensions.marketplace.loadingDetail') }}</p>
+              <p v-else-if="changelogState === 'error'" class="ext-error">{{ $t('settings.extensions.marketplace.changelogFailed') }}</p>
+              <div v-else-if="changelogLines.length" class="mkt-readme">
+                <template v-for="(line, i) in changelogLines" :key="i">
+                  <pre v-if="line.kind === 'codeblock'" class="mkt-code"><code>{{ line.text }}</code></pre>
+                  <component :is="line.level <= 2 ? 'h3' : 'h4'" v-else-if="line.kind === 'heading'" class="mkt-md-h">
+                    <InlineText :text="line.text" />
+                  </component>
+                  <div v-else-if="line.kind === 'bullet'" class="mkt-md-li mkt-md-li--bullet"><InlineText :text="line.text" /></div>
+                  <div v-else-if="line.kind === 'ordered'" class="mkt-md-li"><span class="mkt-md-marker">{{ line.marker }}</span> <InlineText :text="line.text" /></div>
+                  <blockquote v-else-if="line.kind === 'quote'" class="mkt-md-quote"><InlineText :text="line.text" /></blockquote>
+                  <p v-else-if="line.kind === 'paragraph'" class="mkt-md-p"><InlineText :text="line.text" /></p>
+                </template>
+              </div>
+              <p v-else class="nv-hint">{{ $t('settings.extensions.marketplace.noChangelog') }}</p>
+              </div>
+            </section>
           </div>
 
           <aside class="mkt-detail-side">
+            <section class="mkt-side-card mkt-install-card">
+              <h4>{{ $t('settings.extensions.marketplace.installCard') }}</h4>
+              <p v-if="installedRow" class="mkt-install-state">
+                <span class="mkt-badge mkt-badge--ok mkt-installed">
+                  {{ $t('settings.extensions.marketplace.installedVersion', { version: installedRow.packageVersion ?? '' }) }}
+                </span>
+                <span v-if="installedRow.disabled" class="mkt-badge mkt-badge--muted mkt-disabled-badge">
+                  {{ $t('settings.extensions.marketplace.disabledBadge') }}
+                </span>
+              </p>
+              <div class="mkt-actions">
+                <button
+                  v-if="isPack(detail)"
+                  class="mkt-pack-install nv-btn nv-btn--primary"
+                  :disabled="packFlow.busy.value || flow.busy.value"
+                  @click="packFlow.start(detail.namespace, detail.name)"
+                >
+                  {{ $t('settings.extensions.pack.install', { count: detail.extension_pack?.length ?? 0 }) }}
+                </button>
+                <template v-else-if="installedById.get(idOf(detail))">
+                  <button
+                    v-if="updatesById.get(idOf(detail))"
+                    class="ext-update nv-btn nv-btn--primary"
+                    :disabled="flow.busy.value"
+                    @click="flow.install(detail.namespace, detail.name, updatesById.get(idOf(detail))?.latestVersion)"
+                  >
+                    {{
+                      $t('settings.extensions.marketplace.updateTo', {
+                        version: updatesById.get(idOf(detail))?.latestVersion ?? '',
+                      })
+                    }}
+                  </button>
+                  <!-- Built-in Navide plugins are disabled in Extensions, never removed. -->
+                  <button
+                    v-if="!idOf(detail).startsWith('navide.')"
+                    class="ext-uninstall nv-btn nv-btn--ghost mkt-btn-danger-ghost"
+                    :disabled="flow.busy.value"
+                    @click="flow.uninstall(idOf(detail))"
+                  >
+                    {{ $t('settings.extensions.marketplace.uninstall') }}
+                  </button>
+                  <button
+                    v-if="installedRow?.rollbackKind"
+                    class="ext-rollback nv-btn nv-btn--sm"
+                    :disabled="flow.busy.value || rowBusy"
+                    @click="rollbackInstalled"
+                  >
+                    {{
+                      installedRow.rollbackKind === 'factory'
+                        ? $t('settings.extensions.rollback.toBundled')
+                        : $t('settings.extensions.rollback.toVersion', { version: installedRow.rollbackToVersion ?? '' })
+                    }}
+                  </button>
+                  <button
+                    v-if="installedRow?.disabled === false"
+                    class="ext-disable nv-btn nv-btn--sm"
+                    :disabled="flow.busy.value || rowBusy"
+                    @click="setInstalledDisabled(true)"
+                  >
+                    {{ $t('settings.extensions.disable') }}
+                  </button>
+                  <!-- A package a stop disabled is enabled from Extensions, after
+                       its stop summary (P2). -->
+                  <button
+                    v-else-if="installedRow?.disabled && !installedRow.stopRecord"
+                    class="ext-enable nv-btn nv-btn--sm"
+                    :disabled="flow.busy.value || rowBusy"
+                    @click="setInstalledDisabled(false)"
+                  >
+                    {{ $t('settings.extensions.enable') }}
+                  </button>
+                </template>
+                <button
+                  v-else-if="installableVersionInfo"
+                  class="ext-install nv-btn nv-btn--primary"
+                  :class="{ 'is-working': isInstalling(idOf(detail)) }"
+                  :disabled="flow.busy.value || latestIncompatible"
+                  :aria-busy="isInstalling(idOf(detail))"
+                  @click="installFrom(detail.namespace, detail.name, installableVersionInfo.version)"
+                >
+                  <span v-if="isInstalling(idOf(detail))" class="mkt-spinner" aria-hidden="true"></span>
+                  <!-- Name the version when it is not the one the header shows, and
+                       say so when it is a pre-release. -->
+                  <template v-if="isInstalling(idOf(detail))">{{ $t('settings.extensions.marketplace.installing') }}</template>
+                  <template v-else>{{
+                    installableVersionInfo.channel === 'pre-release'
+                      ? $t('settings.extensions.marketplace.installPrerelease', { version: installableVersionInfo.version })
+                      : installableVersionInfo.version === detail.latest_version
+                        ? $t('settings.extensions.install')
+                        : $t('settings.extensions.marketplace.installVersion', { version: installableVersionInfo.version })
+                  }}</template>
+                </button>
+                <button
+                  v-if="!isPack(detail) && !installedById.get(idOf(detail)) && prereleaseOffer"
+                  class="mkt-install-prerelease nv-btn nv-btn--ghost"
+                  :disabled="flow.busy.value || prereleaseBusy"
+                  @click="installPrereleaseOffer"
+                >
+                  {{ $t('settings.extensions.marketplace.installPrerelease', { version: prereleaseOffer.version }) }}
+                </button>
+                <label v-if="hasPrereleases" class="mkt-prerelease-toggle">
+                  <input
+                    type="checkbox"
+                    class="nv-check"
+                    :checked="detail.gets_prereleases === true"
+                    :disabled="prereleaseBusy || flow.busy.value"
+                    @change="setPrerelease(($event.target as HTMLInputElement).checked, $event.target as HTMLInputElement)"
+                  />
+                  {{ $t('settings.extensions.getPrereleases') }}
+                </label>
+              </div>
+              <p v-if="installedRow?.disabled && installedRow.stopRecord" class="nv-hint mkt-enable-in-extensions">
+                {{ $t('settings.extensions.marketplace.enableInExtensions') }}
+              </p>
+              <p class="nv-hint mkt-actions-note">{{ $t('settings.extensions.marketplace.actionsNote') }}</p>
+            </section>
+
             <section class="mkt-side-card mkt-works-with">
               <h4>
                 {{ $t('settings.extensions.marketplace.worksWith') }}
@@ -962,12 +1101,31 @@ watch(
               />
             </section>
 
-            <section
-              v-if="detail.repository || detail.homepage || detail.license || detail.categories.length"
-              class="mkt-side-card"
-            >
+            <section class="mkt-side-card mkt-rating-card">
+              <h4>{{ $t('settings.extensions.marketplace.ratingTitle') }}</h4>
+              <p class="mkt-rating-line">
+                {{
+                  detail.rating_count > 0
+                    ? $t('settings.extensions.marketplace.rating', { average: detail.rating_average.toFixed(1), count: detail.rating_count })
+                    : $t('settings.extensions.marketplace.noRating')
+                }}
+              </p>
+              <template v-if="detail.web_url">
+                <div class="mkt-links">
+                  <a href="#" class="mkt-link mkt-rate-on-web" @click.prevent="openLink(detail.web_url)">
+                    {{ $t('settings.extensions.marketplace.rateOnWeb') }} ↗
+                  </a>
+                  <a href="#" class="mkt-link mkt-report" @click.prevent="openLink(`${detail.web_url}/report`)">
+                    {{ $t('settings.extensions.marketplace.report') }} ↗
+                  </a>
+                </div>
+                <p class="nv-hint">{{ $t('settings.extensions.marketplace.ratingSignIn') }}</p>
+              </template>
+            </section>
+
+            <section v-if="detail.repository || detail.homepage || detail.license" class="mkt-side-card">
               <h4>{{ $t('settings.extensions.marketplace.info') }}</h4>
-              <div v-if="detail.repository || detail.homepage || detail.license" class="mkt-links">
+              <div class="mkt-links">
                 <a v-if="detail.repository" href="#" class="mkt-link" @click.prevent="openLink(detail.repository)">
                   {{ $t('settings.extensions.marketplace.repository') }} ↗
                 </a>
@@ -977,9 +1135,6 @@ watch(
                 <span v-if="detail.license" class="mkt-muted mkt-license">
                   {{ $t('settings.extensions.marketplace.license', { license: reveal(detail.license) }) }}
                 </span>
-              </div>
-              <div v-if="detail.categories.length" class="mkt-tags mkt-categories">
-                <span v-for="c in detail.categories" :key="c" class="mkt-tag">{{ categoryLabel({ slug: c, label: c }) }}</span>
               </div>
             </section>
           </aside>
@@ -1098,6 +1253,15 @@ watch(
         </template>
       </SettingsEmptyState>
       <template v-else>
+        <!-- The website's introduction, while browsing everything. -->
+        <section v-if="!query && !category" class="mkt-intro" data-testid="marketplace-intro">
+          <p class="mkt-intro-title">{{ $t('settings.extensions.marketplace.intro.title') }}</p>
+          <ul class="mkt-intro-points">
+            <li>✓ {{ $t('settings.extensions.marketplace.intro.signed') }}</li>
+            <li>✓ {{ $t('settings.extensions.marketplace.intro.permissions') }}</li>
+            <li>✓ {{ $t('settings.extensions.marketplace.intro.inApp') }}</li>
+          </ul>
+        </section>
         <section v-if="featured.length" class="mkt-featured" :aria-label="$t('settings.extensions.marketplace.featured')">
           <h2 class="mkt-section-label">{{ $t('settings.extensions.marketplace.featured') }}</h2>
           <ul class="mkt-featured-list" :class="`mkt-featured-list--${featured.length}`">
@@ -1192,6 +1356,11 @@ watch(
                   :variesByPlatform="ext.listRisk?.variesByPlatform === true"
                 />
               </div>
+              <div class="mkt-tags mkt-card-tags">
+                <span v-for="c in ext.categories" :key="`c:${c}`" class="mkt-tag" v-truncate>{{ categoryLabel({ slug: c, label: c }) }}</span>
+                <span v-if="!cardPlatforms(ext).length" class="mkt-tag mkt-card-platform">{{ $t('settings.extensions.marketplace.allPlatforms') }}</span>
+                <span v-for="target in cardPlatforms(ext)" :key="`t:${target}`" class="mkt-tag mkt-card-platform">{{ target }}</span>
+              </div>
               <p v-if="isIncompatible(ext)" class="mkt-card-incompatible">
                 {{ $t('settings.extensions.marketplace.updateNavideToInstall', { current: ext.app_version ?? '' }) }}
               </p>
@@ -1262,10 +1431,18 @@ watch(
           {{ $t('settings.extensions.marketplace.loadFailed', { error: loadMoreError }) }}
         </span>
       </div>
-      <p v-if="listState === 'ready'" class="mkt-build-own" data-testid="marketplace-build-own">
+      <p v-if="listState !== 'loading'" class="mkt-build-own" data-testid="marketplace-build-own">
         <span class="mkt-muted">{{ $t('settings.extensions.marketplace.buildOwnHint') }}</span>
         <button class="nv-btn nv-btn--ghost nv-btn--sm" @click="setMarketplaceView('developer')">{{ $t('settings.extensions.marketplace.buildOwn') }}</button>
       </p>
+      <nav v-if="listState === 'ready'" class="mkt-footer-links" :aria-label="$t('settings.extensions.marketplace.footer.label')">
+        <a v-if="siteUrl" href="#" class="mkt-link" data-link="removed" @click.prevent="openLink(`${siteUrl}/removed`)">
+          {{ $t('settings.extensions.marketplace.footer.removed') }} ↗
+        </a>
+        <a v-for="link in FOOTER_LINKS" :key="link.key" href="#" class="mkt-link" :data-link="link.key" @click.prevent="openLink(link.url)">
+          {{ $t(`settings.extensions.marketplace.footer.${link.key}`) }} ↗
+        </a>
+      </nav>
     </section>
 
     <PluginTrustDialog
@@ -1317,12 +1494,11 @@ watch(
 .ext-section {
   margin-bottom: var(--space-5);
 }
-/* Switching between the list and a detail page, and between detail tabs,
-   eases in instead of cutting. Durations are the motion tokens, which are
-   0ms under prefers-reduced-motion. */
+/* Switching between the list and a detail page eases in instead of
+   cutting. Durations are the motion tokens, which are 0ms under
+   prefers-reduced-motion. */
 .mkt-detail,
-.ext-section[data-section='marketplace'],
-.mkt-panel {
+.ext-section[data-section='marketplace'] {
   animation: mkt-enter var(--motion-base) var(--ease-out);
 }
 @keyframes mkt-enter {
@@ -1437,7 +1613,7 @@ watch(
   font-weight: 600;
 }
 .mkt-chip:focus-visible,
-.mkt-tab:focus-visible,
+.mkt-changelog-toggle:focus-visible,
 .mkt-featured-card:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-focus);
@@ -1772,6 +1948,51 @@ watch(
      and push the Install button out of the page. */
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
+}
+/* Two columns of cards on a wide page, like the website's grid. */
+@container (min-width: 720px) {
+  .ext-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+}
+.mkt-card-tags {
+  margin-top: var(--space-1);
+}
+.mkt-intro {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(90% 140% at 0% 0%, var(--accent-subtle) 0%, transparent 58%),
+    var(--bg-subtle);
+}
+.mkt-intro-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text-bright);
+  font-size: var(--font-md);
+  font-weight: 700;
+}
+.mkt-intro-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.mkt-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px var(--space-4);
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-muted);
+  font-size: var(--font-xs);
 }
 .mkt-featured + .ext-list {
   margin-top: var(--space-5);
@@ -2110,6 +2331,7 @@ watch(
 }
 @container (min-width: 720px) {
   .mkt-detail-body {
+    /* Main column plus a sidebar, as on the Marketplace website. */
     grid-template-columns: minmax(0, 1fr) 232px;
     gap: var(--space-7);
   }
@@ -2168,51 +2390,79 @@ watch(
   gap: 6px;
 }
 
-/* Tabs */
-.mkt-tabs {
-  display: flex;
-  gap: var(--space-5);
-  border-bottom: 1px solid var(--border-muted);
-}
-.mkt-tab {
-  position: relative;
-  padding: 0 0 10px;
-  border: 0;
-  background: none;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-out);
-}
-.mkt-tabs {
-  position: relative;
-}
-/* One underline that slides between tabs. */
-.mkt-tab-indicator {
-  position: absolute;
-  left: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent-fg);
-  transition:
-    transform var(--motion-base) var(--ease-out),
-    width var(--motion-base) var(--ease-out);
-}
-.mkt-tab:hover {
-  color: var(--text-primary);
-}
-.mkt-tab--active {
-  color: var(--text-bright);
-}
-
-.mkt-panel {
-  padding: var(--space-4) 0 0;
-}
 .mkt-block {
   border-bottom: 0;
+}
+.mkt-detail-main > .mkt-block + .mkt-block {
+  margin-top: var(--space-6);
+}
+.mkt-head-tags {
+  margin-top: var(--space-2);
+}
+.mkt-risk-banner {
+  margin-top: var(--space-4);
+}
+.mkt-callout > .mkt-risk-icon {
+  flex: none;
+}
+.mkt-shot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.mkt-yanked-tag {
+  display: table;
+  margin-top: 4px;
+}
+.mkt-row-trust,
+.mkt-channel-stable,
+.mkt-channel-pre {
+  white-space: nowrap;
+}
+.mkt-row-caps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* The Install card: what is installed, then every action, stacked. */
+.mkt-install-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 var(--space-3);
+}
+.mkt-install-card .mkt-actions {
+  margin-top: 0;
+}
+.mkt-install-card .mkt-actions > .nv-btn--primary {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+.mkt-actions-note,
+.mkt-enable-in-extensions {
+  margin: var(--space-3) 0 0;
+}
+.mkt-rating-line {
+  margin: 0 0 var(--space-2);
+}
+/* The changelog folds open under its own section label. */
+.mkt-changelog-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+.mkt-changelog-toggle::before {
+  display: none;
+}
+.mkt-disclosure-caret {
+  display: inline-block;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+.mkt-disclosure-caret--open {
+  transform: rotate(90deg);
 }
 .mkt-block h4 {
   margin: 0 0 var(--space-2);
@@ -2306,7 +2556,7 @@ watch(
   font-variant-numeric: tabular-nums;
 }
 .mkt-versions th {
-  padding: 6px 12px 6px 0;
+  padding: 6px 8px 6px 0;
   border-bottom: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-size: var(--font-2xs);
@@ -2314,10 +2564,15 @@ watch(
   letter-spacing: 0.04em;
   text-align: left;
   text-transform: uppercase;
-  white-space: nowrap;
+  /* Headers wrap (and long single words hyphenate in the page language) so
+     the table fits beside the sidebar in every language, never scrolling. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  vertical-align: bottom;
 }
 .mkt-versions td {
-  padding: 8px 12px 8px 0;
+  padding: 8px 8px 8px 0;
   border-bottom: 1px solid var(--border-muted);
 }
 .mkt-versions tbody tr {

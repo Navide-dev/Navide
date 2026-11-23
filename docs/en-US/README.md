@@ -31,7 +31,7 @@ Start with the first row: it is the one page for the whole flow, and the others 
 
 | Document | Purpose |
 |---|---|
-| [Build for Navide](build-for-navide.md) | Start here as a plugin author: one page from `npx navide-plugin init` through self-checks, Developer Mode, and the Marketplace's application, Testplace, review, update and yank steps |
+| [Build for Navide](build-for-navide.md) | Start here as a plugin author: one page from `navide-plugin init` through self-checks, Developer Mode, and the Marketplace's application, Testplace, review, update and yank steps |
 | [Plugin ideas](plugin-ideas.md) | The plugins Navide's team would like to see, with the capabilities each needs and what blocks it |
 | [Plugin development v2](plugin-development-v2.md) | Use the public contracts, SDK, UI package, and external frontend package workflow |
 | [Publishing to the Navide Marketplace](marketplace-publishing.md) | Scaffold, package, sign, and publish a plugin with `navide-plugin`, then pass review |

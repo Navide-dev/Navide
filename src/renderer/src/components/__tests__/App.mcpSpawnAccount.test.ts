@@ -4,6 +4,8 @@ import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveReadySpawnGroupId } from '../../lib/runGroups'
 import { standaloneKickoffVerdict } from '../../lib/standalonePaneTask'
+import { createKickoffReporter } from '../../lib/spawnKickoff'
+import { notePaneRecordWrite } from '../../lib/restoreDiagnostics'
 
 // cli_open_agent's `account` (plan mcp-pane-cli-usage_213031 P3). The backend
 // resolves it to an explicit pin, `profile_id` on agent_spawn.request, and the
@@ -48,10 +50,10 @@ function harness() {
     activeTab: { value: 'rg-active' }, runGroupsReady: { value: true },
     normWs: (path: string) => path.replace(/\/+$/, ''), resolveReadySpawnGroupId,
     mcpSpawnCommandOverride: () => '',
-    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict,
+    standaloneTaskDeps: () => ({}), standaloneKickoffVerdict, createKickoffReporter,
     evaluateSpawnRequest: (req: Record<string, unknown>) => ({ ok: true, ...req, agentKey: req.agent }),
     spawnGateContextFor: () => ({}), standaloneSpawnGateContext: () => ({}),
-    recordDiagnostic: vi.fn(), notifyRestore: { toast: vi.fn() },
+    recordDiagnostic: vi.fn(), terminalPlacementNote: () => null, notePaneRecordWrite, notifyRestore: { toast: vi.fn() },
     i18n: { global: { t: (key: string) => key } }, sendSpawnFeedback: vi.fn(),
     seenSpawnRequestIds: new Set(), SEEN_SPAWN_REQUEST_IDS_CAP: 200,
   }

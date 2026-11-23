@@ -2,33 +2,37 @@ import { createVitest } from 'vitest/node'
 import { describe, expect, it } from 'vitest'
 import { assertTestOwnership, repositoryTestFiles } from '../support/testInventory'
 
+/** Every spec a config collects, as { file, project } with the config's projects. */
+async function collected(config: string): Promise<{ projects: string[]; owned: Array<{ file: string; project: string }> }> {
+  const runner = await createVitest('test', { watch: false, config })
+  try {
+    const specifications = await runner.globTestSpecifications()
+    return {
+      projects: runner.projects.map((project) => project.name).sort(),
+      owned: specifications.map((specification) => ({ file: specification.moduleId, project: specification.project.name })),
+    }
+  } finally {
+    await runner.close()
+  }
+}
+
 describe('test project ownership', () => {
   it('collects every repository test in exactly one required project', async () => {
-    const runner = await createVitest('test', { watch: false, config: 'vitest.config.ts' })
-    try {
-      expect(runner.projects.map((project) => project.name).sort()).toEqual(['artifacts', 'artifacts-heavy', 'cli', 'unit'])
-      const specifications = await runner.globTestSpecifications()
-      const owned = specifications.map((specification) => ({
-        file: specification.moduleId,
-        project: specification.project.name,
-      }))
-      expect(() => assertTestOwnership(repositoryTestFiles(process.cwd()), owned)).not.toThrow()
-      expect(owned.filter(({ file }) => file.endsWith('/plugins/navide-mini-ide/tests/manifest.test.ts')))
-        .toEqual([{ file: expect.any(String), project: 'artifacts' }])
-      expect(owned.find((entry) => entry.file.endsWith('/packages/plugin-sdk/bin/navide-plugin.test.ts'))?.project)
-        .toBe('artifacts')
-      for (const file of [
-        'plugins/navide-mini-ide/tests/packageBoundary.test.ts',
-        'plugins/navide-plans/tests/packageBoundary.test.ts',
-        'plugins/navide-git/tests/compositionBoundary.test.ts',
-        'src/main/plugins/pluginExternalWorkspace.test.ts',
-      ]) {
-        expect(owned.find((entry) => entry.file.endsWith(`/${file}`))?.project).toBe('artifacts-heavy')
-      }
-    } finally {
-      await runner.close()
+    // The root config owns the Host and the workspace packages.
+    const root = await collected('vitest.config.ts')
+    expect(root.projects).toEqual(['artifacts', 'artifacts-heavy', 'cli', 'packages', 'unit'])
+    const owned = root.owned
+    expect(() => assertTestOwnership(repositoryTestFiles(process.cwd()), owned)).not.toThrow()
+    expect(owned.find((entry) => entry.file.endsWith('/packages/plugin-sdk/bin/navide-plugin.test.ts'))?.project)
+      .toBe('artifacts')
+    expect(owned.find((entry) => entry.file.endsWith('/packages/plugin-ui/src/foundation/i18n/__tests__/locales.test.ts'))?.project)
+      .toBe('packages')
+    for (const [file, project] of [
+      ['src/main/plugins/pluginExternalWorkspace.test.ts', 'artifacts-heavy'],
+    ]) {
+      expect(owned.find((entry) => entry.file.endsWith(`/${file}`))?.project).toBe(project)
     }
-  }, 30_000)
+  }, 60_000)
 
   it('rejects missing, duplicated and unexpected ownership instead of silently dropping tests', () => {
     expect(() => assertTestOwnership(['/repo/a.test.ts'], [])).toThrow('Uncollected')

@@ -61,32 +61,6 @@ pnpm dev
 
 The `pnpm dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
 
-The first development start packages the production Plans backend with
-`uv`/PyInstaller. Later starts reuse it when the Python sources, build script,
-dependency files, resolved interpreter, platform, architecture, and executable
-contents are unchanged. Missing or changed output is rebuilt automatically.
-`pnpm run build:plans:backend` always rebuilds it explicitly; production and CI
-builds remain unconditional — only `pnpm dev` passes `--if-needed`, and the
-build script honours the opt-out below on that invocation alone.
-
-Without `uv`/PyInstaller that build fails and `pnpm dev` stops before Electron
-starts. To work on anything else in the meantime, skip it:
-
-```bash
-NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev
-```
-
-The app then starts without the packaged Plans backend: the Host finds no
-backend entry on disk, so the Plans v2 package is not registered and Plans runs
-through its legacy recovery window instead. Every other surface — terminals,
-Git, the editor — is unaffected. Never set this for a production or CI build:
-invoked without `--if-needed` (`pnpm build`, `pnpm dist`, the CI gates) the
-script fails with a message naming the variable rather than shipping a release
-with no packaged Plans backend.
-
-> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev` 跳過打包，
-> Plans 會以 legacy recovery 視窗運作，其他功能不受影響。
-
 > `pnpm dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
 
 ### Git hooks
@@ -141,6 +115,9 @@ rewritten: rotate it.
    pnpm test:run
    uv --project backend run pytest backend/tests
    ```
+   The root config covers the Host and the workspace packages; the
+   first-party plugins (Git, Mini-IDE, Browser, Plans) are tested in their own
+   repositories, `Navide-dev/navide-<name>`.
    While iterating, run only what your change can affect, then the full suites
    above before you push (CI and the release gates always run them in full):
    ```bash

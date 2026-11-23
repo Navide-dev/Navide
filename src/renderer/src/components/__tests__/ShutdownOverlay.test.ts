@@ -60,7 +60,7 @@ describe('ShutdownOverlay', () => {
   it.each(['zh-TW', 'en-US'])('has copy for every stage in %s', (locale) => {
     const messages = JSON.parse(
       readFileSync(
-        resolve(`packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+        resolve(`src/renderer/src/i18n/locales/${locale}.json`),
         'utf8'
       )
     ) as { shutdown?: Record<string, string> }

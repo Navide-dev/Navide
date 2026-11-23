@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import type { ChannelBinding, ChannelOverviewBinding, ChannelsStore } from '../composables/useChannels'
 import { formatChannelIdentity } from '../lib/channelIdentity'
@@ -29,6 +29,8 @@ interface Row {
   pane: string
   /** The backend's pane registry reports the pane closed (an orphan binding). */
   closed: boolean
+  /** The pane was closed and its binding parked: the chat (or this row) can wake it back. */
+  dormant: boolean
   channel: string
   status: string
   tone: 'ok' | 'warn' | 'err' | 'idle'
@@ -91,6 +93,7 @@ function toRow(binding: ChannelBinding): Row {
     binding,
     paneName,
     ...paneText(binding, paneName),
+    dormant: binding.state === 'dormant',
     channel: channelText(binding, state),
     status,
     tone,
@@ -122,12 +125,19 @@ const groups = computed<Group[]>(() => {
   return tops.map((b) => ({ ...toRow(b), children: children.get(b.pane_id) ?? [] }))
 })
 
+/** Closing a link cannot be undone (a dormant pane can never be woken again),
+ *  so the button only opens a confirmation under its row. */
+const confirming = ref<string | null>(null)
+
 function onKeyDown(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && props.open) emit('close')
+  if (e.key !== 'Escape' || !props.open) return
+  if (confirming.value) confirming.value = null
+  else emit('close')
 }
 watch(
   () => props.open,
   (open) => {
+    confirming.value = null
     if (open) void props.store.loadOverview()
     if (open) window.addEventListener('keydown', onKeyDown)
     else window.removeEventListener('keydown', onKeyDown)
@@ -137,7 +147,25 @@ watch(
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
 function disconnect(row: Row): void {
+  confirming.value = null
   void props.store.unbind(row.binding.pane_id, row.paneName)
+}
+
+/** Per binding: a wake in flight, and the backend's wording of the last refusal. */
+const waking = reactive(new Set<string>())
+const wakeErrors = reactive(new Map<string, string>())
+
+async function wakeRow(row: Row): Promise<void> {
+  const id = row.binding.pane_id
+  if (waking.has(id)) return
+  waking.add(id)
+  wakeErrors.delete(id)
+  try {
+    const res = await props.store.wake(id)
+    if (!res.ok) wakeErrors.set(id, res.error ?? '')
+  } finally {
+    waking.delete(id)
+  }
 }
 </script>
 
@@ -180,19 +208,63 @@ function disconnect(row: Row): void {
               <span class="cmon-text">
                 <span class="cmon-pane-line">
                   <span class="cmon-pane" v-truncate>{{ row.pane }}</span>
-                  <span v-if="row.closed" class="cmon-closed">{{ t('channels.monitor.pane-closed') }}</span>
+                  <span
+                    v-if="row.dormant"
+                    class="cmon-closed cmon-dormant"
+                    data-testid="channel-monitor-dormant"
+                    :title="t('channels.monitor.pane-dormant-hint')"
+                  >{{ t('channels.monitor.pane-dormant') }}</span>
+                  <span v-else-if="row.closed" class="cmon-closed">{{ t('channels.monitor.pane-closed') }}</span>
                 </span>
                 <span class="cmon-channel" v-truncate>{{ row.channel }}</span>
+                <span
+                  v-if="wakeErrors.get(row.binding.pane_id)"
+                  class="cmon-wake-error"
+                  data-testid="channel-monitor-wake-error"
+                >{{ wakeErrors.get(row.binding.pane_id) }}</span>
               </span>
               <span class="cmon-status" :class="row.tone">{{ row.status }}</span>
             </button>
+            <button
+              v-if="row.dormant"
+              class="cmon-unlink cmon-wake"
+              type="button"
+              data-testid="channel-monitor-wake"
+              :disabled="waking.has(row.binding.pane_id)"
+              :aria-label="t('channels.monitor.wake-label', { pane: row.pane, channel: row.channel })"
+              @click="wakeRow(row)"
+            >{{ waking.has(row.binding.pane_id) ? t('channels.monitor.waking') : t('channels.monitor.wake') }}</button>
             <button
               class="cmon-unlink"
               type="button"
               data-testid="channel-monitor-unlink"
               :aria-label="t('channels.monitor.disconnect-label', { pane: row.pane, channel: row.channel })"
-              @click="disconnect(row)"
+              :aria-expanded="confirming === row.binding.pane_id"
+              @click="confirming = row.binding.pane_id"
             >{{ t('channels.monitor.disconnect') }}</button>
+          </div>
+          <div
+            v-if="confirming === row.binding.pane_id"
+            class="cmon-confirm"
+            role="alertdialog"
+            :aria-label="t('channels.monitor.disconnect-label', { pane: row.pane, channel: row.channel })"
+            data-testid="channel-monitor-unlink-confirm"
+          >
+            <p class="cmon-confirm-text">{{ t('channels.monitor.disconnect-confirm-text', { pane: row.pane, channel: row.channel }) }}</p>
+            <div class="cmon-confirm-actions">
+              <button
+                class="cmon-unlink"
+                type="button"
+                data-testid="channel-monitor-unlink-cancel"
+                @click="confirming = null"
+              >{{ t('channels.monitor.disconnect-cancel') }}</button>
+              <button
+                class="cmon-unlink cmon-danger"
+                type="button"
+                data-testid="channel-monitor-unlink-confirm-button"
+                @click="disconnect(row)"
+              >{{ t('channels.monitor.disconnect-confirm') }}</button>
+            </div>
           </div>
           <ul v-if="row.children.length" class="cmon-children">
             <li v-for="child in row.children" :key="child.binding.pane_id" class="cmon-row cmon-child" data-testid="channel-monitor-child">
@@ -352,6 +424,21 @@ function disconnect(row: Row): void {
 }
 .cmon-unlink:hover { background: var(--bg-muted); color: var(--danger-fg); }
 .cmon-unlink:focus-visible { outline: 2px solid var(--accent-fg); outline-offset: 2px; }
+.cmon-wake { color: var(--accent-fg); }
+.cmon-confirm {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-control);
+  background: var(--bg-base);
+}
+.cmon-confirm-text { margin: 0 0 8px; font-size: 12px; color: var(--text-primary); white-space: normal; }
+.cmon-confirm-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.cmon-danger { color: var(--danger-fg); border-color: var(--danger-fg); font-weight: 600; }
+.cmon-wake:hover { color: var(--accent-fg); }
+.cmon-wake:disabled { cursor: progress; opacity: 0.7; }
+.cmon-dormant { border-style: dashed; }
+.cmon-wake-error { color: var(--danger-fg); font-size: 12px; white-space: normal; }
 .cmon-item { display: flex; flex-direction: column; gap: 4px; }
 .cmon-children { list-style: none; margin: 0 0 0 18px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .cmon-child { padding-right: 0; }

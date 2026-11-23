@@ -9,11 +9,9 @@
 // no-sync uv forms (the venvs are left alone). What runs depends on the
 // change since origin/main, working tree included, like `vitest --changed`:
 //   - always: the repository-scanning guards `vitest --changed` cannot select
-//     (they read the tree instead of importing it), tests/infrastructure, the
-//     official plugin fingerprints;
-//   - by path: Python compile and ruff, lockfile parity, typecheck, the guards
-//     that need built packages, the whole i18n test folder, the contract
-//     fixtures, the marketplace checks;
+//     (they read the tree instead of importing it), tests/infrastructure;
+//   - by path: Python compile and ruff, lockfile parity, typecheck, the whole
+//     i18n test folder, the contract fixtures, the marketplace checks;
 //   - last: `vitest --changed` and scripts/changed-backend-tests.mjs.
 //
 // Only one run happens at a time across all worktrees of this clone: a lockfile
@@ -43,9 +41,6 @@ const BACKEND_TEMP = /tmp_path|mkdtemp|TemporaryDirectory/
 // Scanners the patterns above miss: they name a temporary directory themselves.
 const FRONTEND_SCAN_EXTRA = ['src/main/crossPlatformTestHygiene.test.ts']
 const BACKEND_SCAN_EXTRA = ['backend/tests/test_cross_platform_test_hygiene.py']
-// Scanners owned by the artifacts project, whose setup builds the public
-// packages first (about 100 s): they run only when a package could have moved.
-const ARTIFACT_GUARD = /^plugins\/[^/]+\/tests\//
 
 const I18N_TESTS = 'packages/plugin-ui/src/foundation/i18n/__tests__'
 const REGISTRY = 'marketplace/registry'
@@ -90,9 +85,10 @@ function scanGuards(localeChanged) {
     // locale check below runs them along with the rest of the folder.
     .filter((file) => !(localeChanged && file.startsWith(`${I18N_TESTS}/`)))
   const backend = discover('backend/tests/*.py', BACKEND_SCAN, BACKEND_TEMP).concat(BACKEND_SCAN_EXTRA)
+  const unique = [...new Set(frontend)]
   return {
-    frontend: [...new Set(frontend)].filter((file) => !ARTIFACT_GUARD.test(file)),
-    artifacts: [...new Set(frontend)].filter((file) => ARTIFACT_GUARD.test(file)),
+    frontend: unique.filter((file) => !file.startsWith('packages/')),
+    packages: unique.filter((file) => file.startsWith('packages/')),
     backend: [...new Set(backend)],
   }
 }
@@ -106,7 +102,6 @@ function buildPlan(changed) {
   const guards = scanGuards(localeChanged)
   const when = (condition, reason, check) => (condition ? check : { name: check.name, skip: reason })
   return [
-    { name: 'official plugin fingerprints', argv: ['node', 'scripts/official-plugin-fingerprints.mjs'] },
     when(py.length > 0, 'no Python file changed', {
       name: 'compile changed Python',
       // compile() rather than py_compile: nothing lands in __pycache__.
@@ -125,18 +120,19 @@ function buildPlan(changed) {
       name: 'typecheck',
       argv: ['pnpm', 'typecheck'],
     }),
-    {
+    // A project given no files would run whole, so an empty list is skipped.
+    when(guards.frontend.length > 0, 'no Host scanner', {
       name: `scanning guards (${guards.frontend.length} frontend)`,
       argv: ['pnpm', 'vitest', 'run', '--project', 'unit', ...guards.frontend],
-    },
-    when(changed.some((file) => /^(plugins|packages)\//.test(file)), 'no plugin or package changed', {
-      name: `scanning guards (${guards.artifacts.length} plugin package)`,
-      argv: ['pnpm', 'vitest', 'run', '--project', 'artifacts', ...guards.artifacts],
+    }),
+    when(guards.packages.length > 0, 'no package scanner', {
+      name: `scanning guards (${guards.packages.length} package)`,
+      argv: ['pnpm', 'vitest', 'run', '--project', 'packages', ...guards.packages],
     }),
     { name: 'tests/infrastructure', argv: ['pnpm', 'run', 'test:infrastructure'] },
     when(localeChanged, 'no locale changed', {
       name: 'i18n tests folder',
-      argv: ['pnpm', 'vitest', 'run', '--project', 'unit', I18N_TESTS],
+      argv: ['pnpm', 'vitest', 'run', '--project', 'packages', I18N_TESTS],
     }),
     {
       name: `scanning guards (${guards.backend.length} backend)`,

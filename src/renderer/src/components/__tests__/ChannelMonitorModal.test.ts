@@ -120,14 +120,63 @@ describe('ChannelMonitorModal', () => {
     expect(wrapper!.emitted('focus-pane')![0]).toEqual(['p1'])
   })
 
-  it('unbinds the pane without a confirmation step', async () => {
+  it('asks before unbinding: cancel and Escape send nothing, confirming unbinds', async () => {
     seed([binding])
     await render()
+    const unbinds = () => mock.sent.filter((s) => s.type === 'channels.unbind')
     q('[data-testid="channel-monitor-unlink"]')!.click()
     await flushPromises()
-    const sent = mock.sent.filter((s) => s.type === 'channels.unbind')
+    expect(unbinds()).toHaveLength(0)
+    expect(q('[data-testid="channel-monitor-unlink-confirm"]')!.textContent).toContain('can no longer wake this conversation')
+    q('[data-testid="channel-monitor-unlink-cancel"]')!.click()
+    await flushPromises()
+    expect(q('[data-testid="channel-monitor-unlink-confirm"]')).toBeNull()
+    q('[data-testid="channel-monitor-unlink"]')!.click()
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(q('[data-testid="channel-monitor-unlink-confirm"]')).toBeNull()
+    expect(wrapper!.emitted('close')).toBeUndefined()
+    expect(unbinds()).toHaveLength(0)
+    q('[data-testid="channel-monitor-unlink"]')!.click()
+    await flushPromises()
+    q('[data-testid="channel-monitor-unlink-confirm-button"]')!.click()
+    await flushPromises()
+    expect(unbinds()).toHaveLength(1)
+    expect(unbinds()[0].payload).toMatchObject({ pane_id: 'p1', pane_name: 'Claude 1' })
+  })
+
+  it('marks a parked binding asleep and wakes it from the row', async () => {
+    seed([{ ...binding, state: 'dormant', closed_at: 5 }], 'ready',
+      [chat('Team room', [{ ...binding, state: 'dormant', created_at: 1, pane: pane('api-refactor', false) }])])
+    mock.setResponse('channels.wake', { ok: true, pane_id: 'p1b' })
+    await render()
+    expect(q('[data-testid="channel-monitor-dormant"]')!.textContent).toBe(i18n.global.t('channels.monitor.pane-dormant'))
+    expect(q('.cmon-closed:not(.cmon-dormant)')).toBeNull()
+    q('[data-testid="channel-monitor-wake"]')!.click()
+    await flushPromises()
+    const sent = mock.sent.filter((s) => s.type === 'channels.wake')
     expect(sent).toHaveLength(1)
-    expect(sent[0].payload).toMatchObject({ pane_id: 'p1', pane_name: 'Claude 1' })
+    expect(sent[0].payload).toEqual({ pane_id: 'p1', fresh: false })
+    expect(q('[data-testid="channel-monitor-wake-error"]')).toBeNull()
+    // Unlinking a parked binding is the same disconnect as any other.
+    expect(q('[data-testid="channel-monitor-unlink"]')).not.toBeNull()
+  })
+
+  it("shows the backend's reason when a wake is refused", async () => {
+    seed([{ ...binding, state: 'dormant' }])
+    mock.setResponse('channels.wake', { ok: false, reason: 'workspace-missing', error: 'the folder is gone' })
+    await render()
+    q('[data-testid="channel-monitor-wake"]')!.click()
+    await flushPromises()
+    expect(q('[data-testid="channel-monitor-wake-error"]')!.textContent).toBe('the folder is gone')
+  })
+
+  it('offers no wake on an active binding', async () => {
+    seed([binding])
+    await render()
+    expect(q('[data-testid="channel-monitor-wake"]')).toBeNull()
+    expect(q('[data-testid="channel-monitor-dormant"]')).toBeNull()
   })
 
   it('names the bot, the chat and the topic on the channel line', async () => {

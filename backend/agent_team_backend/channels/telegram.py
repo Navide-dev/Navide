@@ -48,7 +48,7 @@ from .base import (
     MediaTooLarge,
     backoff_delay,
 )
-from . import redact
+from . import proxy, redact
 from .inbound import chat_hash
 from .adapter_runtime import READY_STABLE_S, cancel_and_wait, download_to, media_client
 from .report import Caption
@@ -66,7 +66,15 @@ CAPTION_LIMIT = 1024  # sendDocument caption, characters
 # The file kinds a Message may carry that are taken as attachments (stickers are not).
 # An animation also fills ``document`` "for backward compatibility", so it comes first.
 _FILE_KINDS = ("animation", "document", "video", "audio", "voice", "video_note")
+# Messages a person sends that no pane can take: the chat is told it did not go in.
+UNSUPPORTED_KINDS = ("poll", "dice", "story", "game", "invoice", "checklist", "paid_media", "giveaway")
 POLL_TIMEOUT_S = 30
+# getMe is the short request that proves the token, quick add included: bounded on its own
+# (connect, TLS and the answer each within this), not by the long poll's read timeout, and
+# retried at once when the network failed, so a first connection that stalls (an IPv6 route
+# that drops packets, a slow DNS or proxy) gets a second, fresh try well inside quick add's wait.
+GET_ME_TIMEOUT = httpx.Timeout(10.0)
+GET_ME_NETWORK_RETRIES = 1
 GENERAL_TOPIC_ID = "1"
 SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
@@ -90,6 +98,7 @@ BOT_COMMANDS = [
     {"command": "resume", "description": "恢復被中斷的 pane"},
     {"command": "model", "description": "切換 pane 的模型"},
     {"command": "account", "description": "切換 CLI 帳號"},
+    {"command": "shipped", "description": "最近上線了什麼"},
 ]
 # BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
 BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
@@ -105,6 +114,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Resume an interrupted pane",
         "model": "Switch the pane's model",
         "account": "Switch the CLI account",
+        "shipped": "What shipped recently",
     },
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
@@ -117,6 +127,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "中断した pane を再開",
         "model": "pane のモデルを切り替え",
         "account": "CLI のアカウントを切り替え",
+        "shipped": "最近リリースされた変更",
     },
     "zh-CN": {
         "pending": "列出等待确认的 pane",
@@ -129,6 +140,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "恢复被中断的 pane",
         "model": "切换 pane 的模型",
         "account": "切换 CLI 账号",
+        "shipped": "最近上线了什么",
     },
     "ko-KR": {
         "pending": "확인 대기 중인 pane 목록",
@@ -141,6 +153,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "중단된 pane 재개",
         "model": "pane 모델 전환",
         "account": "CLI 계정 전환",
+        "shipped": "최근 배포된 변경",
     },
     "es-ES": {
         "pending": "Panes en espera de confirmación",
@@ -153,6 +166,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Reanudar un pane interrumpido",
         "model": "Cambiar el modelo del pane",
         "account": "Cambiar la cuenta de la CLI",
+        "shipped": "Qué se ha publicado últimamente",
     },
     "fr-FR": {
         "pending": "Lister les panes en attente de confirmation",
@@ -165,6 +179,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Reprendre un pane interrompu",
         "model": "Changer le modèle du pane",
         "account": "Changer le compte de la CLI",
+        "shipped": "Ce qui a été mis en production récemment",
     },
     "de-DE": {
         "pending": "Panes auflisten, die auf Bestätigung warten",
@@ -177,6 +192,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Ein unterbrochenes pane fortsetzen",
         "model": "Das Modell des pane wechseln",
         "account": "Das CLI-Konto wechseln",
+        "shipped": "Was zuletzt ausgeliefert wurde",
     },
     "pt-BR": {
         "pending": "Panes aguardando confirmação",
@@ -189,6 +205,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Retomar um pane interrompido",
         "model": "Trocar o modelo do pane",
         "account": "Trocar a conta da CLI",
+        "shipped": "O que foi entregue recentemente",
     },
     "ru-RU": {
         "pending": "Pane, ожидающие подтверждения",
@@ -201,6 +218,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Возобновить прерванный pane",
         "model": "Сменить модель pane",
         "account": "Сменить аккаунт CLI",
+        "shipped": "Что недавно выпущено",
     },
     "vi-VN": {
         "pending": "Liệt kê các pane đang chờ xác nhận",
@@ -213,6 +231,7 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "resume": "Tiếp tục pane bị ngắt",
         "model": "Đổi mô hình của pane",
         "account": "Đổi tài khoản CLI",
+        "shipped": "Những gì vừa được phát hành",
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.
@@ -253,7 +272,8 @@ class TelegramApiError(Exception):
 
 class TelegramAdapter:
     # getMe answering sets the identity: the token is accepted even while getUpdates
-    # still fails (another poller holds it, 409), so quick add need not wait for ready.
+    # still fails (another poller holds it, 409), so quick add need not wait for ready
+    # (it only waits for the first poll, to warn of that conflict).
     identity_confirms_credential = True
     platform = "telegram"
     capabilities = Capabilities(
@@ -303,6 +323,15 @@ class TelegramAdapter:
         self.command_language: Callable[[], str] | None = None
         self.bot_id = self._token.split(":", 1)[0]
         self._client: httpx.AsyncClient | None = None
+        self._transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake network
+        # Nothing from Telegram has come back since the last network failure (or since start):
+        # quick add reports such a bot as unreachable rather than as a slow answer.
+        self.unreachable = True
+        # The last getUpdates was refused with 409: another program polls this bot.
+        self.conflict = False
+        # The session's first getUpdates answered (or was refused): quick add waits for it to
+        # tell a bot another program holds from one that is free.
+        self.polled = False
         self._task: asyncio.Task[None] | None = None
         self._emit: Emit | None = None
         self._offset: int | None = None
@@ -318,7 +347,14 @@ class TelegramAdapter:
         if self._task and not self._task.done():
             return
         self._emit = emit
-        self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=self._poll_timeout_s + 15.0))
+        # trust_env (httpx's default) picks up a fixed system proxy: HTTP(S)_PROXY, or macOS and
+        # Windows proxy settings through urllib.request.getproxies(); a PAC file is resolved
+        # by the Host (channels/proxy.py).
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, read=self._poll_timeout_s + 15.0),
+                                         **proxy.client_options(self._transport))
+        self.unreachable = True
+        self.conflict = False
+        self.polled = False
         self.status.lifecycle = "starting"
         self.status.last_error = ""
         self._task = asyncio.create_task(self._run(), name="channels-telegram")
@@ -351,6 +387,8 @@ class TelegramAdapter:
                 self._attempt += 1
                 if isinstance(exc, TelegramApiError) and exc.code == 409:
                     self._attempt = max(self._attempt, CONFLICT_MIN_ATTEMPT)
+                    self.conflict = True
+                    self.polled = True
                 self.status.lifecycle = "recovering"
                 self.status.connected = False
                 self.status.reconnect_attempts = self._attempt
@@ -396,8 +434,20 @@ class TelegramAdapter:
         except Exception as exc:  # noqa: BLE001
             log.info("telegram: updating the bot's commands failed: %s", exc)
 
+    async def _get_me(self) -> dict[str, Any]:
+        failures = 0
+        while True:
+            try:
+                return await self._call("getMe", timeout=GET_ME_TIMEOUT)
+            except httpx.TransportError as exc:
+                failures += 1
+                if failures > GET_ME_NETWORK_RETRIES:
+                    raise
+                log.info("telegram[%s]: getMe failed (%s); retrying now", self.account,
+                         self._redact(_describe_failure(exc)))
+
     async def _session(self) -> None:
-        me = await self._call("getMe")
+        me = await self._get_me()
         username = me.get("username") or ""
         self.status.identity = f"@{username}" if username else str(me.get("id", ""))
         self.status.display_name = str(me.get("first_name") or "")
@@ -412,9 +462,11 @@ class TelegramAdapter:
         self.status.connected = True
         self.status.last_connected_at = time.time()
         ready_at = time.monotonic()
+        first = True
         while True:
             params: dict[str, Any] = {
-                "timeout": self._poll_timeout_s,
+                # The first poll answers at once: whether another program holds the bot shows now.
+                "timeout": 0 if first else self._poll_timeout_s,
                 # managed_bot only ever arrives for a bot in Bot Management Mode.
                 "allowed_updates": ["message", "callback_query", "managed_bot"],
             }
@@ -426,6 +478,9 @@ class TelegramAdapter:
                 )
             except asyncio.TimeoutError as exc:
                 raise RuntimeError("getUpdates stalled; restarting") from exc
+            first = False
+            self.conflict = False
+            self.polled = True
             # A session that stayed up (ReceiveLoop's rule): the next failure is a fresh
             # drop, not one more in a series. A shorter one keeps backing off.
             if time.monotonic() - ready_at >= self._stable_s:
@@ -498,10 +553,19 @@ class TelegramAdapter:
             return
         chat = msg.get("chat") or {}
         self._remember_chat(chat)
-        text = msg.get("text") or msg.get("caption") or ""
+        text = msg.get("text") or msg.get("caption") or _content_text(msg)
         attachments = _attachments(msg)
-        if not (text or attachments) or (msg.get("from") or {}).get("is_bot"):
+        if (msg.get("from") or {}).get("is_bot"):
+            log.info("telegram[%s]: message %s dropped: sent by a bot", self.account, msg.get("message_id"))
             return
+        unsupported = ""
+        if not (text or attachments):
+            # Only its field names are logged, never its content.
+            unsupported = next((k for k in UNSUPPORTED_KINDS if k in msg), "")
+            log.info("telegram[%s]: message %s dropped: unsupported content (fields: %s)%s", self.account,
+                     msg.get("message_id"), ",".join(sorted(msg)), "; the chat is told" if unsupported else "")
+            if not unsupported:
+                return  # a service message (a pin, a member joining, ...): nobody sent it to a pane
         # Sent on behalf of a chat (a channel, an anonymous admin): ``from`` is a stand-in
         # that names no one, so the message carries no sender id the gate could admit.
         sender_chat = msg.get("sender_chat")
@@ -512,13 +576,14 @@ class TelegramAdapter:
             ts=float(msg.get("date") or time.time()),
             reply_to_id=str((msg.get("reply_to_message") or {}).get("message_id") or ""),
             reply_quote=_reply_quote(msg, self.bot_id), attachments=attachments,
+            unsupported_kind=unsupported,
         )
 
     async def _deliver(
         self, *, chat: dict[str, Any], sender: dict[str, Any], text: str, thread: str,
         message_id: str, ts: float, callback_data: str = "", reply_to_id: str = "",
         reply_quote: tuple[str, str, str, bool] = ("", "", "", False),
-        attachments: list[InboundAttachment] | None = None,
+        attachments: list[InboundAttachment] | None = None, unsupported_kind: str = "",
     ) -> None:
         self.status.last_inbound_at = time.time()
         if self._emit is None:
@@ -530,7 +595,7 @@ class TelegramAdapter:
             callback_data=callback_data, reply_to_id=reply_to_id,
             reply_to_text=reply_quote[0], reply_to_sender=reply_quote[1],
             reply_to_sender_id=reply_quote[2], reply_to_self=reply_quote[3],
-            attachments=attachments or [],
+            attachments=attachments or [], unsupported_kind=unsupported_kind,
         ))
 
     def _remember_chat(self, chat: dict[str, Any]) -> None:
@@ -741,13 +806,20 @@ class TelegramAdapter:
         # The token is part of every request URL; keep it out of status and logs.
         return text.replace(self._token, "***") if self._token else text
 
-    async def _call(self, method: str, params: dict[str, Any] | None = None) -> Any:
+    async def _call(self, method: str, params: dict[str, Any] | None = None,
+                    timeout: httpx.Timeout | None = None) -> Any:
         client = self._client
         own = client is None
         if own:
-            client = httpx.AsyncClient(timeout=20.0)
+            client = httpx.AsyncClient(timeout=20.0, **proxy.client_options(self._transport))
         try:
-            resp = await client.post(f"{self._base}/{method}", json=params or {})
+            try:
+                resp = await client.post(f"{self._base}/{method}", json=params or {},
+                                         timeout=timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT)
+            except httpx.TransportError:
+                self.unreachable = True
+                raise
+            self.unreachable = False
         finally:
             if own:
                 await client.aclose()
@@ -818,6 +890,28 @@ def _attachments(msg: dict[str, Any]) -> list[InboundAttachment]:
     return found
 
 
+def _content_text(msg: dict[str, Any]) -> str:
+    """A contact, venue, location or sticker as a line of text for the pane; "" otherwise.
+    A contact keeps its phone number: the user sent it to their own pane."""
+    contact = msg.get("contact")
+    if isinstance(contact, dict):
+        name = " ".join(str(p) for p in (contact.get("first_name"), contact.get("last_name")) if p)
+        return " ".join(p for p in ("[Contact]", name, str(contact.get("phone_number") or "")) if p)
+    venue = msg.get("venue")
+    if isinstance(venue, dict):
+        where = venue.get("location") or {}
+        coords = f"({where.get('latitude')}, {where.get('longitude')})" if where else ""
+        return " ".join(p for p in ("[Venue]", str(venue.get("title") or ""), str(venue.get("address") or ""),
+                                    coords) if p)
+    location = msg.get("location")
+    if isinstance(location, dict):
+        return f"[Location] {location.get('latitude')}, {location.get('longitude')}"
+    sticker = msg.get("sticker")
+    if isinstance(sticker, dict):
+        return " ".join(p for p in ("[Sticker]", str(sticker.get("emoji") or "")) if p)
+    return ""
+
+
 def _display_name(user: dict[str, Any]) -> str:
     return user.get("username") or " ".join(
         p for p in (user.get("first_name"), user.get("last_name")) if p
@@ -886,4 +980,5 @@ def _describe_update(update: dict[str, Any]) -> str:
 def _describe_failure(exc: Exception) -> str:
     if isinstance(exc, TelegramApiError) and exc.code == 409:
         return "另一個程式也在用這個 bot（409 Conflict: another getUpdates consumer）"
-    return f"{type(exc).__name__}: {exc}"
+    # httpx's timeouts often carry no message: the class name alone, not "ConnectTimeout: ".
+    return f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__

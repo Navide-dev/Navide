@@ -6,6 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from agent_team_backend.mcp_server import server as plan_mcp
 from agent_team_backend.plugins.builtin.navide_plans import plan_tools
+from agent_team_backend.plugins.builtin.navide_shipped_log import ship_log_tools
 from agent_team_backend.plugins.builtin.navide_skills import skills_tools
 
 MCP_TOOLS = [
@@ -125,6 +126,10 @@ MCP_TOOLS = [
     "share_create",
     "share_list",
     "share_revoke",
+    "ship_log_config_list",
+    "ship_log_config_register",
+    "ship_log_record",
+    "ship_log_report",
     "skills_inspect",
     "skills_install",
     "skills_install_status",
@@ -153,6 +158,7 @@ async def test_mcp_tool_names_are_pinned() -> None:
     builtin = FastMCP("builtin-tools")
     plan_tools.install(builtin)
     skills_tools.install(builtin)
+    ship_log_tools.install(builtin)
     names = {tool.name for tool in await plan_mcp.server.list_tools()}
     names |= {tool.name for tool in await builtin.list_tools()}
     assert sorted(names) == MCP_TOOLS

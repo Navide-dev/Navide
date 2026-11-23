@@ -67,6 +67,10 @@ a = Analysis(
          'agent_team_backend/plugins/builtin/navide_plans'),
         ('agent_team_backend/plugins/builtin/navide_plans/backend.py',
          'agent_team_backend/plugins/builtin/navide_plans'),
+        ('agent_team_backend/plugins/builtin/navide_shipped_log/plugin.json',
+         'agent_team_backend/plugins/builtin/navide_shipped_log'),
+        ('agent_team_backend/plugins/builtin/navide_shipped_log/backend.py',
+         'agent_team_backend/plugins/builtin/navide_shipped_log'),
         ('agent_team_backend/plugins/builtin/navide_skills/plugin.json',
          'agent_team_backend/plugins/builtin/navide_skills'),
         ('agent_team_backend/plugins/builtin/navide_skills/backend.py',
@@ -86,6 +90,13 @@ a = Analysis(
         # ("cannot import name 'plan_tools' ... (unknown location)").
         # test_pyinstaller_spec.py holds these names to what exists on disk.
         'agent_team_backend.plugins.builtin.navide_plans.plan_tools',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.ship_log_tools',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.ledger',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.report',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.messages',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.deploy_detect',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.digest',
+        'agent_team_backend.plugins.builtin.navide_shipped_log.ui_api',
         'agent_team_backend.plugins.builtin.navide_skills.skills_wiring',
         'agent_team_backend.plugins.builtin.navide_skills.skills_tools',
         # Chat channel adapters: channels/manager.py imports each platform by
@@ -153,7 +164,7 @@ a = Analysis(
         # all of them costs a warning line per platform and nothing else.
         'watchdog.observers.fsevents',              # macOS
         'watchdog.observers.inotify',               # Linux
-        'watchdog.observers.inotify_buffer',
+        'watchdog.observers.inotify_move_event_grouper',
         'watchdog.observers.inotify_c',
         'watchdog.observers.read_directory_changes',  # Windows
         'watchdog.observers.winapi',

@@ -177,6 +177,20 @@ server = NavideMCP(
         "and saying so is the answer, not hunting for a tool that would do "
         "it for them.\n"
         "\n"
+        "Your own Navide connection versus your window: two different links, "
+        "so say which one you mean. If the navide tools disappear or fail with "
+        "a connection error, it is YOUR CLI's link to Navide's tool server that "
+        "dropped — not the Navide window, and not the user's network. You "
+        "cannot fix it yourself (/mcp is typed by a person, and cli_send to "
+        "you would not run it): say so once, in those words; Navide types "
+        "`/mcp reconnect navide` into you on its own while you are idle, and "
+        "a commander can ask for it now with ui_invoke ui.pane.reconnectMcp "
+        "{paneId}. A tool that answers at all proves that link is up. A "
+        "`target-offline` error, or `offline: true` on a target, is the other "
+        "link: that pane's Navide window lost the backend, and its own tools "
+        "may be fine. `mcp` / `mcp_detail` on a target is its tool-server "
+        "link.\n"
+        "\n"
         "When you need the answer and not just the send, use cli_send_and_wait "
         "instead: it sends and then waits for that pane to finish the turn, "
         "handling the race a hand-written cli_send + cli_wait_idle loses (the "
@@ -565,7 +579,29 @@ def _credential(request: Any) -> _Caller:
         raise CallerUnknown(_STALE)
     if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_connect_watch.record_connect(pane_id)
     return _Caller(kind="pane", pane_id=pane_id)
+
+
+def _mcp_detail(mcp_state: str) -> str:
+    """What a flagged `mcp` state means, in words an agent can relay as is.
+    The pane's own CLI-to-tool-server link and its Navide window are different
+    connections; a report that ran them together contradicted itself
+    (2026-11-22)."""
+    what = (
+        "has not once reached" if mcp_state == "never-connected"
+        else "lost its connection to, and stopped retrying,"
+    )
+    return (
+        f"This pane's own CLI {what} Navide's tool server, so it has no Navide "
+        "tools. Its Navide window is a separate connection (`offline` says "
+        "whether that one is down). The pane cannot run /mcp itself and cli_send "
+        "cannot type it; Navide types `/mcp reconnect navide` into it on its own "
+        "while it is idle (a few tries), and ui_invoke ui.pane.reconnectMcp "
+        "{paneId} asks for one now. Past that, the user's Reconnect button."
+    )
 
 
 def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
@@ -594,6 +630,14 @@ def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
     hold_reason = _hold_reason_for(entry.qualified_name)
     if hold_reason:
         view["hold_reason"] = hold_reason
+    # Absent unless the pane's CLI has been up for minutes without ever
+    # reaching this server: its Navide tools are missing (mcp_connect_watch).
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(entry.pane_id)
+    if mcp_state:
+        view["mcp"] = mcp_state
+        view["mcp_detail"] = _mcp_detail(mcp_state)
     # Only an embedded AI panel carries these (which window hosts it); a window
     # pane never sets them, so its view keeps exactly the keys it always had.
     if entry.surface:
@@ -735,6 +779,21 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     what makes `busy` explainable — but it exists only while a message sent
     from here is queued for that pane, so its absence says nothing.
 
+    `mcp: "never-connected"` appears on a pane whose CLI has been up for three
+    minutes without once reaching Navide's tool server: its Navide tools are
+    missing, so a message it is asked to answer through them will not come.
+    `mcp: "disconnected"` is the same for a CLI that was connected, lost the
+    connection and stopped retrying. `mcp_detail` comes with either: it is the
+    pane's own tool-server link, not its window (`offline`), and Navide retries
+    `/mcp reconnect navide` while it is idle.
+
+    `offline_reason` on an offline remote target names the segment that is
+    down: "device-offline" (that machine is not connected to the server),
+    "window-disconnected" (it is, but the window holding the pane is not) or
+    "session-ended" (the CLI behind it is gone). `remote_link` {state,
+    segment: "this-machine-to-server"} appears when THIS machine's own link
+    to the server is down: the remote rows are then the last copy it got.
+
     `remote_targets` appears only when this machine is linked to a Navide-Server
     and that server knows of panes on *other* machines. Those are a separate
     list because they are a separate deal: their `address` is the three-part
@@ -792,7 +851,26 @@ async def cli_list_targets(ctx: Context) -> dict[str, Any]:
     remote = [pane.to_dict() for pane in remote_roster.list_panes()]
     if remote:
         result["remote_targets"] = remote
+        link = _remote_link_down()
+        if link is not None:
+            result["remote_link"] = link
     return result
+
+
+def _remote_link_down() -> dict[str, Any] | None:
+    """This machine's own server link, when it is the broken segment."""
+    from agent_team_backend import server_link
+
+    state = server_link.link_state()
+    if state in (server_link.STATE_CONNECTED, server_link.STATE_UNCONFIGURED):
+        return None
+    return {
+        "state": state,
+        "segment": "this-machine-to-server",
+        "note": "this machine is not connected to Navide-Server, so remote_targets "
+        "is the last copy it received and host_online may be stale; the other "
+        "machines may be fine",
+    }
 
 
 @server.tool()
@@ -1236,7 +1314,13 @@ async def cli_open_agent(
     submitted — or `kickoff: "failed"`: the injection could not be verified
     after a bounded retry, or no verdict arrived in time. A failed kickoff is
     still `ok: true` (the pane is open; do NOT open it again) and comes with
-    `hint` and the window's reason in `advisories`. FOLLOW THE HINT: when the
+    `hint` and the window's reason in `advisories`.
+    `kickoff: "blocked-by-prompt"`: the CLI stopped on a launch prompt Navide
+    does not answer by itself (only an allowlisted one, such as Claude Code
+    asking to add Navide's own skills folder, is answered for you, and logged
+    in ui_diagnostics). The answer carries `prompt`, `options` and
+    `prompt_fingerprint` for cli_answer_prompt; the task is held and typed
+    once the prompt is gone, so do not resend it. FOLLOW THE HINT: when the
     window saw the task not go in, it says to resend with cli_send to the
     returned address; when the window could not tell (its text may be sitting
     in the composer, or it was still typing when the deadline hit), it says to
@@ -1679,6 +1763,23 @@ async def cli_open_agent(
     kickoff = str(kickoff_verdict.get("kickoff") or "")
     if kickoff == "sent":
         result["kickoff"] = "sent"
+    elif kickoff == "blocked-by-prompt":
+        # The CLI stopped on a launch prompt Navide does not answer by itself.
+        # The window holds the task and types it once the prompt is gone, so
+        # this is neither "sent" nor a reason to resend.
+        prompt = str(kickoff_verdict.get("prompt") or "")
+        raw_options = kickoff_verdict.get("options")
+        options = [str(o) for o in raw_options] if isinstance(raw_options, list) else []
+        result["kickoff"] = "blocked-by-prompt"
+        result["prompt"] = prompt
+        result["options"] = options
+        result["prompt_fingerprint"] = _prompt_fingerprint(prompt, options)
+        result["hint"] = (
+            f"the pane is stopped on a launch prompt Navide does not answer by itself; the task is "
+            f"held and is typed as soon as the prompt is gone — do NOT resend it. Read `prompt`, then "
+            f"answer with cli_answer_prompt(target=\"{result['address']}\", answer=..., "
+            f"prompt_fingerprint=...) or leave it for the user; the pane is open, do not open another"
+        )
     elif kickoff == "failed":
         result["kickoff"] = "failed"
         result["hint"] = (
@@ -2506,6 +2607,10 @@ async def _dispatch_delivery(
 
         sender_name = agent_messaging.readable_sender(me, from_display) if me else caller.kind
         await run_in_db_thread(safe_mark_tainted, entry.pane_id, taint_source, taint_detail or f"message from {sender_name}", msg_key)
+    # On record before the broadcast: it runs in a task of its own, so the
+    # receiving window can report back before this call resumes, and a report
+    # for a key not yet recorded is dropped (the send would stay "queued").
+    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     await app.broadcast(
         make_event(
             "agent_msg.deliver",
@@ -2544,7 +2649,6 @@ async def _dispatch_delivery(
             },
         )
     )
-    _record_message_sent(msg_key, entry.qualified_name, me or caller.kind, text)
     return msg_key
 
 
@@ -2704,9 +2808,12 @@ async def cli_send(
       - `status: "queued"` with `waited_s`, plus `hold` and `held_for_s` when
         the receiving window said why — the message is still waiting. `hold.key`
         is "typing" (someone is at that keyboard), "mid-turn" (the agent is
-        working), "behind" (other messages first), "starting", "settling",
-        "not-ready" or "gone". Nothing was lost; it goes in when the pane frees
-        up, and cli_check_message picks the story up later.
+        working; for a terminal, a command is printing), "foreground" (a
+        terminal only: a program other than the shell has its tty — a quiet
+        command, an editor, a password prompt — so someone has to finish it),
+        "behind" (other messages first), "starting", "settling", "not-ready"
+        or "gone". Nothing was lost; it goes in when the pane frees up, and
+        cli_check_message picks the story up later.
 
     `error_code` "target-offline" is not "unknown-target": the pane exists but
     its Navide window is disconnected. Wait for it to come back and retry —
@@ -2740,7 +2847,9 @@ async def cli_send(
     placeholder: the window holds the saved pane but no CLI is running behind
     it, so it is busy forever and the message parks until someone opens it.
     The send still succeeds, and the answer says so with
-    `target_state: "not-opened"` and a `warning`. `open_target: true` opens it
+    `target_state: "not-opened"`, `delivered: false`, `parked: "placeholder"`
+    and a `warning`; cli_check_message reports its hold as "not-opened", and
+    the user is told if it is still parked after 10 minutes. `open_target: true` opens it
     first — the same restore the user's click would do, without the "resume
     which?" modal — and only then delivers; the answer then carries
     `opened: {realized: true, reason}`. `reason: "fresh"` means the pane came
@@ -2959,6 +3068,11 @@ async def _send(
         answer["opened"] = opened
     elif not target.realized:
         answer["target_state"] = "not-opened"
+        # Stated in the fields a sender reads first: `ok` alone read as "it
+        # went in" (2026-11-12), while the message sits until someone opens it.
+        answer["delivered"] = False
+        answer["parked"] = "placeholder"
+        _mark_parked(msg_key)
         answer["warning"] = (
             "the target is a restore placeholder with no CLI running; the message "
             "waits until someone opens it (ui.pane.open, or open_target=True)"
@@ -3084,6 +3198,38 @@ def record_message_hold(msg_key: str, hold: dict[str, Any] | None) -> bool:
     # the two agree to within one round trip.
     entry["hold_since"] = time.monotonic()
     return True
+
+
+#: How long a message may sit parked on a restore placeholder before the user
+#: is told (mcp_connect_watch's loop asks take_overdue_parked).
+_PARKED_NOTICE_S = 600.0
+
+
+def _mark_parked(msg_key: str) -> None:
+    """A cli_send to a restore placeholder: its hold is "not-opened" from the
+    start, until the window that opens the pane reports something else."""
+    entry = _mcp_message_status.get(msg_key)
+    if entry is None:
+        return
+    entry["parked"] = "placeholder"
+    record_message_hold(msg_key, {"key": "not-opened"})
+
+
+def take_overdue_parked(now: float | None = None) -> list[dict[str, Any]]:
+    """Messages still parked on a placeholder after _PARKED_NOTICE_S, each
+    returned once: {msg_key, target, origin, excerpt}."""
+    now = time.monotonic() if now is None else now
+    out: list[dict[str, Any]] = []
+    for key, entry in _mcp_message_status.items():
+        if (
+            entry.get("parked") != "placeholder" or entry.get("parked_noticed")
+            or entry["status"] != "queued" or now - entry["created_at"] < _PARKED_NOTICE_S
+        ):
+            continue
+        entry["parked_noticed"] = True
+        out.append({"msg_key": key, "target": entry["target"], "origin": entry["origin"],
+                    "excerpt": entry["excerpt"]})
+    return out
 
 
 def _hold_view(entry: dict[str, Any], now: float) -> dict[str, Any]:
@@ -3313,12 +3459,16 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     On a "queued" message, `hold` is why it has not gone in yet — {key, n?},
     the same reason the Messages panel shows — and `held_for_s` is how long it
     has been that way. `hold.key` is "typing" (someone is typing in that pane),
-    "mid-turn" (its agent is working), "behind" (`n` messages ahead of it),
+    "mid-turn" (its agent is working; for a terminal, a command is printing),
+    "foreground" (a terminal whose tty a program other than the shell holds:
+    a quiet command, an editor, a password prompt), "behind" (`n` messages
+    ahead of it),
     "starting", "settling", "not-ready", "gone", "paused", "remote-ack",
     "composer" (text from an earlier push may still sit in that pane's input
     box, so nothing is typed until the pane shows activity) or "pty-blocked"
     (it is being typed in, but the pane's terminal has stopped reading
-    input). Both keys are absent once the message settles, and while no window has reported
+    input), or "not-opened" (sent to a restore placeholder: nothing runs
+    behind it until someone opens it). Both keys are absent once the message settles, and while no window has reported
     a hold at all — a message queued with no hold is simply on its way in.
 
     A message to another device that has gone a minute without an answer is
@@ -4258,6 +4408,12 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
     effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the
     renderer; it is omitted (not a failure) when the window does not reply.
+    `mcp: "never-connected"` appears when the pane's CLI has been up for
+    three minutes without once reaching Navide's tool server, so its Navide
+    tools are missing; `mcp: "disconnected"` when it was connected, lost the
+    connection and stopped retrying; absent otherwise. `mcp_detail` comes
+    with either and says what to do: that is the pane's own tool-server link,
+    not its window, and Navide retries `/mcp reconnect navide` while it is idle.
     `busy` is the backend's own activity verdict OR'd with that badge: true
     when `ui.status` is "running" or "starting", since the renderer sees
     things the activity log cannot (a delivered message the CLI has queued
@@ -4362,12 +4518,16 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     if result.pane is None:
         # A pane on another machine: the roster row is the whole answer, and
         # `source` says as much rather than letting it pass for a local read.
-        return {
+        answer = {
             "ok": True,
             "remote": True,
             "source": "roster_status",
             **result.entry.to_dict(),
         }
+        link = _remote_link_down()
+        if link is not None:
+            answer["remote_link"] = link
+        return answer
     pane = result.pane
     # A sign-in pane's screen holds its authorization URL or code: its text
     # stays out of this answer (the window already sends none; an older one may).
@@ -4379,6 +4539,12 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         "agent_key": pane.agent_key,
         "busy": pane.busy,
     }
+    from agent_team_backend import mcp_connect_watch
+
+    mcp_state = mcp_connect_watch.state(pane.pane_id)
+    if mcp_state:
+        status["mcp"] = mcp_state
+        status["mcp_detail"] = _mcp_detail(mcp_state)
     last = _activity_summary(pane.pane_id)
     if last is not None:
         status["last_activity"] = last
@@ -4628,7 +4794,8 @@ async def _wait_idle_remote(address: Any, timeout_s: float) -> dict[str, Any]:
             "host_online": entry.host_online,
         }
         if not entry.host_online or entry.status == "disconnected":
-            return {**answer, "idle": False, "source": "roster_offline", "reason": "offline"}
+            return {**answer, "idle": False, "source": "roster_offline", "reason": "offline",
+                    "offline_reason": entry.offline_reason}
         if entry.status in _ROSTER_IDLE_STATUSES:
             return {**answer, "idle": True, "source": "roster_status"}
         if waited >= timeout:
@@ -12292,6 +12459,15 @@ async def request_account_switch(
 
     if not agent_key or not profile_id:
         return {**await settle("bad-request"), "error": "agent and profile_id are required"}
+    from agent_team_backend.remote_devcontainer_ws import is_remote_pane
+
+    if target_pane and is_remote_pane(target_pane):
+        # A switch copies this machine's sign-in into the pane's CLI; a remote
+        # pane signs in inside its own container instead.
+        return {
+            **await settle("refused", code="REMOTE_PANE"),
+            "error": "remote container panes do not switch accounts; sign in inside the container",
+        }
     from agent_team_backend import api_key_accounts
 
     if api_key_accounts.is_api_key(await asyncio.to_thread(_app_store_get, profile_id)):
@@ -12478,6 +12654,11 @@ class _Runner:
 
 
 _runner: _Runner | None = None
+# The loop of the /plan-mcp listener on its own thread and the session manager
+# serving it there (own_loop), while it runs. Requests arriving on that loop
+# are served by that manager; the SDK's task group is bound to its loop.
+_own_loop: asyncio.AbstractEventLoop | None = None
+_own_runner: _Runner | None = None
 # Replaced runners whose task is still finishing (see _replace_stopped_runner).
 _stopping_runner_tasks: set[asyncio.Task[None]] = set()
 # Stands for an attribute the SDK no longer has (see _runner_stopped).
@@ -12532,7 +12713,7 @@ class _PlanMcpASGI:
     ASGI, not a request-response function); 503 until startup() has run."""
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        runner = _runner
+        runner = _loop_runner()
         if runner is None:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
@@ -12609,9 +12790,20 @@ class _PlanMcpASGI:
                 return
             await send(message)
 
+        # A pane's GET is its CLI's long-lived stream: while one is open the
+        # CLI is connected, and one closing without another opening is a CLI
+        # that may have given up (mcp_connect_watch, 2026-11-15).
+        stream_pane = caller.pane_id if caller is not None and caller.kind == "pane" \
+            and scope.get("method") == "GET" else ""
+        if stream_pane:
+            from agent_team_backend import mcp_connect_watch
+
+            mcp_connect_watch.stream_opened(stream_pane)
         try:
             await manager.handle_request(scope, counting_receive, explaining_send)
         finally:
+            if stream_pane:
+                mcp_connect_watch.stream_closed(stream_pane)
             _sdk_failures.reset(failures_token)
             _request_body_bytes.reset(token)
             from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
@@ -12697,9 +12889,25 @@ def _runner_stopped(runner: _Runner) -> bool:
     return group is None or group.cancel_scope.cancel_called
 
 
+def _loop_runner() -> _Runner | None:
+    """The session manager for a request on the running loop: own_loop's on
+    its thread, the main one everywhere else."""
+    own = _own_loop
+    if own is not None and asyncio.get_running_loop() is own:
+        return _own_runner
+    return _runner
+
+
 def _replace_stopped_runner(stopped: _Runner) -> _Runner:
     """The running session manager, started anew if ``stopped`` is still it."""
-    global _runner, _session_manager
+    global _runner, _session_manager, _own_runner
+    if stopped is _own_runner:
+        _log.warning("plan-mcp: restarting the MCP session manager of its own loop")
+        if not stopped.task.done():
+            _stopping_runner_tasks.add(stopped.task)
+            stopped.task.add_done_callback(_stopping_runner_tasks.discard)
+        _own_runner = _start_runner()
+        return _own_runner
     if _runner is stopped:
         _log.warning("plan-mcp: restarting the MCP session manager")
         if not stopped.task.done():

@@ -1077,7 +1077,11 @@ function prepareClose(): { isCurrent(): boolean; release(): void } | null {
   if (isClosePrepared() || readsInFlight !== 0 || writesInFlight !== 0 || cmdk.value.busy || ghostBusy.value) return null
   const pane = editorRef.value
   const modelIdentity = pane?.getModelIdentity()
-  if (!loaded.value || loadError.value || isBinaryFile.value || !pane || !modelIdentity) return null
+  // No editable model (error screen, binary or image preview, not yet loaded): nothing can
+  // be lost, so closing must not be refused. Only in-flight work above returns busy.
+  if (!loaded.value || loadError.value || isBinaryFile.value || !pane || !modelIdentity) {
+    return { isCurrent: (): boolean => true, release: (): void => {} }
+  }
 
   const workspacePath = props.workspacePath
   const relPath = props.relPath

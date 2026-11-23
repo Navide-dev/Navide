@@ -29,7 +29,7 @@ def test_builtin_root_contains_navide_skills() -> None:
 def test_startup_activates_skills_plugin_and_registers_transformer(
     host: PluginHost,
 ) -> None:
-    assert wiring.startup(host) == ["navide.plans", "navide.skills"]
+    assert wiring.startup(host) == ["navide.plans", "navide.shipped-log", "navide.skills"]
     # Only skills registers a spawn transformer now: the MCP endpoint wiring
     # that navide.plans used to contribute is core, applied ahead of the
     # plugin transformers by the terminal.create handler.

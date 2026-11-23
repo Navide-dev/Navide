@@ -43,12 +43,35 @@ D7_LOGIN_FUNCTIONS = frozenset({
 #: _notify_commit_listeners, called once at the end of _after_commit, hand a
 #: copy of the committed switch to failover_notice on its own task. Nothing
 #: in detection, ranking, the budget, the swap or the audit row changed.
+#: quota_failover was updated deliberately in 0.2.44 for the user's account
+#: order (user-approved rule A, 2026-11-16): rank_candidates takes slot_order
+#: and sorts eligible accounts by their position in it first; candidates()
+#: passes the profiles store's slotOrder. With no order the sort key reduces
+#: to the old tier/headroom/fetchedAt/slotId one (test_quota_failover
+#: regression tests). Exclusion, detection, the budget and the swap are as
+#: before.
+#: usage_service was updated deliberately in 0.2.45 for the badge stuck on
+#: "reading" (user-authorized 2026-11-20): poll_once resolves the active Claude
+#: account again when a switch lands before its reads start (instead of
+#: running them and discarding them), publishes the active account's reading
+#: as soon as it lands when parked reads are still out, and the reading mark
+#: carries refreshPendingSince. Switch decisions, credentials and failover
+#: are untouched.
+#: quota_failover was updated deliberately in 0.2.47 for smooth account
+#: switching (plan 0-2-47_c72cd8 t6): an automatic switch no longer gives up
+#: when only some panes take their credential from the environment (it moves
+#: the vault-backed panes and names the rest, as a manual switch already did;
+#: it still refuses when every pane is overridden), the commit event carries
+#: overriddenPanes, and an open incident left in notify-stopped is reminded
+#: (15 min, then every 2 h) and expires after 6 h or at its window's reset
+#: (_watch_stuck / _stuck_due / add_stuck_listener). Detection, ranking, the
+#: budget, the swap and the audit row are unchanged.
 MAIN_DIGESTS = {
     "usage_service": (
-        "e5672d4b14a3bc7e0674f42c8710bbe4920e6bb1be242da276563b06dd6b49e1", D7_LOGIN_FUNCTIONS,
+        "369f00219e0f4f05dac97a777b1218b9c1cca147c309bd859fc61605ebe3e247", D7_LOGIN_FUNCTIONS,
     ),
     "quota_failover": (
-        "6629199a2b55dc956d6f99512ebbcfce6e9b1ea1752d31fbc0a283cbb17a4a8f", frozenset(),
+        "ea8e535f881c448f310233c169919c9a25be1d3739fc45952f2f97fc57e5eebf", frozenset(),
     ),
 }
 

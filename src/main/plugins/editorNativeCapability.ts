@@ -1,7 +1,31 @@
-import { basename, dirname, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import type { EditorNativeResults } from '../../../packages/plugin-contracts/src/index'
 import { EditorSelectionGrants, type EditorSelectionOwner } from './editorSelectionGrants'
 import { isWorkspaceContainedPath, resolvePathForContainment } from './workspacePathPolicy'
+
+/** How the editor window names one absolute file: relative to the workspace
+ *  when the file is inside it, otherwise by name under its own folder
+ *  (`file_ws`). The editor reads `filepath` relative to one of those roots, so
+ *  an absolute `filepath` resolves to a path that does not exist. */
+export function editorWindowFileTarget(workspacePath: string, path: string): { filepath: string; file_ws?: string } {
+  if (isWorkspaceContainedPath(workspacePath, path)) {
+    const root = resolvePathForContainment(workspacePath)
+    const resolved = resolvePathForContainment(path)
+    if (!root || !resolved) throw new Error('workspace cannot be safely resolved')
+    return { filepath: relative(root, resolved) }
+  }
+  return { filepath: basename(path), file_ws: dirname(path) }
+}
+
+/** Editor-open params whose `filepath` is absolute (a terminal link, a drop),
+ *  rewritten into the form `editorWindowFileTarget` gives. Anything else —
+ *  a relative path, or one that already names its root with `file_ws` — is
+ *  returned as is. */
+export function editorOpenParamsForAbsolutePath(params: Record<string, string>): Record<string, string> {
+  const { workspace_path: workspacePath, filepath, file_ws: fileWs } = params
+  if (!workspacePath || !filepath || fileWs || !isAbsolute(filepath)) return params
+  return { ...params, ...editorWindowFileTarget(workspacePath, filepath) }
+}
 
 const fields = {
   'ui.openPluginWindow': { contributionKey: 'string', path: 'string?', line: 'number?', grant: 'string?' },
@@ -132,14 +156,8 @@ export class EditorNativeCapability {
       }
       case 'ui.openEditorWindow': {
         if (args.path !== undefined) {
-          const path = target()
-          if (isWorkspaceContainedPath(context.workspacePath, path)) {
-            const root = resolvePathForContainment(context.workspacePath)
-            if (!root) throw new Error('workspace cannot be safely resolved')
-            return performed(this.host.openEditorWindow({ workspace_path: context.workspacePath,
-              filepath: relative(root, path), line: args.line as number | undefined }))
-          }
-          return performed(this.host.openEditorWindow({ workspace_path: context.workspacePath, filepath: basename(path), file_ws: dirname(path), line: args.line as number | undefined }))
+          return performed(this.host.openEditorWindow({ workspace_path: context.workspacePath,
+            ...editorWindowFileTarget(context.workspacePath, target()), line: args.line as number | undefined }))
         }
         return performed(this.host.openEditorWindow({ workspace_path: workspace(), sidebar: args.sidebar as string | undefined }))
       }

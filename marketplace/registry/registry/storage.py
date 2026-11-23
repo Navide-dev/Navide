@@ -6,6 +6,7 @@ implementation in this slice is a local-filesystem store.
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import BinaryIO, Protocol, runtime_checkable
 
@@ -15,6 +16,10 @@ class StorageBackend(Protocol):
     """Content store keyed by opaque string keys."""
 
     def put(self, key: str, data: bytes) -> None: ...
+
+    def put_stream(self, key: str, stream: BinaryIO) -> None:
+        """Store the whole of a seekable binary stream, read in chunks."""
+        ...
 
     def get(self, key: str) -> bytes: ...
 
@@ -51,6 +56,13 @@ class LocalStorageBackend:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+
+    def put_stream(self, key: str, stream: BinaryIO) -> None:
+        path = self._path(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stream.seek(0)
+        with path.open("wb") as out:
+            shutil.copyfileobj(stream, out)
 
     def get(self, key: str) -> bytes:
         path = self._path(key)

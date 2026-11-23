@@ -9,6 +9,8 @@
 // mode" notice and an undefined (or empty) result. Inside Electron the real bridge
 // exists and this does nothing.
 
+import { MARKETPLACE_FIXTURES } from './marketplaceFixtures'
+
 type PlatformId = 'darwin' | 'win32' | 'linux'
 
 export interface DevWebBridgeDeps {
@@ -56,8 +58,6 @@ const EMPTY_RESULTS: Record<string, unknown> = {
   },
   'plugins.nativeBackends.list': { enabled: true, plugins: [] },
   'plugins.nativeBackends.resourceNotices': [],
-  'plugins.marketplaceCategories': [],
-  'plugins.marketplaceSearch': { items: [], total: 0, offset: 0, limit: 20 },
   // A healthy store on the Host default (src/main/plugins/executionPolicy.ts),
   // with no workspace and an empty shell allowlist.
   'executionPolicy.inspect': {
@@ -119,10 +119,13 @@ export function createDevWebBridge(deps: DevWebBridgeDeps): unknown {
         if (!path && Object.prototype.hasOwnProperty.call(implemented, key)) return implemented[key]
         return node(path ? `${path}.${key}` : key)
       },
-      apply() {
+      apply(_target, _this, args: never[]) {
         const last = path.slice(path.lastIndexOf('.') + 1)
         // Event subscriptions simply never fire; hand back a disposer.
         if (/^on[A-Z]/.test(last)) return () => {}
+        // The Navide Marketplace page browses sample data (no notice).
+        const fixture = MARKETPLACE_FIXTURES[path]
+        if (fixture) return Promise.resolve(structuredClone(fixture(...args)))
         deps.notify(path)
         return Promise.resolve(structuredClone(EMPTY_RESULTS[path]))
       },

@@ -2242,3 +2242,35 @@ async def test_send_and_wait_without_a_reply_carries_no_key(
     await task
 
     assert "reply_to" not in captured[0]["payload"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["connecting", "unreachable", "unauthorized"])
+async def test_list_targets_says_when_this_machines_own_link_is_the_broken_segment(
+    roster: Any, monkeypatch: pytest.MonkeyPatch, state: str
+) -> None:
+    """Remote rows survive a dropped link as the last copy the server gave, so
+    host_online can be stale; the answer has to say this machine's link is down."""
+    from agent_team_backend import server_link
+
+    _seed()
+    roster.replace([_remote_row()], local_device_id="this-device")
+    monkeypatch.setattr(server_link, "link_state", lambda: state)
+    result = await plan_mcp.cli_list_targets(_ctx())
+
+    assert result["remote_link"]["state"] == state
+    assert result["remote_link"]["segment"] == "this-machine-to-server"
+
+
+@pytest.mark.asyncio
+async def test_list_targets_says_nothing_about_a_link_that_is_up(
+    roster: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_team_backend import server_link
+
+    _seed()
+    roster.replace([_remote_row()], local_device_id="this-device")
+    monkeypatch.setattr(server_link, "link_state", lambda: "connected")
+    result = await plan_mcp.cli_list_targets(_ctx())
+
+    assert "remote_link" not in result

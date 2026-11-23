@@ -18,7 +18,8 @@ every check through the store, which caches them until they change:
 built-in categories can be switched off one by one, user block patterns add
 refusals, and user allow prefixes exempt a segment from the built-in checks.
 A block pattern outranks an allow prefix, and an allow prefix never exempts a
-pipeline that feeds a download into a shell.
+pipeline that feeds a download into a shell, nor a segment that reads or sends
+a credential file.
 """
 
 from __future__ import annotations
@@ -108,6 +109,10 @@ _PIPELINE_RULES = {"pipe-download-to-shell", "download-then-exec", "decode-and-e
 #: whole line matching its pattern. Nothing else is exemptable: a block
 #: pattern still outranks it, and piping a download into a shell never is.
 EXEMPTABLE_RULES = frozenset({"credential-pipe-upload"})
+#: Reading or sending a secret file: an allow prefix exempts a segment from
+#: every other built-in check, never from these (`cat` allowed is not
+#: `cat ~/.ssh/id_rsa` allowed).
+_NOT_LIFTED_BY_ALLOW = {"credential-access", "credential-exfil", "dotenv-outside-workspace"}
 #: Opaque verdicts that mean "cannot be judged" rather than "an unknown script".
 _UNANALYZABLE_RULES = {"dynamic-command", "eval", "unbalanced-quotes", "nesting-too-deep", "too-long",
                        "decode-and-exec", "stdin-script", "dynamic-stdin-script"}
@@ -556,6 +561,10 @@ def check(text: str, *, workspace: str, settings: Settings | None = None) -> Ref
     # 3. every segment on its own
     for seg in segs:
         if _allowed(settings.allow_prefixes, seg):
+            if "credential" in enabled:
+                for rule, level, reason in _classifier_hits(seg, workspace, settings.protected_branches):
+                    if rule in _NOT_LIFTED_BY_ALLOW:
+                        return Refusal("credential", seg, reason)
             continue
         hit = _explicit(seg, home)
         if hit and hit[0] in enabled:

@@ -134,9 +134,11 @@ You never need to read or modify the shared orchestration code.
 4. Update `src/renderer/src/components/__tests__/CliAgentsHelp.test.ts`: the
    table row count (asserted twice, once per locale), the sign-in command
    list, and the list of which cells render a `<code>` element.
-5. Append your `{ agentKey, label, hint }` to
-   `plugins/navide-plans/src/retained/agentSpecs.ts` — the plans plugin keeps a
-   retained copy that a test compares against the live list.
+5. Append your `{ agentKey, label, hint }` to `agentSpecs` in
+   `tests/fixtures/navide-plans/contract.json` (a test compares it against the
+   live list), and to `src/retained/agentSpecs.ts` in
+   [navide-plans](https://github.com/Navide-dev/navide-plans), which keeps a
+   retained copy; the next Plans release ships it.
 6. Only if your spec declares `home_env_vars`: add each one to
    `SPAWN_ENV_RESERVED_KEYS` in
    `src/renderer/src/platform/plugin-shell/lib/cliLaunchOverride.ts`. This is

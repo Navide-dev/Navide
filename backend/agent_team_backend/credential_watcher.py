@@ -42,6 +42,7 @@ import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
+from . import osplat
 from .cli_vendors.registry import VENDORS
 from .credential_vault import DEFAULT_SLOT_ID, vault_to_thread
 from .profiles_store import SUPPORTED_AGENT_KEYS
@@ -62,6 +63,21 @@ POLL_INTERVAL_S = 1.0
 # An identity read that failed, or a change that did not read the same twice,
 # is looked at again this many times before waiting for the next file change.
 CHECK_RETRIES = 5
+
+# macOS keeps every login-keychain item in this one database file. A CLI whose
+# live secret is a Keychain item changes nothing else on disk when it signs in
+# (Antigravity no longer rewrites its token file), so this file's stamp is the
+# only signal there is. Any app's Keychain write moves it; that costs one
+# debounced identity read per keychain-backed agent, and the fingerprint gate
+# keeps it from going further unless the identity really changed.
+LOGIN_KEYCHAIN_REL = ("Library", "Keychains", "login.keychain-db")
+
+# Agents watched through the login keychain. Antigravity's identity names no
+# account, so a change there only re-announces the sign-in state. Cursor's
+# names one (the access token's user id), so a change there reconciles like
+# any file-backed login: the ledger follows a profile already holding it, and
+# an account none holds is registered once.
+KEYCHAIN_WATCH_AGENTS = ("antigravity", "cursor")
 
 # Sentinel for "no fingerprint recorded yet" — a signed-out agent is a
 # legitimate reading, so no ordinary value can stand in for "never read".
@@ -277,6 +293,32 @@ def point_at_profile_holding_live(agent_key: str, *, scope: str | None = None) -
     return None
 
 
+def _navide_sign_in_pending(agent_key: str) -> bool:
+    """Is a sign-in started from Navide still running against the live store?
+
+    A CLI without login isolation (cursor, copilot, kilo, ...) signs in over
+    the live credentials; the profile the sign-in was started for parks that
+    login when it finishes and puts the previous one back. Until then the live
+    login belongs to that profile, so registering it as an unknown account
+    would hold the same account twice. Blocking."""
+    from . import app
+
+    vault = app.credential_vault
+    if vault._login_isolated(agent_key):  # noqa: SLF001 — vault-internal policy
+        return False
+    slot_ids = {DEFAULT_SLOT_ID} | {
+        str(p["id"])
+        for p in app.cli_profiles_store.list()["profiles"]
+        if p.get("agentKey") == agent_key
+    }
+    return any(vault.login_pending(agent_key, slot_id) for slot_id in slot_ids)
+
+
+def _align_unless_signing_in(agent_key: str) -> None:
+    if not _navide_sign_in_pending(agent_key):
+        align_default_to_live(agent_key)
+
+
 async def reconcile_live_account(agent_key: str) -> None:
     """CredentialWatcher sink: this agent's live credentials now belong to a
     different account than when we last looked.
@@ -295,7 +337,7 @@ async def reconcile_live_account(agent_key: str) -> None:
             guard = getattr(app.credential_vault, "require_store_mutation", None)
             if guard is not None:
                 await vault_to_thread(guard, agent_key)
-            await vault_to_thread(align_default_to_live, agent_key)
+            await vault_to_thread(_align_unless_signing_in, agent_key)
     except Exception as err:  # noqa: BLE001 — a watcher must never crash the loop
         log.warning("reconciling the active %s account failed: %s", agent_key, err)
         return
@@ -339,6 +381,7 @@ class CredentialWatcher:
         debounce_s: float = 0.8,
         poll_s: float = POLL_INTERVAL_S,
         resolver=None,
+        platform: str = osplat.platform_id,
     ) -> None:
         self._on_identity_change = on_identity_change
         self._real_home = Path(real_home or Path.home())
@@ -361,8 +404,9 @@ class CredentialWatcher:
         self._check_tasks: set[asyncio.Task] = set()
         self._started = False
         self._resolver = resolver
-        # path -> (agent_key, last stamp)
-        self._watched: dict[Path, tuple[str, tuple[int, int, int] | None]] = {}
+        self._platform = platform
+        # path -> (agent keys, last stamp); the login keychain serves several
+        self._watched: dict[Path, tuple[tuple[str, ...], tuple[int, int, int] | None]] = {}
 
     def start(self) -> None:
         if self._started:
@@ -372,6 +416,11 @@ class CredentialWatcher:
         for directory, files in _watch_targets(self._real_home, self._agent_keys, self._resolver).items():
             for filename, agent_key in files.items():
                 self._watch_file(directory / filename, agent_key)
+        if self._platform == "darwin":
+            keychain = self._real_home.joinpath(*LOGIN_KEYCHAIN_REL)
+            for agent_key in KEYCHAIN_WATCH_AGENTS:
+                if agent_key in self._agent_keys:
+                    self._watch_file(keychain, agent_key)
         self._seed_task = asyncio.ensure_future(self._seed())
         self._poll_task = asyncio.ensure_future(self._poll())
         log.info(
@@ -380,8 +429,11 @@ class CredentialWatcher:
         )
 
     def _watch_file(self, path: Path, agent_key: str) -> None:
+        agents, stamp = self._watched.get(path, ((), None))
         if path not in self._watched:
-            self._watched[path] = (agent_key, _stamp(path))
+            stamp = _stamp(path)
+        if agent_key not in agents:
+            self._watched[path] = (agents + (agent_key,), stamp)
 
     async def watch_bound_store(self, agent_key: str, path: Path) -> None:
         # Bindings cannot be replaced. An unbound vendor had no previous
@@ -438,11 +490,12 @@ class CredentialWatcher:
                 # Off the loop: a home directory on a network mount stats slowly.
                 stamps = await asyncio.to_thread(lambda: [_stamp(p) for p in paths])
                 for path, stamp in zip(paths, stamps):
-                    agent_key, last = self._watched[path]
+                    agents, last = self._watched[path]
                     if stamp != last:
-                        self._watched[path] = (agent_key, stamp)
-                        self._retries_left[agent_key] = CHECK_RETRIES
-                        self._schedule_fire(agent_key)
+                        self._watched[path] = (agents, stamp)
+                        for agent_key in agents:
+                            self._retries_left[agent_key] = CHECK_RETRIES
+                            self._schedule_fire(agent_key)
             except Exception as err:  # noqa: BLE001
                 log.warning("polling the credential files failed: %s", err)
 

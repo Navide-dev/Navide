@@ -24,7 +24,7 @@ describe('backendErrorText', () => {
 
   it('has the not-found message in every locale', () => {
     for (const locale of LOCALES) {
-      const raw = readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
+      const raw = readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`), 'utf8')
       expect(JSON.parse(raw).pipelineEditor.error['pipeline-not-found'], locale).toBeTruthy()
     }
   })
@@ -37,7 +37,7 @@ const ALL_LOCALES = ['en-US', 'zh-TW', 'zh-CN', 'ja-JP', 'ko-KR', 'de-DE', 'fr-F
 const parsedLocales = new Map<string, unknown>()
 function lookup(locale: string, key: string): unknown {
   if (!parsedLocales.has(locale)) {
-    const raw = readFileSync(resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`), 'utf8')
+    const raw = readFileSync(resolve(process.cwd(), `src/renderer/src/i18n/locales/${locale}.json`), 'utf8')
     parsedLocales.set(locale, JSON.parse(raw))
   }
   return key.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], parsedLocales.get(locale))

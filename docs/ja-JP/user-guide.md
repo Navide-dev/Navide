@@ -50,7 +50,21 @@ Select multiple pane headers with Cmd/Ctrl-click or Shift-click, then right-clic
 
 **Reclaim selected (N)** shows how many selected panes are eligible, releases their CLI processes, and keeps click-to-resume placeholders. It skips protected panes, including running panes, the focused pane, panes awaiting an answer or holding unsent text, and panes without a resumable session. The action stays visible but is disabled when none of the selected panes can be reclaimed. **Mute selected notifications** mutes the entire selection, including a mix of muted and unmuted panes; when every selected pane is muted, **Unmute selected notifications** restores notifications for all of them. These batch actions affect only the selected panes.
 
-組み込みで対応する Agent Key は次のコーディング CLI です：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code。正確な CLI Behavior と Provider Billing は各 External Tool が引き続き管理します。
+組み込みで対応する Agent Key は次のコーディング CLI です：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Devin CLI、Droid、Goose、Grok CLI、Hermes Agent、Kilo Code、Kimi Code、Kiro CLI、MiniMax Code、Muse Code、OpenCode、OpenClaw、Pi、Qwen Code。正確な CLI Behavior と Provider Billing は各 External Tool が引き続き管理します。
+
+### SSH Remote ペイン（実験的な機能）
+
+別のマシン上で `ssh` 経由でシェルが動くターミナルのペインです。対応するのはターミナルのペインだけで、リモートホストで Claude Code や Codex は開きません。
+
+**設定 → 一般 → 実験的な機能 → リモートコンテナのペイン** をオンにすると、**+** メニューの **ターミナル** の下に **SSH Remote…** が表示されます。
+
+- **ホスト** はホスト名、IP アドレス、または ssh 設定の名前です。**ユーザー** は省略でき、空なら ssh 設定に従います。**ポート** の既定は 22 です。
+- **秘密鍵のパス** は省略できます。Navide はパスだけを保存して `ssh -i` に渡し、鍵を読み取り・コピー・アップロードすることはありません。
+- **最近の接続** は最大 8 件（ホスト、ユーザー、ポート、鍵のパス）をこのコンピューターにのみ保存します。Navide Cloud の同期にも、書き出した設定バンドルにも含まれません。
+- **SSH agent 転送はオフのまま** です（`ForwardAgent=no`、`-A` は付けません）。`ssh` 自体に必要なもの以外の環境変数は取り除かれるため、`SendEnv` の設定でローカルの API キーが送られることはありません。
+- **接続** を押すと、Navide は対話なしの `ssh` でホストを一度確認します。応答があれば、そのホストでログインシェルが動くターミナルのペインを開きます。応答がなければ、ホストに接続できない、鍵が拒否された、ホストを確認できない、のどれかをわかりやすく表示します。鍵またはホスト鍵が拒否された場合は **それでも開く** でペインを開き、`ssh` 自身に鍵のパスフレーズやホストの指紋を尋ねさせられます。
+- **切れた接続は自動で再接続します。** `ssh` の接続が切れると、ペインは 2・5・15・30・60 秒後にホストを確認し直し、失敗するたびに理由を表示します。鍵やホスト鍵が拒否された場合は再試行しません。**再接続** を押すとすぐに試します。`exit` で終了した場合は再接続しません。
+- Navide を再起動すると SSH Remote ペインは復元されません。**最近の接続** から開き直してください。
 
 ### CLI risk observations
 
@@ -266,6 +280,18 @@ Claude Code はリクエストごとに Credential を読み直すため、何�
 **App Lock**（設定 → App Lock）は、すべての Navide ウィンドウをロック画面で覆い、4〜12 桁の PIN で解除します。Mac では Touch ID、Windows 11 では Windows Hello を先に使えます。Windows 10 と Linux では PIN でのみ解除し、設定ページにもそう表示されます。これはプライバシー画面であり、アクセス制御ではありません。下では agent、ターミナル、チャットチャンネル、MCP ツール、ほかのデバイス、スケジュールがそのまま動き続け、コンピューターの前にいる詳しい人なら回避できます。ロック中は、隠す・終了・ウィンドウ操作と、PIN 入力欄に必要な編集キーを除いてアプリケーションメニューがグレー表示になり、キー入力も下のウィンドウには届かないため、メニューのクリックでもショートカットでも背後の App を操作できません。「開発者ツールの切り替え」もグレー表示になり、ロック中は DevTools を開けません。すでに開いている DevTools はそのままです。「今すぐロック」（⌘⌥L、Windows と Linux では Ctrl+Alt+L）で手動でロックできるほか、一定時間操作がないとき、画面がロックされたとき、コンピューターがスリープしたとき、Navide の起動時（既定でオフ）に自動でロックできます。PIN を忘れた場合は Touch ID または Windows Hello で確認してから再設定します。どちらもない場合は、Navide を終了して Navide のデータフォルダーにある `app-lock.json` を削除してください。App Lock とその PIN だけが削除され、ほかには影響しません。
 
 `.agent-team/` は現在 Portability Mechanism ではありません。将来 Machine 間で移行する場合は Git Synchronization ではなく、Redaction と Retention Control を備えた明示的な Local Export/Import Flow を使用すべきです。
+
+### 自分の Navide プラグインを作る
+
+誰でも Navide プラグインを作り、Navide マーケットプレイスに公開できます。**設定 → Navide マーケットプレイス → 開発者** が App の中で手順を案内します。すべてのコマンドはガイド [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md)（英語）にあります。
+
+1. **テンプレートから作成する。** `navide-plugin init acme-hello --id acme.hello` はビルド不要のプラグインを作ります。`--template vue` を付けると、Vue のビュー、小さなバックエンド、エージェントツールを作ります。開発用パッケージはまだ npm にありません。GitHub Release `plugin-packages-1.0.0` から直接実行する 1 行の `npx` コマンドがガイドにあります。
+2. **公開せずに読み込む。** 開発者モードをオンにして **フォルダーから読み込む…** を選びます。読み込んだフォルダーは保存すると自動で再読み込みされます。
+3. **検証してパッケージにする。** `navide-plugin validate` と `navide-plugin package` は、Navide マーケットプレイスが審査前に行うのと同じチェックを実行し、`.vsix` ファイルを書き出します。ペインのエージェントも `plugins_validate_package` と `plugins_package` で同じチェックを実行できます。どちらも何もインストールしません。
+4. **開発者申請を一度だけ行う。** 開発者ページでサインインし、実名で申請を記入します。担当者が審査します。
+5. **審査に提出する。** 名前空間を取得して署名鍵を登録し、パッケージに署名して `navide-plugin publish` または Navide の公開フォームで提出します。各バージョンは担当者が審査し（目安は 3 営業日）、通過後に掲載されます。
+
+手順 1～3 はこのコンピューターの中だけで行われます。手順 4～5 は、エージェントがフォームを代わりに記入した場合も含め、あなたがボタンを押すかコマンドを実行するまで送信されません。
 
 ### Navide プラグインのコマンド
 

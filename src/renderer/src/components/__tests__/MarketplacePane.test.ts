@@ -462,6 +462,16 @@ describe('MarketplacePane', () => {
     setMarketplaceView('browse')
   })
 
+  it('still offers to build a Navide plugin when the Registry cannot be reached', async () => {
+    mockPlugins({ marketplaceSearch: vi.fn().mockRejectedValue(new Error('offline')) })
+    setMarketplaceView('browse')
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-testid="marketplace-build-own"] button').trigger('click')
+    expect(marketplaceView.value).toBe('developer')
+    setMarketplaceView('browse')
+  })
+
   it('marks installed items and offers Update only when the main process reports one', async () => {
     const api = mockPlugins({
       marketplaceSearch: vi.fn().mockResolvedValue({
@@ -697,6 +707,61 @@ describe('MarketplacePane', () => {
     await wrapper.get('[data-id="acme.demo"]').trigger('click')
     await flushPromises()
     expect(wrapper.get('.mkt-no-readme').text()).toContain('no README')
+  })
+
+  it('leaves the skeleton for the error state when the detail request times out, and retry succeeds', async () => {
+    const api = mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockRejectedValueOnce(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+        .mockResolvedValue(demoDetail()),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.mkt-detail-skeleton').exists()).toBe(false)
+    expect(wrapper.get('.mkt-detail-error').text()).toContain('timeout')
+
+    await wrapper.get('.mkt-detail-error .mkt-retry').trigger('click')
+    await flushPromises()
+    expect(api.marketplaceDetail).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.mkt-detail-error').exists()).toBe(false)
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Demo')
+  })
+
+  it('never lets an older detail answer overwrite the one opened after it', async () => {
+    let answerFirst: (value: unknown) => void = () => {}
+    const other = { namespace: 'acme', name: 'other', identity: 'acme.other', display_name: 'Other', description: null, categories: [], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false }
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          { namespace: 'acme', name: 'demo', identity: 'acme.demo', display_name: 'Demo', description: null, categories: [], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false },
+          other,
+        ],
+        total: 2,
+        offset: 0,
+        limit: 20,
+      }),
+      marketplaceDetail: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((resolve) => { answerFirst = resolve }))
+        .mockResolvedValueOnce(demoDetail({ name: 'other', identity: 'acme.other', display_name: 'Other' })),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.mkt-back').trigger('click')
+    await wrapper.get('[data-id="acme.other"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Other')
+
+    answerFirst(demoDetail())
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail').attributes('data-detail-id')).toBe('acme.other')
+    expect(wrapper.get('.mkt-detail-title').text()).toContain('Other')
+    expect(wrapper.get('.mkt-detail-title').text()).not.toContain('Demo')
   })
 
   it('offers Update on the Extensions page and routes it through the trust dialog', async () => {
@@ -1162,8 +1227,8 @@ describe('MarketplacePane', () => {
     await flushPromises()
     const links = wrapper.get('.mkt-links')
     expect(links.findAll('.mkt-link').map((l) => l.text())).toEqual(['Repository ↗', 'Homepage ↗'])
-    // The changelog is a tab next to README and Versions, fetched on first open.
-    expect(wrapper.findAll('[role="tab"]').map((tab) => tab.text())).toEqual(['Details', 'Changelog', 'Versions'])
+    // The changelog is folded at the end of the page, fetched on first open.
+    expect(wrapper.get('.mkt-changelog-toggle').attributes('aria-expanded')).toBe('false')
     expect(api.marketplaceChangelog).not.toHaveBeenCalled()
     expect(links.get('.mkt-license').text()).toBe('License: MIT')
     const worksWith = wrapper.get('.mkt-works-with')
@@ -1712,8 +1777,9 @@ describe('MarketplacePane', () => {
         'Published',
         'Target',
         'Channel',
+        'Trust',
+        'Capabilities',
         'Downloads',
-        'Status',
       ])
     })
 
@@ -1884,21 +1950,20 @@ describe('MarketplacePane', () => {
       expect(wrapper.find('.mkt-featured').exists()).toBe(false)
     })
 
-    it('switches detail tabs with the arrow keys', async () => {
-      mockPlugins()
+    it('stacks README and versions like the website and folds the changelog', async () => {
+      mockPlugins({ marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({ has_changelog: true })) })
       wrapper = mountMarketplace()
       await flushPromises()
       await wrapper.get('[data-id="acme.demo"]').trigger('click')
       await flushPromises()
-      const tabs = () => wrapper!.findAll('[role="tab"]')
-      expect(tabs().map((tab) => tab.attributes('aria-selected'))).toEqual(['true', 'false'])
-      await tabs()[0].trigger('keydown', { key: 'ArrowRight' })
-      expect(tabs().map((tab) => tab.attributes('aria-selected'))).toEqual(['false', 'true'])
-      expect(tabs()[1].attributes('tabindex')).toBe('0')
-      expect((wrapper.get('#mkt-panel-versions').element as HTMLElement).style.display).toBe('')
-      expect((wrapper.get('#mkt-panel-readme').element as HTMLElement).style.display).toBe('none')
-      await tabs()[1].trigger('keydown', { key: 'ArrowRight' })
-      expect(tabs()[0].attributes('aria-selected')).toBe('true')
+      expect(wrapper.find('[role="tab"]').exists()).toBe(false)
+      const labels = wrapper.findAll('.mkt-detail-main > .mkt-block > .mkt-section-label').map((h) => h.text())
+      expect(labels).toEqual(['Details', 'Versions', '▸ Changelog'])
+      const toggle = wrapper.get('.mkt-changelog-toggle')
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-expanded')).toBe('true')
+      await toggle.trigger('click')
+      expect(toggle.attributes('aria-expanded')).toBe('false')
     })
 
     it('labels the trust dialog, starts on Cancel, keeps Tab inside and returns focus after', async () => {
@@ -2466,5 +2531,168 @@ describe('MarketplacePane pre-release install (K5)', () => {
     expect(
       wrapper.findAll('.mkt-detail-title .nv-source-badge').map((badge) => badge.attributes('data-source'))
     ).toEqual(['marketplace', 'prerelease'])
+  })
+})
+
+describe('MarketplacePane website layout', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+  })
+
+  async function openDemo(overrides: Record<string, unknown> = {}) {
+    const api = mockPlugins(overrides)
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    return api
+  }
+
+  it('names each sensitive capability in plain words above the page', async () => {
+    await openDemo()
+    expect(wrapper!.get('.mkt-risk-banner').text()).toContain(
+      'This Navide plugin requests sensitive capabilities: fs (reads and writes files). Review before installing.'
+    )
+  })
+
+  it('shows no risk banner when the version asks for nothing sensitive', async () => {
+    const detail = demoDetail()
+    detail.versions[0] = { ...detail.versions[0], sensitive_capabilities: [] }
+    await openDemo({ marketplaceDetail: vi.fn().mockResolvedValue(detail) })
+    expect(wrapper!.find('.mkt-risk-banner').exists()).toBe(false)
+  })
+
+  it('shows the trust and capabilities of every version', async () => {
+    await openDemo()
+    const first = wrapper!.findAll('.mkt-versions tbody tr')[0]
+    expect(first.get('.mkt-row-trust').text()).toBe('✓ signed')
+    expect(first.findAll('.mkt-row-caps .mkt-pack-cap').map((c) => c.text())).toEqual(['fs', 'ui'])
+    expect(first.get('.mkt-pack-cap--sensitive').text()).toBe('fs')
+  })
+
+  it('hides the verified domain, screenshots and rating links an older Registry does not send', async () => {
+    await openDemo()
+    expect(wrapper!.find('.mkt-verified-domain').exists()).toBe(false)
+    expect(wrapper!.find('.mkt-screenshots').exists()).toBe(false)
+    expect(wrapper!.find('.mkt-rate-on-web').exists()).toBe(false)
+    expect(wrapper!.get('.mkt-rating-card').text()).toContain('4.5')
+  })
+
+  it('shows the verified domain, screenshots and website rating links when sent', async () => {
+    const api = await openDemo({
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({
+          verified_domain: 'acme.dev',
+          screenshots: ['media/one.png'],
+          web_url: 'https://marketplace.example/extensions/acme/demo',
+        })
+      ),
+      marketplaceIcon: vi.fn().mockResolvedValue('data:image/png;base64,AAAA'),
+    })
+    expect(wrapper!.get('.mkt-verified-domain').text()).toContain('acme.dev')
+    expect(api.marketplaceIcon).toHaveBeenCalledWith({
+      namespace: 'acme',
+      name: 'demo',
+      version: '1.1.0',
+      path: 'media/one.png',
+      kind: 'screenshot',
+    })
+    expect(wrapper!.find('.mkt-screenshots img').exists()).toBe(true)
+    await wrapper!.get('.mkt-report').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.kind).toBe('confirm')
+    useNotify().resolveDialog(false)
+    await flushPromises()
+  })
+
+  it('keeps every action in the Install card, rollback and Disable included', async () => {
+    const setDisabled = vi.fn().mockResolvedValue(undefined)
+    const rollback = vi.fn().mockResolvedValue(undefined)
+    await openDemo({
+      listInstalled: vi.fn().mockResolvedValue([
+        {
+          id: 'acme.demo',
+          requires: [],
+          sensitive: [],
+          packageVersion: '1.1.0',
+          provenance: 'official-registry',
+          rollbackKind: 'previous',
+          rollbackToVersion: '1.0.0',
+          disabled: false,
+        },
+      ]),
+      setDisabled,
+      rollback,
+    })
+    const card = wrapper!.get('.mkt-install-card')
+    expect(card.get('.mkt-installed').text()).toContain('1.1.0')
+    expect(card.get('.ext-rollback').text()).toBe('Roll Back to 1.0.0')
+    await card.get('.ext-disable').trigger('click')
+    await flushPromises()
+    expect(setDisabled).toHaveBeenCalledWith('acme.demo', true)
+
+    await card.get('.ext-rollback').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.danger).toBe(true)
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(rollback).toHaveBeenCalledWith('acme.demo')
+  })
+
+  it('sends a package a stop disabled to Extensions instead of enabling it here', async () => {
+    await openDemo({
+      listInstalled: vi.fn().mockResolvedValue([
+        {
+          id: 'acme.demo',
+          requires: [],
+          sensitive: [],
+          packageVersion: '1.1.0',
+          disabled: true,
+          stopRecord: { reason: 'resource', at: 1 },
+        },
+      ]),
+    })
+    const card = wrapper!.get('.mkt-install-card')
+    expect(card.find('.ext-enable').exists()).toBe(false)
+    expect(card.find('.mkt-enable-in-extensions').exists()).toBe(true)
+    expect(card.find('.mkt-disabled-badge').exists()).toBe(true)
+  })
+
+  it('shows the introduction, platform chips and footer links on the list', async () => {
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          {
+            namespace: 'acme',
+            name: 'demo',
+            identity: 'acme.demo',
+            display_name: 'Demo',
+            description: null,
+            categories: [],
+            latest_version: '1.0.0',
+            latest_targets: ['darwin-arm64', 'linux-x64'],
+            download_count: 0,
+            rating_average: 0,
+            featured: false,
+          },
+        ],
+        total: 1,
+        offset: 0,
+        limit: 20,
+        site_url: 'https://marketplace.example',
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="marketplace-intro"]').exists()).toBe(true)
+    expect(wrapper.findAll('.mkt-card-platform').map((c) => c.text())).toEqual(['darwin-arm64', 'linux-x64'])
+    expect(wrapper.findAll('.mkt-footer-links .mkt-link').map((l) => l.attributes('data-link'))).toEqual([
+      'removed',
+      'docs',
+      'discussions',
+      'security',
+    ])
   })
 })

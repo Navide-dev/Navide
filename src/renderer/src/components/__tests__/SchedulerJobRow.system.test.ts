@@ -10,6 +10,7 @@ import { i18n } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import { useSchedulerJobs } from '../../composables/useSchedulerJobs'
 import { __resetEvolveForTest, useEvolveBadges } from '../../composables/useEvolve'
+import { __resetShippedLogForTest, useShippedLogPanel } from '../../composables/useShippedLog'
 import type { SchedulerJob } from '../../lib/schedulerJobs'
 import SchedulerJobRow from '../SchedulerJobRow.vue'
 
@@ -78,6 +79,7 @@ describe('SchedulerJobRow – system jobs are read-only', () => {
     i18n.global.locale.value = 'zh-TW'
     calls.length = 0
     __resetEvolveForTest()
+    __resetShippedLogForTest()
   })
   afterEach(() => wrapper?.unmount())
 
@@ -100,6 +102,44 @@ describe('SchedulerJobRow – system jobs are read-only', () => {
     expect(useEvolveBadges().panelWorkspace.value).toBe(WS)
     expect(calls.filter((c) => c !== 'scheduler.list')).toEqual([])
     expect(wrapper.emitted()).not.toHaveProperty('edit')
+  })
+
+  it('the Shipped Log digest job opens that workspace Shipped Log panel instead', async () => {
+    wrapper = mountRow(systemJob({
+      id: 'ship_digest:abc',
+      action: { kind: 'ship_digest', workspace: WS },
+      owner: { kind: 'system', feature: 'shipped-log', workspace: WS },
+    }))
+    await flushPromises()
+    expect(wrapper.get('[data-test="target"]').text()).toBe('由工作區管理')
+    expect(wrapper.get('[data-test="system-name"]').attributes('title')).toContain('上線紀錄')
+    await wrapper.get('[data-test="manage"]').trigger('click')
+    expect(useShippedLogPanel().panelWorkspace.value).toBe(WS)
+    expect(useEvolveBadges().panelWorkspace.value).toBe(null)
+    expect(calls.filter((c) => c !== 'scheduler.list')).toEqual([])
+  })
+
+  it('a system job name follows the UI language, even when the stored name is the old English one', async () => {
+    const digest = systemJob({
+      id: 'ship_digest:abc',
+      name: 'Shipped Log digest · Agent-Team',
+      action: { kind: 'ship_digest', workspace: WS },
+      owner: { kind: 'system', feature: 'shipped-log', workspace: WS },
+    })
+    wrapper = mountRow(digest)
+    await flushPromises()
+    const name = wrapper.get('[data-test="system-name"]')
+    expect(name.text()).toBe('上線紀錄摘要 · Agent-Team')
+    expect(name.attributes('data-truncate')).toBe('')
+    wrapper.unmount()
+    wrapper = mountRow(systemJob({ name: 'Self-evolution · Agent-Team' }))
+    await flushPromises()
+    expect(wrapper.get('[data-test="system-name"]').text()).toBe('自我優化 · Agent-Team')
+    wrapper.unmount()
+    i18n.global.locale.value = 'en-US'
+    wrapper = mountRow(digest)
+    await flushPromises()
+    expect(wrapper.get('[data-test="system-name"]').text()).toBe('Shipped Log digest · Agent-Team')
   })
 
   it('an ordinary job keeps its controls and no manage link', async () => {

@@ -68,6 +68,38 @@ export function dropTuiNoise(text: string): string {
   return dirty ? kept.join('\n') : text
 }
 
+// A move to another row: CUU/CUD/CNL/CPL, VPA, CUP/HVP.
+const ROW_MOVE_RE = /\x1b\[\d*[ABEFd]|\x1b\[\d*(?:;\d*)?[Hf]/
+const ROW_MOVE_SPLIT_RE = /(\x1b\[\d*[ABEFd]|\x1b\[\d*(?:;\d*)?[Hf])/
+
+/**
+ * Raw PTY output with every status-chrome row taken out, for a TUI that
+ * places its rows with cursor moves instead of `\n`.
+ *
+ * Claude Code 2.1.3xx writes no `\n` at all, so stripAnsi turns a frame into
+ * one line, and dropTuiNoise — which drops a whole line holding chrome —
+ * dropped the banner and prompt along with the "bypass permissions on" footer
+ * of a pane started with --dangerously-skip-permissions. Such a pane never
+ * counted a visible byte, and cli_open_agent left its task untyped and called
+ * the kickoff failed (macOS VM 4/4, 0.2.42/0.2.43). Only a row that is chrome
+ * on its own is taken out here; everything else, the row moves included, is
+ * left for stripAnsi/dropTuiNoise exactly as before, so the clean buffer keeps
+ * its one-line shape (the Manager router's sentinel scan depends on it).
+ */
+export function dropNoiseRows(raw: string): string {
+  if (!ROW_MOVE_RE.test(raw)) return raw
+  const parts = raw.split(ROW_MOVE_SPLIT_RE)
+  let dropped = false
+  for (let i = 0; i < parts.length; i += 2) {
+    const row = stripAnsi(parts[i])
+    if (row && !row.includes('\n') && TUI_NOISE_RE.test(row.toLowerCase().replace(/\s+/g, ''))) {
+      parts[i] = ''
+      dropped = true
+    }
+  }
+  return dropped ? parts.join('') : raw
+}
+
 export interface QuestionBlock {
   type: 'text' | 'choice'
   prompt: string

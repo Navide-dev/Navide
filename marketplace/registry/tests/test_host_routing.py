@@ -217,17 +217,9 @@ def test_legacy_keeps_serving_the_api_and_downloads(legacy) -> None:
         "/extensions/acme/hello",
         "/extensions/acme/hello/report",
         "/removed",
-        "/publish",
-        "/publisher",
-        "/publisher/claim",
-        "/developer",
-        "/developer/apply",
-        "/login",
-        "/admin/review",
-        "/admin/testplace",
     ],
 )
-def test_legacy_pages_redirect_to_the_website(legacy, path: str) -> None:
+def test_legacy_store_pages_redirect_to_the_website(legacy, path: str) -> None:
     resp = legacy.get(PREFIX + path)
     assert resp.status_code == 301
     assert resp.headers["location"] == HOME
@@ -239,6 +231,31 @@ def test_legacy_cli_login_page_moves_to_the_console(legacy) -> None:
     resp = legacy.get(f"{PREFIX}/cli/authorize?port=5&state=x")
     assert resp.status_code == 301
     assert resp.headers["location"] == f"{DEV}/cli/authorize?port=5&state=x"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/login",
+        "/login?next=%2Fdeveloper%2Fapply",
+        "/publish",
+        "/publish?name=acme%2Fhello",
+        "/publisher",
+        "/publisher/claim",
+        "/developer",
+        "/developer/apply?from=app",
+        "/admin/review",
+        "/admin/testplace",
+    ],
+)
+def test_legacy_console_pages_move_to_the_same_path_on_the_console(legacy, path: str) -> None:
+    resp = legacy.get(PREFIX + path)
+    assert resp.status_code == 301
+    assert resp.headers["location"] == DEV + path
+    assert resp.headers["x-robots-tag"] == "noindex, nofollow"
+    head = legacy.head(PREFIX + path)
+    assert head.status_code == 301
+    assert head.headers["location"] == DEV + path
 
 
 def test_legacy_never_redirects_a_post_or_the_sign_in_callback(legacy) -> None:

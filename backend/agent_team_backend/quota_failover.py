@@ -71,6 +71,17 @@ WAIT_SAFE_MAX_S = 30 * 60.0
 # After a commit: how long the incident waits for evidence that the target
 # account actually works before it says "switched, quota unconfirmed".
 SETTLE_TIMEOUT_S = 120.0
+# An open incident that stopped (notify-stopped) waits for someone to act on
+# it; nobody may be watching the window. The user is reminded this long after
+# it stopped and again every STUCK_REMIND_EVERY_S, and the incident expires
+# STUCK_EXPIRE_S after it stopped (or when the exhausted window resets, if
+# that is sooner) so the next exhaustion opens a fresh, automatic run.
+STUCK_REMIND_S = 15 * 60.0
+STUCK_REMIND_EVERY_S = 2 * 3600.0
+STUCK_EXPIRE_S = 6 * 3600.0
+# Stop reasons the user caused themselves: no reminder (they know), but the
+# incident still expires.
+USER_STOP_REASONS = frozenset({"user-cancelled", "manual-switch", "manual-request"})
 
 # Told about every switch that moved credentials (plan agent-0-2-42_3f728e P3):
 # channels writes it to account_switch_log and posts the chat notice. A notice
@@ -87,6 +98,23 @@ def add_commit_listener(listener: Callable[[dict[str, Any]], Any]) -> Callable[[
     def remove() -> None:
         if listener in _commit_listeners:
             _commit_listeners.remove(listener)
+
+    return remove
+
+
+# Told when a stopped incident is still open past its reminder time, and once
+# more when it expires (``final``). A notice only, like the commit listeners.
+_stuck_listeners: list[Callable[[dict[str, Any]], Any]] = []
+
+
+def add_stuck_listener(listener: Callable[[dict[str, Any]], Any]) -> Callable[[], None]:
+    """Call ``listener(event)`` (a coroutine function) for each reminder about
+    a stopped incident; returns the function that removes it."""
+    _stuck_listeners.append(listener)
+
+    def remove() -> None:
+        if listener in _stuck_listeners:
+            _stuck_listeners.remove(listener)
 
     return remove
 
@@ -742,6 +770,7 @@ def rank_candidates(
     tried: set[str],
     now: float,
     ledger_vetoes: set[str] | None = None,
+    slot_order: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Order the accounts a switch may target. Excluded rows stay in the
     result with ``excluded`` set so the UI can say *why* nobody is eligible
@@ -754,7 +783,9 @@ def rank_candidates(
     quota ledger still holds an exhausted, un-reset cycle — newer than any
     snapshot and never overridden by one whose reset has passed. Percentages
     are never compared across vendors — the caller passes one vendor's
-    slots."""
+    slots. ``slot_order`` is the user's own ranking: an eligible account is
+    placed by its position there first, accounts it does not list after
+    every listed one, and the quota ranking only breaks the rest."""
     rows: list[dict[str, Any]] = []
     for slot_id in slot_ids:
         snap = snapshots.get(slot_id)
@@ -778,7 +809,9 @@ def rank_candidates(
             "fetchedAt": _now_iso(fetched_at) if fetched_at is not None else None,
         })
     eligible = [r for r in rows if r["excluded"] is None]
+    position = {slot_id: i for i, slot_id in enumerate(slot_order or ())}
     eligible.sort(key=lambda r: (
+        position.get(r["slotId"], len(position)),
         _TIER_ORDER.get(r["tier"], 9),
         -(r["headroom"] if r["headroom"] is not None else -1.0),
         -(_parse_iso(r["fetchedAt"]) or 0.0),
@@ -988,6 +1021,19 @@ class Incident:
         self.window_kind = window_kind
         self.closed_at: float | None = None
         self.updated_at = now
+        # When the stuck watch first saw this open incident stopped, and the
+        # reminders it has sent since (see QuotaFailoverService._watch_stuck).
+        self.stopped_at: float | None = None
+        self.reminded_at: float | None = None
+        self.reminders = 0
+
+    def stuck_expires_at(self) -> float | None:
+        if self.stopped_at is None:
+            return None
+        expires = self.stopped_at + STUCK_EXPIRE_S
+        if self.resets_at is not None and self.stopped_at < self.resets_at < expires:
+            expires = self.resets_at
+        return expires
 
     @property
     def key(self) -> tuple[str, str, str, int]:
@@ -1017,6 +1063,9 @@ class Incident:
             "windowKind": self.window_kind,
             "closedAt": _now_iso(self.closed_at) if self.closed_at is not None else None,
             "updatedAt": _now_iso(self.updated_at),
+            "stoppedAt": _now_iso(self.stopped_at) if self.stopped_at is not None else None,
+            "expiresAt": _now_iso(e) if (e := self.stuck_expires_at()) is not None and self.open else None,
+            "remindedAt": _now_iso(self.reminded_at) if self.reminded_at is not None else None,
         }
 
 
@@ -1404,6 +1453,7 @@ class QuotaFailoverService:
             self.incidents.pop(incident.id, None)
 
     async def _broadcast_changed(self) -> None:
+        self._watch_stuck()
         try:
             from . import app
             from .ipc import make_event
@@ -1759,6 +1809,7 @@ class QuotaFailoverService:
         return rank_candidates(
             slot_ids=slot_ids, current_slot_id=current, snapshots=snapshots,
             login_states=login_states, tried=tried, now=self._now(), ledger_vetoes=vetoes,
+            slot_order=doc.get("slotOrder", {}).get(agent_key),
         )
 
     def _ledger_vetoes(self, agent_key: str, slot_ids: list[str]) -> set[str]:
@@ -2111,7 +2162,11 @@ class QuotaFailoverService:
         affected = self._affected_terminals(auth_scope)
         tx.panes = {p["paneId"] or p["termId"]: p for p in affected}
         overridden = self._overridden_panes(affected)
-        if overridden and automatic:
+        if overridden and automatic and len(overridden) == len(affected):
+            # Every pane takes its credential from the environment: the swap
+            # would change nobody's account. With any vault-backed pane in the
+            # pool the swap goes ahead for those (below) and the rest are
+            # named, one by one, as untouched.
             self._fail(tx, incident, "cancelled", "credential-override", now)
             await self._broadcast_changed()
             raise FailoverRefused(
@@ -2121,8 +2176,8 @@ class QuotaFailoverService:
                 {"panes": overridden, "transactionId": tx.id},
             )
         if overridden:
-            # Manual: the swap proceeds for the vault-backed panes; the others
-            # are listed as untouched so nobody reads them as switched.
+            # The swap proceeds for the vault-backed panes; the others are
+            # listed as untouched so nobody reads them as switched.
             tx.overridden_panes = overridden
             tx.panes = {k: p for k, p in tx.panes.items() if (p["paneId"] or p["termId"]) not in overridden}
         unknown = self._scope_unknown_panes(affected)
@@ -2625,6 +2680,7 @@ class QuotaFailoverService:
             "restartStrategy": tx.restart_strategy,
             "state": tx.state,
             "hotSwitchedPanes": tx.hot_switched_panes,
+            "overriddenPanes": list(tx.overridden_panes),
             "needsLogin": login_state != "ok",
             "needsLoginReason": None if login_state == "ok" else login_state,
             "panes": [
@@ -2646,6 +2702,7 @@ class QuotaFailoverService:
             "state": tx.state,
             "needsLogin": login_state != "ok",
             "paneIds": sorted({str(p.get("paneId") or "") for p in [*tx.panes.values(), *tx.hot_switched_panes]} - {""}),
+            "overriddenPaneIds": list(tx.overridden_panes),
         }
         for listener in list(_commit_listeners):
             try:
@@ -2965,6 +3022,82 @@ class QuotaFailoverService:
                 incident.updated_at = now
         await self._broadcast_changed()
 
+    # ── stopped incidents: reminder and expiry ─────────────────────────────
+
+    def _watch_stuck(self) -> None:
+        """Arm a reminder for every open incident that has stopped, so one
+        that nobody acts on is neither silent nor permanent."""
+        for incident in list(self.incidents.values()):
+            key = f"stuck:{incident.id}"
+            if not incident.open or incident.state != "notify-stopped":
+                if incident.stopped_at is not None and incident.open:
+                    # Back in a live state (a manual switch picked it up).
+                    incident.stopped_at = incident.reminded_at = None
+                    incident.reminders = 0
+                self._disarm_timer(key)
+                continue
+            if incident.stopped_at is None:
+                incident.stopped_at = incident.updated_at
+            if key not in self._timers:
+                due = self._stuck_next_due(incident)
+                self._arm_timer(key, max(0.0, due - self._now()))
+
+    def _stuck_next_due(self, incident: Incident) -> float:
+        assert incident.stopped_at is not None
+        expires = incident.stuck_expires_at() or incident.stopped_at + STUCK_EXPIRE_S
+        if incident.reason in USER_STOP_REASONS:
+            return expires
+        if incident.reminded_at is None:
+            remind = incident.stopped_at + STUCK_REMIND_S
+        else:
+            remind = incident.reminded_at + STUCK_REMIND_EVERY_S
+        return min(remind, expires)
+
+    async def _stuck_due(self, incident_id: str, now: float) -> None:
+        incident = self.incidents.get(incident_id)
+        if (incident is None or not incident.open or incident.state != "notify-stopped"
+                or incident.stopped_at is None):
+            return
+        expires = incident.stuck_expires_at() or incident.stopped_at + STUCK_EXPIRE_S
+        if now >= expires:
+            reason = incident.reason
+            self._close_incident(incident, "notify-stopped", "stuck-expired", now)
+            self._notify_stuck(incident, reason, now, final=True)
+        elif now >= self._stuck_next_due(incident):
+            incident.reminded_at = now
+            incident.reminders += 1
+            self._notify_stuck(incident, incident.reason, now, final=False)
+        await self._broadcast_changed()
+
+    def _notify_stuck(self, incident: Incident, reason: str | None, now: float, *, final: bool) -> None:
+        if reason in USER_STOP_REASONS:
+            return
+        event = {
+            "incidentId": incident.id,
+            "agentKey": incident.agent_key,
+            "authScope": incident.auth_scope,
+            "outgoingSlotId": incident.outgoing_slot_id,
+            "reason": reason,
+            "stoppedAt": _now_iso(incident.stopped_at) if incident.stopped_at is not None else None,
+            "expiresAt": _now_iso(incident.stuck_expires_at() or now),
+            "stoppedForSec": round(now - (incident.stopped_at or now)),
+            "reminders": incident.reminders,
+            "final": final,
+            "paneIds": sorted(incident.panes),
+        }
+        try:
+            from . import app
+            from .ipc import make_event
+
+            asyncio.ensure_future(app.broadcast(make_event("quota_failover.stuck", dict(event))))
+        except Exception:  # noqa: BLE001 — a notice must never reach the authority
+            log.exception("quota_failover: stuck broadcast failed")
+        for listener in list(_stuck_listeners):
+            try:
+                asyncio.ensure_future(listener(dict(event))).add_done_callback(_listener_done)
+            except Exception:  # noqa: BLE001
+                log.exception("quota_failover: a stuck listener could not start")
+
     # ── timers ────────────────────────────────────────────────────────────
 
     def _arm_timer(self, key: str, delay: float) -> None:
@@ -2994,8 +3127,12 @@ class QuotaFailoverService:
 
     async def tick(self, key: str) -> None:
         """Deadline handling, also callable directly by tests. ``key`` is a
-        transaction id (prepare / waiting-safe deadline) or ``settle:<id>``."""
+        transaction id (prepare / waiting-safe deadline), ``settle:<id>`` or
+        ``stuck:<incident id>``."""
         now = self._now()
+        if key.startswith("stuck:"):
+            await self._stuck_due(key[len("stuck:"):], now)
+            return
         if key.startswith("settle:"):
             tx = self.transactions.get(key[len("settle:"):])
             if tx is None:

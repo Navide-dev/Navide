@@ -8,7 +8,7 @@
 //
 // Mirrors the Git panel's `.sec-hdr` — `.sec-caret`, `.sec-label`,
 // `.sec-badge` and the `.sec-btn` actions (− to unstage all, ↩ to discard,
-// ＋ to stage all) in plugins/navide-git/src/components/GitPane.vue:1828-1836
+// ＋ to stage all) in navide-git's src/components/GitPane.vue:1828-1836
 // and :1958-1970; also stands in for ConflictPane's own title strip.
 defineProps<{
   /** Section name. Omitted for a bare action row, like the commit buttons. */

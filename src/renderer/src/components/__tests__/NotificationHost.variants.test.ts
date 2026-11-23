@@ -77,4 +77,39 @@ describe('NotificationHost toast variants', () => {
     expect(el.querySelector('.toast-band')).toBeNull()
     wrapper.unmount()
   })
+
+  it('renders a second button beside the action, and either one dismisses the toast', async () => {
+    const wrapper = mount(NotificationHost, { attachTo: document.body })
+    const ran: string[] = []
+    useNotify().toast('cleared', {
+      duration: 0,
+      action: { label: 'Restore', run: () => ran.push('restore') },
+      secondaryAction: { label: 'Copy', run: () => ran.push('copy') },
+    })
+    await flushPromises()
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.toast .toast-action'))
+    expect(buttons.map((b) => b.textContent)).toEqual(['Restore', 'Copy'])
+    buttons[1].click()
+    await flushPromises()
+    expect(ran).toEqual(['copy'])
+    expect(document.querySelector('.toast')).toBeNull()
+    wrapper.unmount()
+  })
+  it("puts a titled toast's two buttons on one row and shows its icon once", async () => {
+    const wrapper = mount(NotificationHost, { attachTo: document.body })
+    useNotify().toast('cleared', {
+      duration: 0,
+      title: 'Prompt cleared in dev',
+      action: { label: 'Restore', run: () => {} },
+      secondaryAction: { label: 'Copy', run: () => {} },
+    })
+    await flushPromises()
+    const el = document.querySelector('.toast')!
+    const row = el.querySelector('.toast-actions')
+    expect(row).not.toBeNull()
+    expect(Array.from(row!.querySelectorAll('.toast-action')).map((b) => b.textContent)).toEqual(['Restore', 'Copy'])
+    expect((el.textContent ?? '').split('ℹ').length - 1).toBe(1)
+    expect(el.querySelector('.toast-band')?.textContent?.trim()).toBe('Prompt cleared in dev')
+    wrapper.unmount()
+  })
 })

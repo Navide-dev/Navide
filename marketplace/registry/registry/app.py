@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 import time
 import urllib.parse
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import BinaryIO, Iterator
@@ -18,6 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
 from . import audit, cloud_auth, qualification
+from .access_log import AccessLogMiddleware, RouteTemplateMiddleware
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import TRUST_PROFILE_SELF_HOSTED_DEV, VERIFIER_ACCEPTING, Settings, load_settings
 from . import review
@@ -29,6 +32,7 @@ from .db import create_db_engine
 from .error_docs import CAPABILITY_DENIED, DocumentedHTTPException, register_error_docs
 from .migrations import MIGRATIONS, applied_migrations
 from .signing import public_key_fingerprint
+from .self_service import verified_domain
 from .static_scan.report import SCANNER_ID, SCANNER_VERSION
 from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure, undeclared_network_hosts
@@ -50,8 +54,9 @@ from .models import Extension, ExtensionVersion, Publisher
 from .headless_views import headless_view_notices
 from .native_backend import local_native_backend_notices, native_backend_publish_problem
 from .manifest import ManifestV2, manifest_capabilities, manifest_icon
-from .package import MAX_ARCHIVE_SIZE, PackageError, read_package
+from .package import MAX_ARCHIVE_SIZE, READ_CHUNK, PackageError, read_package
 from .packs import pack_conflict
+from .cloud_assertion import CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS, CLOUD_EXCHANGE_FAILURES_PER_WINDOW
 from .ratelimit import SlidingWindowLimiter
 from .ratings import RATING_LIMIT_PER_HOUR
 from .reports import REPORT_LIMIT_PER_HOUR
@@ -88,7 +93,7 @@ from .versions import (
     latest_stable_version,
     version_channel,
 )
-from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text
+from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text, screenshot_paths
 
 _log = logging.getLogger(__name__)
 
@@ -108,6 +113,12 @@ class RegistryState:
     report_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(REPORT_LIMIT_PER_HOUR, 3600)
     )
+    cloud_exchange_limiter: SlidingWindowLimiter = field(
+        default_factory=lambda: SlidingWindowLimiter(
+            CLOUD_EXCHANGE_FAILURES_PER_WINDOW, CLOUD_EXCHANGE_FAILURE_WINDOW_SECONDS
+        )
+    )
+    """Failed `/api/cli/cloud-exchange` verifications per client address."""
     grandfather_swept_at: float | None = None
     """Monotonic time of the last grandfather sweep (sweep_grandfather)."""
 
@@ -178,6 +189,7 @@ def create_app(
             "admin endpoints accept unauthenticated calls (local dev only)"
         )
     engine = create_db_engine(settings.db_path)
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
     state = RegistryState(
         engine=engine,
         storage=LocalStorageBackend(settings.storage_root),
@@ -201,6 +213,8 @@ def create_app(
         root_path=settings.root_path,
     )
     app.state.registry = state
+    # Innermost: sees the router's scope (access_log.py).
+    app.add_middleware(RouteTemplateMiddleware)
     if settings.host_routing_enabled:
         from .host_routing import HostRoutingMiddleware
 
@@ -234,10 +248,15 @@ def create_app(
     from .publisher_web import create_publisher_router
 
     app.include_router(create_publisher_router())
+    from .auth_proxy import create_auth_proxy_router
+
+    app.include_router(create_auth_proxy_router())
     from .testplace_web import create_testplace_admin_router
 
     app.include_router(create_testplace_admin_router())
     app.add_middleware(_HtmlSecurityHeadersMiddleware, csp=html_content_security_policy(settings))
+    # Outermost: the duration covers every middleware.
+    app.add_middleware(AccessLogMiddleware)
     return app
 
 
@@ -324,6 +343,32 @@ def _session(state: RegistryState = Depends(_state)) -> Iterator[Session]:
 
 def _repo(session: Session = Depends(_session)) -> RegistryRepository:
     return RegistryRepository(session)
+
+
+MAX_UPLOAD_SIZE = MAX_ARCHIVE_SIZE + 8 * 1024 * 1024
+"""An archive whose expanded contents fit MAX_ARCHIVE_SIZE is never larger
+than this (ZIP headers and incompressible data add well under 8 MiB)."""
+
+
+async def _spooled_package(
+    package: UploadFile, state: RegistryState = Depends(_state)
+) -> AsyncIterator[BinaryIO]:
+    """The uploaded package copied, a chunk at a time, into an unnamed
+    temporary file under the data directory's `uploads/`. Nothing holds the
+    whole package in memory, and the file disappears when the request ends,
+    or with the process if it dies."""
+    with tempfile.TemporaryFile(dir=state.settings.upload_dir) as spool:
+        size = 0
+        while chunk := await package.read(READ_CHUNK):
+            size += len(chunk)
+            if size > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"package exceeds the {MAX_UPLOAD_SIZE // (1024 * 1024)} MiB upload limit",
+                )
+            spool.write(chunk)
+        spool.seek(0)
+        yield spool
 
 
 # -- helpers ------------------------------------------------------------
@@ -611,7 +656,7 @@ def _register_routes(app: FastAPI) -> None:
     @app.post("/api/publish", response_model=PublishResponse, status_code=201)
     async def publish(
         request: Request,
-        package: UploadFile,
+        package: BinaryIO = Depends(_spooled_package),
         signature: str | None = None,
         target: str = Query(
             default="universal",
@@ -636,9 +681,8 @@ def _register_routes(app: FastAPI) -> None:
             )
         if channel is not None and channel not in VERSION_CHANNELS:
             raise HTTPException(status_code=400, detail=f"unknown channel '{channel}'")
-        data = await package.read()
         try:
-            loaded = read_package(data, target=target)
+            loaded = read_package(package, target=target)
         except PackageError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -757,7 +801,7 @@ def _register_routes(app: FastAPI) -> None:
         # Contract 3.8 / DS4: scan synchronously, within the time budget, before
         # anything is signed. A pending submission keeps its (unsigned) report
         # for the reviewer; approval scans again and signs that report.
-        scan = run_scan(data, artifact_digest=loaded.digest, target=target,
+        scan = run_scan(package, artifact_digest=loaded.digest, target=target,
                         manifest=manifest.model_dump(exclude_none=True))
         if not testplace_publish:
             # C1 (2026-11-07): a public listing that declares network hosts must
@@ -779,7 +823,7 @@ def _register_routes(app: FastAPI) -> None:
                 repo.session,
                 namespace=namespace,
                 name=name,
-                data=data,
+                data=package,
                 manifest=manifest.model_dump(exclude_none=True),
                 signature_present=signature is not None,
                 size_limit=MAX_ARCHIVE_SIZE,
@@ -830,7 +874,7 @@ def _register_routes(app: FastAPI) -> None:
                 repo.session,
                 namespace=namespace,
                 name=name,
-                data=data,
+                data=package,
                 manifest=manifest.model_dump(exclude_none=True),
                 signature_present=signature is not None,
                 size_limit=MAX_ARCHIVE_SIZE,
@@ -864,7 +908,7 @@ def _register_routes(app: FastAPI) -> None:
             review_report = {}
 
         key = _package_key(namespace, name, manifest.version, target)
-        state.storage.put(key, data)
+        state.storage.put_stream(key, package)
         try:
             row = repo.add_version(
                 extension=extension,
@@ -992,6 +1036,10 @@ def _register_routes(app: FastAPI) -> None:
             and any(
                 a.path.lower() in CHANGELOG_NAMES
                 for a in repo.list_assets(latest_row.id)
+            ),
+            verified_domain=verified_domain(publisher),
+            screenshots=(
+                screenshot_paths(repo, latest_row) if latest_row is not None else []
             ),
         )
 

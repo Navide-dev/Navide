@@ -102,6 +102,12 @@ so:
    watchdog in place and the sentence above on the card. Not recommended as
    a default or as an interim.
 
+## Open question
+
+Should first-party backends on Windows also move under the AppContainer
+helper once it exists? They run unsandboxed on every platform today, as
+documented; parity is cheap once the helper is there. This is not decided.
+
 ## Did we do enough (acceptance when A is implemented)
 
 - A Windows VM test starts a real PyInstaller backend under the helper and

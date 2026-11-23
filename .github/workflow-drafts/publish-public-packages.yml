@@ -1,0 +1,84 @@
+# DRAFT — not active. GitHub runs only files under .github/workflows/, so this
+# file does nothing until it is moved to
+# .github/workflows/publish-public-packages.yml (the file name npm's trusted
+# publisher settings must name; see docs/en-US/plugin-development-v2.md,
+# "Publishing the public packages to npm").
+#
+# Publishes @navide/plugin-contracts, @navide/plugin-sdk and @navide/plugin-ui
+# with npm provenance through npm trusted publishing (OIDC): the job holds no
+# npm token and the repository stores no npm secret. A tag
+# plugin-packages-v<version> triggers it; the tag must match the shared version
+# in packages/*/package.json.
+name: Publish public plugin packages
+
+on:
+  push:
+    tags:
+      - 'plugin-packages-v1.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-public-packages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @navide/plugin-* to npm
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    # Protect this environment with required reviewers so every publication
+    # waits for the user's approval in the Actions UI.
+    environment: npm-publish
+    permissions:
+      contents: read
+      # npm trusted publishing exchanges this OIDC token for a short-lived
+      # publish credential and signs the provenance statement with it.
+      id-token: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later; Node 22 bundles npm 10.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@11.6.2
+      - name: Check the tag matches the package version
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/plugin-contracts/package.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "plugin-packages-v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match package version $version" >&2
+            exit 1
+          fi
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      # Builds, packs into dist/npm/ and checks every tarball (versions, peer
+      # ranges, required files, no tests/fixtures/private files, no workspace:
+      # specifiers), then dry-runs the publication.
+      - name: Build, pack and check the tarballs
+        run: scripts/publish-public-packages.sh
+      - name: Install the tarballs into an external project, build and validate
+        run: node scripts/verify-public-packages-external.mjs --tarballs dist/npm
+      - name: Publish with provenance
+        shell: bash
+        run: |
+          version="$(node -p "require('./packages/plugin-contracts/package.json').version")"
+          for name in plugin-contracts plugin-sdk plugin-ui; do
+            if npm view "@navide/$name@$version" version >/dev/null 2>&1; then
+              echo "@navide/$name@$version is already on the registry; bump the version instead of republishing" >&2
+              exit 1
+            fi
+          done
+          # Dependency order: sdk peers on contracts, ui peers on sdk.
+          for name in plugin-contracts plugin-sdk plugin-ui; do
+            npm publish "dist/npm/navide-$name-$version.tgz" --access public --provenance
+          done
+      - name: Confirm the registry serves the new versions
+        run: node scripts/verify-public-packages-external.mjs --registry

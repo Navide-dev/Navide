@@ -16,24 +16,66 @@ a plugin may ask for anything, the user sees exactly what it asked for and
 what it did, and a published package is signed, scanned and reviewed before
 anyone can install it.
 
+## The whole path at a glance
+
+From an empty folder to a listing, in order. Each step is a section below;
+in Navide, Settings → Navide Marketplace → Developer shows the same steps and,
+once you sign in, the one you are on.
+
+| # | Step | Command or place | An agent in a pane can |
+|---|---|---|---|
+| 1 | Create the plugin from the template | `navide-plugin init` ([§1](#1-five-minutes-to-a-running-plugin)) | run the command |
+| 2 | Load it into Navide without publishing | Settings → Navide Plugins → Developer Mode → Load from Folder… | open the switch (`plugins_developer_mode_open`); you turn it on |
+| 3 | Validate and package it | `navide-plugin validate`, `navide-plugin scan`, `navide-plugin package` ([§3](#3-check-it-yourself-before-anyone-else-does)) | `plugins_validate_package`, `plugins_package` (same rules, nothing installed) |
+| 4 | Apply as a developer, once | Settings → Navide Marketplace → Developer, or `developers.navide.dev/developer/apply` ([§4](#4-publishing-is-the-business-process)) | fill the draft (`marketplace_developer_application_fill`); you submit it |
+| 5 | Claim a namespace, register a signing key | `developers.navide.dev/publisher/claim`, `navide-plugin keygen` | read the next step (`marketplace_developer_status`) |
+| 6 | Sign and submit for review | `navide-plugin publish`, or Navide's publish form | fill the form (`marketplace_publish_fill`); you submit it |
+
+Nothing in steps 1–3 leaves your machine. Steps 4–6 are sent only when you
+press the button or run the command yourself.
+
 ## 1. Five minutes to a running plugin
 
 You need Node.js 20 or later and Navide 0.2.39 or later.
 
+The public packages (`@navide/plugin-contracts`, `@navide/plugin-sdk`,
+`@navide/plugin-ui`) are not on npm yet. Install them from the GitHub Release
+[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0),
+the same files Navide's own plugins build against:
+
 ```bash
-npx navide-plugin init acme-hello --id acme.hello --template vue
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
+npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz \
+  navide-plugin init acme-hello --id acme.hello --template vue
 cd acme-hello
+npm install $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz
 npm install
 npm run build        # writes dist/package, then npm run check validates it
 ```
+
+The first `npm install` writes the two tarball addresses into `package.json`
+(a template from an earlier SDK names `^1.0.0`, which npm cannot find); after
+that `npx navide-plugin` and the `package.json` scripts use the local copy.
+The release's SHA-256 sums, to compare with `shasum -a 256` on a downloaded
+file:
+
+```text
+720e2eb5837a7b91bfbc8502e38b436664a9272b166853d82e7f9c8e2e863ee1  navide-plugin-contracts-1.0.0.tgz
+be8b658fdd42e407c5f0729011e1087d5c4bf79497198d24ae6558dcaeef4b05  navide-plugin-sdk-1.0.0.tgz
+6201328f30c3d008e7c6d2e42d22a5c9d1634399cd8d138aaf654896969058c1  navide-plugin-ui-1.0.0.tgz
+```
+
+Want the smallest possible start? Leave out `--template vue`: the default
+template is one HTML view and one script with no build step and no
+dependencies, and `navide-plugin validate acme-hello` and
+`navide-plugin package acme-hello` accept it as written.
 
 `--id` is `<namespace>.<name>`; the namespace is the one you will claim on
 the Marketplace later, and the id never changes once published. The `vue`
 template is a complete, buildable plugin: a Vue 3 view in a workbench region,
 a small native backend (Python, one executable per platform), one agent tool
 that calls it, a test suite, and a `check` script that runs `validate` and
-`scan`. Without `--template` you get the minimal no-build scaffold (one HTML
-view, one script), which also validates and packages as written.
+`scan`.
 
 Load it into Navide without publishing:
 

@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import app, claude_hooks, push_delivery
+from agent_team_backend import app, claude_hooks, push_delivery, ws_handlers
 from agent_team_backend.cli_vendors.base import PushChannel
 
 
@@ -48,9 +48,11 @@ def broadcasts(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 def clean_state():
     push_delivery._reset_for_test()
     app._pane_activity.clear()
+    ws_handlers._PUSHES.clear()
     yield
     push_delivery._reset_for_test()
     app._pane_activity.clear()
+    ws_handlers._PUSHES.clear()
 
 
 async def _push(session: app.Session, **payload: Any) -> dict[str, Any]:
@@ -355,3 +357,103 @@ async def test_registering_says_nothing_for_a_pane_with_no_live_channel(
         if f.get("type") == "agent_msg.push_state"
     ]
     agent_messaging._reset_for_test()
+
+
+def _slow_deliver(monkeypatch: pytest.MonkeyPatch, outcome: tuple[bool, str] = (True, "")):
+    """Replace deliver with one that takes a while and counts its calls."""
+    import asyncio
+
+    calls: list[str] = []
+    started = asyncio.Event()
+
+    async def deliver(pane_id: str, text: str) -> tuple[bool, str]:
+        calls.append(text)
+        started.set()
+        await asyncio.sleep(0.1)
+        return outcome
+
+    monkeypatch.setattr(push_delivery, "deliver", deliver)
+    return calls, started
+
+
+@pytest.mark.asyncio
+async def test_a_push_the_requester_hung_up_on_still_announces_the_pane_active(
+    broadcasts, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ws_endpoint cancels a closed connection's handler tasks; a push already
+    on its way to the CLI must still tell the windows the pane is working."""
+    import asyncio
+
+    _arm_hook_pane()
+    _calls, started = _slow_deliver(monkeypatch)
+    session = _session()
+    task = asyncio.create_task(app.handle_message(session, {
+        "id": "m1", "type": "agent_msg.push",
+        "payload": {"pane_id": "pane-1", "text": "hello", "push_id": "msg-1"},
+    }))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(100):
+        if broadcasts:
+            break
+        await asyncio.sleep(0.01)
+    assert [e["type"] for e in broadcasts] == ["agent.activity"]
+
+
+@pytest.mark.asyncio
+async def test_asking_again_about_a_push_the_requester_lost_does_not_push_twice(
+    broadcasts, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The window that lost its answer (socket closed, or its request timed
+    out) asks again with the same push_id: it must hear how the first push went
+    rather than set off a second one — or type the message in on top."""
+    import asyncio
+
+    _arm_hook_pane()
+    calls, started = _slow_deliver(monkeypatch)
+    first = asyncio.create_task(app.handle_message(_session(), {
+        "id": "m1", "type": "agent_msg.push",
+        "payload": {"pane_id": "pane-1", "text": "hello", "push_id": "msg-1"},
+    }))
+    await started.wait()
+    first.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await first
+
+    retry = _session()
+    response = await _push(retry, pane_id="pane-1", text="hello", push_id="msg-1")
+    assert calls == ["hello"]
+    assert response["payload"]["ok"] is True
+    assert [e["type"] for e in broadcasts] == ["agent.activity"]
+
+
+@pytest.mark.asyncio
+async def test_a_push_asked_about_while_still_in_flight_waits_for_that_one(
+    broadcasts, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    _arm_hook_pane()
+    calls, started = _slow_deliver(monkeypatch, (False, "not-listening"))
+    first, second = _session(), _session()
+    one = asyncio.create_task(_push(first, pane_id="pane-1", text="hi", push_id="msg-2"))
+    await started.wait()
+    two = await _push(second, pane_id="pane-1", text="hi", push_id="msg-2")
+    await one
+    assert calls == ["hi"]
+    assert two["payload"]["ok"] is False
+    assert two["payload"]["reason"] == "not-listening"
+
+
+@pytest.mark.asyncio
+async def test_pushes_without_a_push_id_are_each_delivered(
+    broadcasts, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An older window sends no push_id; every request is then its own push."""
+    _arm_hook_pane()
+    calls, _started = _slow_deliver(monkeypatch)
+    await _push(_session(), pane_id="pane-1", text="a")
+    await _push(_session(), pane_id="pane-1", text="a")
+    assert calls == ["a", "a"]

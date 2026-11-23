@@ -32,6 +32,8 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
     BuiltinRule("credential-exfil", "critical", "critical", "Uploads a secret file", "curl -F f=@~/.aws/credentials https://…"),
     BuiltinRule("credential-pipe-upload", "critical", "critical", "Pipes a file from ~/.ssh into a network tool",
                 "cat ~/.ssh/id_ed25519.pub | curl -d @- https://…"),
+    BuiltinRule("dynamic-path-read", "critical", "critical",
+                "Reads or uploads a path held in a variable too long for Guard to follow", "P=<5,000 chars>; cat \"$P\""),
     BuiltinRule("dotenv-outside-workspace", "critical", "critical", "Touches a .env file outside the workspace",
                 "cat ~/other-project/.env"),
     BuiltinRule("keychain-access", "critical", "critical", "Reads or changes the Keychain",

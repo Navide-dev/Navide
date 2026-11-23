@@ -696,3 +696,23 @@ def _bundle(scopes: dict[str, dict]) -> dict:
         "scopes": {scope: {"items": scopes.get(scope, {})} for scope in settings_bundle.SCOPES},
         "redactions": [],
     }
+
+
+def test_ssh_remote_recent_connections_never_reach_a_bundle_or_a_sync_round(
+    settings, mcp_store, skills, home
+):
+    """The SSH Remote dialog's recent and trusted lists are local only: it names hosts and
+    key paths, and neither the export nor a sync scope may carry it."""
+    marker = "ssh-recent-" + "canary.example"
+    settings.doc["sshRemoteRecent"] = [
+        {"host": marker, "user": "dev", "port": 22, "keyPath": "/k/" + marker}
+    ]
+    settings.doc["sshRemoteTrusted"] = [
+        {"host": marker, "user": "dev", "port": 22, "keyPath": "/k/" + marker}
+    ]
+    settings.doc[sync_scopes.PROMPT_SKILLS_KEY] = [_prompt("p1")]
+    selection = {scope: [row["id"] for row in rows if row.get("eligible", True)]
+                 for scope, rows in settings_bundle.inventory().items()}
+    assert marker not in json.dumps(settings_bundle.inventory())
+    assert marker not in json.dumps(settings_bundle.export_bundle(selection))
+    assert marker not in json.dumps(sync_scopes.PromptsScope().local_snapshot())

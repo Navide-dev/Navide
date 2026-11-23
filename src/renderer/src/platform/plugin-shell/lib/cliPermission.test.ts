@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CLI_AGENT_SPECS } from '../agents'
 import {
   cliPermissionKey,
+  launchBypassState,
   parseCliPermissionMode,
   skipPermissionFlagFor,
 } from './cliPermission'
@@ -73,5 +74,26 @@ describe('skipPermissionFlagFor', () => {
       .map((spec) => spec.agentKey)
       .sort()
     expect(flagless).toEqual(['goose', 'grok', 'mcode', 'openclaw', 'opencode', 'pi'])
+  })
+})
+
+describe('launchBypassState', () => {
+  const codexFlag = '--dangerously-bypass-approvals-and-sandbox'
+
+  it('reads the flag from the command the pane launched with', () => {
+    expect(launchBypassState(`codex ${codexFlag} --model gpt-5`, codexFlag)).toBe('on')
+    expect(launchBypassState(`codex resume 0199aaaa-bbbb-cccc-dddd-eeeeeeeeeeee ${codexFlag}`, codexFlag)).toBe('on')
+  })
+
+  it('is off for a command without it, a custom launch command included', () => {
+    expect(launchBypassState('codex --model gpt-5', codexFlag)).toBe('off')
+    expect(launchBypassState('C:\\tools\\codex.exe', codexFlag)).toBe('off')
+    // A longer flag that merely starts with this one is not this one.
+    expect(launchBypassState(`codex ${codexFlag}-x`, codexFlag)).toBe('off')
+  })
+
+  it('is null for a vendor with no flag', () => {
+    expect(launchBypassState('grok', undefined)).toBeNull()
+    expect(launchBypassState('grok', '')).toBeNull()
   })
 })

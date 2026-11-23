@@ -293,9 +293,12 @@ export function useAnalyzer(backend: ReturnType<typeof useBackend>) {
     benchmarkProgress.value = payload as BenchmarkProgress
   })
   const _offBenchmarkDone = backend.on('analyzer.benchmark_done', (payload) => {
-    const p = payload as { results: BenchmarkModelResult[] }
-    benchmarkResults.value = p.results ?? []
-    settingsSet(BENCHMARK_STORAGE_KEY, JSON.stringify(benchmarkResults.value))
+    const p = payload as { results: BenchmarkModelResult[]; cancelled?: boolean }
+    // A run stopped part-way has no results: keep the last finished run's.
+    if (!p.cancelled) {
+      benchmarkResults.value = p.results ?? []
+      settingsSet(BENCHMARK_STORAGE_KEY, JSON.stringify(benchmarkResults.value))
+    }
     benchmarking.value = false
     benchmarkProgress.value = null
   })

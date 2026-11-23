@@ -1143,6 +1143,67 @@ async def test_generate_auto_name_handler_upgrades_and_persists(
     }
 
 
+async def test_generate_auto_name_reaches_the_other_windows_after_the_requester_hangs_up(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The name is being written when the requester hangs up (its handler
+    task is cancelled): the spawn-history mirror and the other windows still
+    get it (0.2.44 p8; leftover-bugs-0243 report-c)."""
+    import asyncio
+    import threading
+    import time
+
+    import pytest
+
+    from agent_team_backend import app, pane_name_service, ws_handlers
+
+    store = ProjectStore()
+    store.save(store.load_or_create(str(tmp_path)))
+    store.record_manual_pane_spawn(str(tmp_path), pane_id="p1", agent="claude")
+    store.set_ui_state(
+        str(tmp_path), spawn_history=[_entry("p1", workspacePath=str(tmp_path))]
+    )
+    monkeypatch.setattr(app, "project_store", store)
+    writing = threading.Event()
+    real = store.set_pane_auto_name
+
+    def slow_set_pane_auto_name(*args: Any, **kwargs: Any) -> Any:
+        writing.set()
+        time.sleep(0.2)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(store, "set_pane_auto_name", slow_set_pane_auto_name)
+    events: list[dict[str, Any]] = []
+
+    async def capture(event: dict[str, Any], exclude: Any = None) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(app, "broadcast", capture)
+
+    async def fake_generate(material: str, url: str, model: str) -> dict[str, Any]:
+        return {"ok": True, "name": "Fix login redirect"}
+
+    monkeypatch.setattr(pane_name_service, "generate_pane_name", fake_generate)
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    fn = ws_handlers.lookup("pane.generate_auto_name")
+    assert fn is not None
+    task = asyncio.create_task(fn(session, "m1", "pane.generate_auto_name", {
+        "workspace_path": str(tmp_path), "pane_id": "p1", "material": "please fix the login redirect loop",
+    }))
+    while not writing.is_set():
+        await asyncio.sleep(0.005)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    for _ in range(200):
+        if events:
+            break
+        await asyncio.sleep(0.01)
+
+    assert events and events[0]["payload"]["auto_named_pane"]["auto_name"] == "Fix login redirect"
+    assert _stored_entries(tmp_path)[0]["autoName"] == "Fix login redirect"
+
+
 async def test_generate_auto_name_handler_stays_quiet_when_generation_fails(
     tmp_path: Path, monkeypatch
 ) -> None:

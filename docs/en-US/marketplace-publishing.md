@@ -28,16 +28,24 @@ manifest rules the Registry enforces, see
 
 ### Install the CLI
 
+The packages are not on npm yet. Install them from the GitHub Release
+[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0)
+(its notes list each file's SHA-256), the same files Navide's own plugins
+build against:
+
 ```bash
-npm install --save-dev @navide/plugin-sdk @navide/plugin-contracts
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
+npm install --save-dev $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz
 npx navide-plugin
 ```
 
-The packages are published to npm from the Navide repository with
-`scripts/publish-public-packages.sh` as a release step, under one shared 1.x
-version with a [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
-Before the first publication, or to try an unreleased build, pack them from a
-Navide checkout instead:
+Before a project exists, run the CLI straight from the release:
+`npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init …`
+(see [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)).
+Publication to npm is a later release step,
+`scripts/publish-public-packages.sh`, under one shared 1.x version with a
+[twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
+To try an unreleased build, pack them from a Navide checkout instead:
 
 ```bash
 # in the Navide checkout
@@ -410,7 +418,9 @@ revoke it under **Publisher tokens** on the dashboard. For CI, create a token
 there and pass it as `NAVIDE_PLUGIN_TOKEN` instead of logging in.
 
 Commands that talk to a Registry use `--registry`, then
-`$NAVIDE_REGISTRY_URL`, then `https://server.navide.dev/registry`. `login` and
+`$NAVIDE_REGISTRY_URL`, then `https://server.navide.dev/registry`. For that
+Official Registry, `login` opens its sign-in page on
+`https://developers.navide.dev`; any other Registry serves its own. `login` and
 `publish` send your token, so they refuse a plain `http://` Registry unless it
 is on loopback (`127.0.0.1`, `localhost`, `[::1]`); `--insecure-http`
 overrides that for a local development host and prints a warning.
@@ -694,18 +704,19 @@ undone, only yanked (see [8. Yank a version](#8-yank-a-version)).
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
 NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
-scripts/publish-first-party-plugins.sh [--only git|mini-ide|plans|browser]
+scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-<name> \
+  --id <plugin id> --version <version> [--target "<targets>"] [--yes]
 ```
 
+Each first-party plugin is built and packed by its own repository's CI
+(`Navide-dev/navide-git`, `navide-mini-ide`, `navide-browser`, `navide-plans`).
+
 - `navide.git` and `navide.mini-ide` are frontend-only and are listed once, as
-  `universal`.
+  `universal` (`--package <vsix> --id <plugin id> --target universal --version <version>`).
 - `navide.plans` and `navide.browser` carry a native backend and are listed
-  per target. The script lists the machine's own target; the other targets
-  the App ships come from `plugin-packages.yml` (Plans) and
-  `browser-plugin-package.yml` (Browser), listed with
-  `--from-run <run id> --id <plugin id> --version <version> --target "<targets>" --yes`.
-- Only list a plugin whose version changed in this release. A version that is
-  already listed answers `409`; skip it with `--only`.
+  per target, from their packaging run with `--from-run`.
+- Only list a plugin whose version changed. A version that is already listed
+  answers `409`.
 - `navide.browser` is listed for the first time with 0.2.39.
 
 The publisher key and token stay on the maintainer's machine; the CI

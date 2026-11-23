@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 
 // Pipeline wording that drifted from docs/en-US/glossary.md or from what
 // Navide does now, checked in every locale file.
-const dir = resolve(process.cwd(), 'packages/plugin-ui/src/foundation/i18n/locales')
+const dir = resolve(process.cwd(), 'src/renderer/src/i18n/locales')
 const locales = Object.fromEntries(
   readdirSync(dir)
     .filter((f) => f.endsWith('.json'))

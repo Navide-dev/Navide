@@ -292,6 +292,53 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   both of which live in the Electron main process's data directory. Activity
   records a `secrets.*` call by its address only, and every agent tool answer
   is redacted against the package's own values.
+- A remote container pane (experimental, off by default;
+  `remote_devcontainer.py`, `remote_devcontainer_ws.py`) runs its CLI on
+  another machine through the user's own `ssh` and `docker exec`. What leaves
+  this machine is the pane's Navide MCP token and nothing else: it is written
+  as the pane's first input line only after the remote side has turned tty
+  echo off and asked for it, so it never appears on a local or remote command
+  line; the spawn environment is reduced to what `ssh` needs, so no `SendEnv`
+  rule can carry a local credential; agent and X11 forwarding are off. The
+  remote pane skips every local-credential step at spawn (CODEX_HOME, account
+  dir, credential launch, launch provenance). The pane is registered under
+  its own agent key, `remote`, which is deliberately not a vendor in
+  `cli_vendors/registry.py`: with no `account_switch` it belongs to no auth
+  pool, so no account-switch or quota-failover scope can include it; the CLI
+  run in the container is `metadata.remote.cli`. The manual failover report
+  and the MCP account switch also refuse a pane whose term metadata carries
+  `remote`.
+  The `ssh -R` tunnel binds the remote host's loopback (or, for a bridge
+  network, its Docker gateway, reachable by other accounts on that host and by other
+  containers on that bridge, guarded only by the per-pane token). Each pane
+  has its own ssh connection, so closing it unbinds the forward at once (a
+  shared master would keep it for ControlPersist), and the remote shell stays
+  the parent of `docker exec` so a hangup also ends the CLI inside the
+  container, which a killed `docker exec` alone does not. A pane connects only to a host and
+  container the user opened from the setup dialog, kept app-wide in
+  `ui_settings` (`remoteDevcontainerTrusted`): the pane record lives in the
+  workspace's `.agent-team/` database, which a cloned repository can carry, so
+  a target read from it is a claim the backend refuses (`REMOTE_UNTRUSTED`)
+  until the user opens that target themselves. Navide never runs `ssh-add`
+  and never reads or writes `~/.ssh`.
+- An SSH Remote pane (experimental, same switch; `remote_ssh.py`) is a
+  terminal pane whose login shell runs on another host: `ssh -tt` to a
+  target of host, user, port and a private key *path*. `remote_ssh.connect`
+  runs one BatchMode `ssh` to the target and answers either the pane spec or
+  `REMOTE_SSH_FAILED` with a plain-language reason (`unreachable`, `auth`,
+  `host-key`, `other`); a success, or `force` after an `auth` / `host-key`
+  refusal, adds the target to the app-level trusted list (`sshRemoteTrusted`).
+  `terminal.create` with `remote = {kind: "ssh", ...}` and agent key
+  `terminal` opens a shell only on a trusted target, so a target named by a
+  pane record alone runs no `ssh`. The pane carries `ssh_remote` metadata, not
+  the container panes' `remote`. Only terminal panes: no CLI and no reverse
+  tunnel run on the host. The renderer reconnects on ssh's exit 255 with
+  backoff, re-running the check each try; such panes are not restored after a
+  restart. The key is passed to `ssh -i` by path and never opened by Navide;
+  the argv always carries `ForwardAgent=no` and never `-A`; the spawn
+  environment is the same reduced set as above. Recent and trusted targets
+  live in `ui_settings` (`sshRemoteRecent`, `sshRemoteTrusted`), which no sync
+  scope, settings bundle or workspace backup reads.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
 - A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is

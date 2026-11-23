@@ -1,0 +1,39 @@
+/login/logiClaude█Code v2.1.327
+▝▜██████▀  Opus 5.5 · API Usage Billing
+ ▝▝   ▝▝   /
+
+
+───────────────────────────────────────────────────────────────────────
+❯ /login 
+───────────────────────────────────────────────────────────────────────
+  ❯ /login                      Sign in with your Anthropic account
+    /design-login               Authorize design-system access for
+                                /design-sync with your claude.ai acc…
+    /plugin-authoring           Write a mod: a live pane, view or
+                                behaviour change in Claude Code
+    /plugin                     Manage Claude Code plugins
+    /reload-plugins             Activate pending plugin changes in
+                                the current session
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

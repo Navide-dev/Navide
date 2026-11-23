@@ -90,11 +90,11 @@ export interface ChannelPlatformState {
 export const DEFAULT_ACCOUNT = 'default'
 
 // The backend's worst case, each step bounded on its side: storing the credential
-// (a Keychain write, up to 10 s), waiting for the platform to accept it (10 s,
+// (a Keychain write, up to 10 s), waiting for the platform to accept it (25 s,
 // QUICK_ADD_TIMEOUT_S), then undoing a failure (a Keychain delete, up to 10 s).
-// The whole call, the channels lock included, gives up at 30 s (QUICK_ADD_DEADLINE_S)
+// The whole call, the channels lock included, gives up at 45 s (QUICK_ADD_DEADLINE_S)
 // and answers "timeout", so this only covers a backend that cannot answer at all.
-const QUICK_ADD_TIMEOUT_MS = 45_000
+const QUICK_ADD_TIMEOUT_MS = 60_000
 
 /** A fresh id for a bot being added: stable for its life, whatever it is renamed to. */
 export function newAccountId(): string {
@@ -160,6 +160,19 @@ export interface ChannelBinding {
   parent_pane_id?: string
   /** True for a topic the backend created itself (a child pane's), false for a manual binding. */
   auto?: boolean
+  /** "dormant": the pane was closed; the binding stays for the chat (or this window) to wake
+   *  it back, until it is unlinked. Absent on older backends (= active). */
+  state?: 'active' | 'dormant'
+  /** When the pane was closed (seconds); 0 while active. */
+  closed_at?: number
+}
+
+/** What the window knows of a pane it closes, for its parked binding's later wake. */
+export interface ClosedPaneInfo {
+  paneName?: string
+  workspacePath?: string
+  sessionId?: string
+  agent?: string
 }
 
 export type ChannelVerbosity = 'replies' | 'minimal' | 'standard' | 'full'
@@ -247,6 +260,8 @@ export interface ChannelQuickAddResult {
   name: string
   identity: string
   link: ChannelLinkInvite | null
+  /** "conflict": added, but another program polls the same bot, so no message arrives yet. */
+  warning?: 'conflict'
 }
 
 /** `channels.managed_created`: the bot a `channels.managed_create` link was for, added
@@ -561,7 +576,7 @@ function createChannelsStore(backend: Backend) {
       mutate('channels.configure', secret ? { platform, ...acct(account), config, secret } : { platform, ...acct(account), config }),
     /** Add a new bot in one step: the backend stores it only once the platform accepted
      *  the credential, and with `linkTarget` answers with a link invite too. A failure
-     *  carries `reason` ("rejected" | "timeout" | "invalid") and leaves nothing stored. */
+     *  carries `reason` ("rejected" | "network" | "timeout" | "invalid") and leaves nothing stored. */
     quickAdd: async (platform: ChannelPlatform, config: Record<string, unknown>, secret: Record<string, string>,
       account: string, linkTarget?: 'direct' | 'group'): Promise<ChannelResult<ChannelQuickAddResult> & { reason?: string }> => {
       const type = 'channels.quick_add'
@@ -625,13 +640,24 @@ function createChannelsStore(backend: Backend) {
     unbind: (paneId: string, paneName = '') => mutate('channels.unbind', { pane_id: paneId, pane_name: paneName }),
     rebind: (fromPaneId: string, toPaneId: string) =>
       mutate('channels.rebind', { from_pane_id: fromPaneId, to_pane_id: toPaneId }),
-    /** A pane really closed. The backend no longer unbinds on unregister (a
-     *  workspace switch or detach unregisters too), so this is the only path
-     *  that releases the binding. Skipped for panes known to be unbound. */
-    paneClosed(paneId: string): void {
+    /** A pane really closed. Its binding is parked, not released: the chat keeps it to
+     *  wake the conversation back (or start a new one) until someone unlinks it. The
+     *  backend does not park on unregister (a workspace switch or detach unregisters
+     *  too), so this is the only path. Skipped for panes known to be unbound. */
+    paneClosed(paneId: string, info: ClosedPaneInfo = {}): void {
       if (loaded.value && !bindingByPane.value.has(paneId)) return
-      void call('channels.unbind', { pane_id: paneId, reason: 'closed' })
+      void call('channels.park', {
+        pane_id: paneId,
+        pane_name: info.paneName ?? '',
+        workspace_path: info.workspacePath ?? '',
+        session_id: info.sessionId ?? '',
+        agent: info.agent ?? '',
+      })
     },
+    /** Wake a dormant binding's pane from the window: back onto its conversation, or
+     *  (`fresh`, or when none is known) a new one in the same CLI and workspace. A
+     *  refusal's `error` is the chat's wording of why, `reason` its code. */
+    wake: (paneId: string, fresh = false) => mutate('channels.wake', { pane_id: paneId, fresh }),
     /** A rebuild replaced a pane under a new id: carry its binding over. */
     paneReplaced(fromPaneId: string, toPaneId: string): void {
       if (loaded.value && !bindingByPane.value.has(fromPaneId)) return

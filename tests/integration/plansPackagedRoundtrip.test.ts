@@ -1,12 +1,11 @@
 // @vitest-environment happy-dom
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type {} from '../../plugins/navide-plans/src/provenance'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
-import { i18n, useNotify } from '@navide/plugin-ui/foundation'
+import { DOMWrapper, flushPromises } from '@vue/test-utils'
+import { createPluginBackendClient } from '@navide/plugin-sdk'
 import { manifestV2CapabilityPolicy } from '../../src/main/plugins/pluginPermissions'
 
 type IpcEvent = { sender: { id: number } }
@@ -287,6 +286,7 @@ import {
 } from '../../src/main/plugins/frontendPluginManager'
 import { createPlansWindowRouter } from '../../src/main/plansWindowRouting'
 import { PLANS_PLUGIN_REQUIRES } from '../../src/shared/pluginCapabilities'
+import { OFFICIAL_PLUGIN_VERSIONS } from '../../src/main/plugins/officialPluginVersions'
 import {
   PluginBackendSupervisor,
   createAuthenticatedBackendRuntime,
@@ -328,18 +328,29 @@ if (packagedFixtureEnabled && !existsSync(packagedFixture)) {
 
 const runPackagedTest = packagedFixtureEnabled ? it : it.skip
 
-const productionBackend = join(
+// navide.plans is built in Navide-dev/navide-plans. These tests drive the
+// copy the build staged from the official Registry for this host's target:
+// its emitted frontend bundle and its packaged backend, never plugin sources.
+// Staged official artifacts are keyed by the plugin's own version, not the App's.
+const plansVersion = OFFICIAL_PLUGIN_VERSIONS[PLANS_PLUGIN_ID]!
+const stagedPlansPackage = join(
   process.cwd(),
-  process.platform === 'win32'
-    ? 'dist-plugins/navide-plans/backend/navide-plans.exe'
-    : 'dist-plugins/navide-plans/backend/navide-plans',
+  'dist-plugins/official-artifacts/factory-resources',
+  PLANS_PLUGIN_ID,
+  plansVersion,
+  `${process.platform}-${process.arch}`,
+  'package',
+)
+const productionBackend = join(
+  stagedPlansPackage,
+  process.platform === 'win32' ? 'backend/navide-plans.exe' : 'backend/navide-plans',
 )
 const productionBackendEnabled =
   process.env.NAVIDE_TEST_PRODUCTION_PLANS_BACKEND === '1' ||
   process.env.NAVIDE_TEST_PRODUCTION_PLANS === '1'
 if (productionBackendEnabled && !existsSync(productionBackend)) {
   throw new Error(
-    `NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 requires the production backend at ${productionBackend}; run pnpm run build:plans:backend first.`,
+    `NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 requires the production backend at ${productionBackend}; stage it with node scripts/stage-official-plugin-artifacts.mjs first.`,
   )
 }
 
@@ -351,8 +362,49 @@ for (const key of ['TMPDIR', 'TEMP', 'TMP'] as const) {
   if (typeof value === 'string' && value.length > 0) packagedBackendEnvironment[key] = value
 }
 
-// Staged official artifacts are keyed by the plugin's own version, not the App's.
-const plansVersion = JSON.parse(readFileSync(join(process.cwd(), 'plugins/navide-plans/manifest.json'), 'utf8')).version as string
+declare global {
+  interface Window {
+    __NAVIDE_PLANS_PROVENANCE__?: { readonly buildId: string; readonly packageVersion: string; readonly packageSource: string }
+  }
+}
+
+let stagedEntryRun = 0
+/** Runs the staged package's emitted entry for one view, as the view's own
+ *  document would: its CSS, then its module script, which mounts the bundled
+ *  app on `#app`. The left and window entries share one emitted script, so
+ *  each run imports it under its own query to execute it again. */
+async function runStagedPlansEntry(view: 'left' | 'window'): Promise<{
+  app: { unmount(): void }
+  root: HTMLElement
+  styles: HTMLStyleElement[]
+  script: string
+}> {
+  const entryFile = join(stagedPlansPackage, 'frontend', view, 'index.html')
+  const entry = readFileSync(entryFile, 'utf8')
+  const styles: HTMLStyleElement[] = []
+  for (const match of entry.matchAll(/<link[^>]+href="([^"]+\.css)"/g)) {
+    const style = document.createElement('style')
+    style.textContent = readFileSync(resolve(dirname(entryFile), match[1]), 'utf8')
+    document.head.appendChild(style)
+    styles.push(style)
+  }
+  const root = document.createElement('div')
+  root.id = 'app'
+  document.body.appendChild(root)
+  const scriptMatch = entry.match(/<script[^>]+src="([^"]+)"/)
+  expect(scriptMatch, 'built frontend entry must select an emitted script').not.toBeNull()
+  const script = resolve(dirname(entryFile), scriptMatch![1])
+  stagedEntryRun += 1
+  await import(/* @vite-ignore */ `${pathToFileURL(script).href}?run=${stagedEntryRun}`)
+  const app = (root as typeof root & { __vue_app__?: { unmount(): void } }).__vue_app__
+  expect(app, 'the staged entry must mount its app').toBeDefined()
+  return { app: app!, root, styles, script }
+}
+
+function removeStagedEntry(run: { root: HTMLElement; styles: HTMLStyleElement[] } | undefined): void {
+  run?.root.remove()
+  for (const style of run?.styles ?? []) style.remove()
+}
 
 describe('Plans packaged backend composition', () => {
   const managers: FrontendPluginManager[] = []
@@ -490,13 +542,9 @@ describe('Plans packaged backend composition', () => {
       const consoleWarn = vi.spyOn(console, 'warn')
       let plansSubscription: { dispose(): void } | undefined
       try {
-        const plansBackendModule = '../../plugins/navide-plans/src/backend'
-        const { plansBackend } = (await import(plansBackendModule)) as {
-          plansBackend: {
-            call(name: string, args?: unknown): Promise<unknown>
-            subscribe(event: string, listener: (payload: unknown) => void): { ready: Promise<void>; dispose(): void }
-          }
-        }
+        // navide.plans' view talks to its backend through this SDK client
+        // (its src/backend.ts exports one as plansBackend).
+        const plansBackend = createPluginBackendClient()
         let resolveChanged!: (payload: unknown) => void
         const changed = new Promise<unknown>((resolve) => {
           resolveChanged = resolve
@@ -661,26 +709,15 @@ describe('Plans packaged backend composition', () => {
       mock.invocations.length = 0
       const consoleError = vi.spyOn(console, 'error')
       const consoleWarn = vi.spyOn(console, 'warn')
-      let app: { unmount(): void } | undefined
+      let staged: Awaited<ReturnType<typeof runStagedPlansEntry>> | undefined
       try {
-        const plansAppModule = '../../plugins/navide-plans/src/PlansApp.vue'
-        const { default: PlansApp } = (await import(plansAppModule)) as {
-          default: any
-        }
-
-        const mountedApp = mount(PlansApp, {
-          global: {
-            plugins: [i18n],
-            stubs: {
-              SafeAiCliPanel: true,
-            },
-          },
-        })
-        app = mountedApp
+        // The staged left view's emitted bundle, mounted by its own entry.
+        staged = await runStagedPlansEntry('left')
+        const { root } = staged
 
         for (let i = 0; i < 50; i++) {
           await flushPromises()
-          if (mountedApp.find('.plan-row').exists()) break
+          if (root.querySelector('.plan-row')) break
           await new Promise((resolve) => setTimeout(resolve, 20))
         }
 
@@ -693,9 +730,10 @@ describe('Plans packaged backend composition', () => {
           }),
         }))
 
-        const row = mountedApp.find('.plan-row')
-        expect(row.exists()).toBe(true)
-        expect(mountedApp.text()).toContain('Integration Plan')
+        const rowElement = root.querySelector('.plan-row')
+        expect(rowElement).not.toBeNull()
+        const row = new DOMWrapper(rowElement!)
+        expect(root.textContent).toContain('Integration Plan')
 
         // A real left contribution uses the authenticated capability broker and
         // router to create a separate standalone Plans contribution.
@@ -732,7 +770,8 @@ describe('Plans packaged backend composition', () => {
       } finally {
         consoleError.mockRestore()
         consoleWarn.mockRestore()
-        app?.unmount()
+        staged?.app.unmount()
+        removeStagedEntry(staged)
         manager.destroyInstance(handle.instanceId)
       }
     },
@@ -940,7 +979,7 @@ describe('Plans packaged backend composition', () => {
         // 1. Production artifact path verified:
         expect(activation.entryFile).toBe(productionBackend)
         expect(activation.entryFile).not.toBe(packagedFixture)
-        expect(productionBackend).toContain('dist-plugins/navide-plans/backend')
+        expect(productionBackend).toContain(join('official-artifacts', 'factory-resources', PLANS_PLUGIN_ID, plansVersion))
 
         // 2. Production serverInfo version is 0.1.0, not fixture 0.1.92:
         expect(health.serverInfo?.version).toBe('0.1.0')
@@ -1110,11 +1149,7 @@ describe('Plans packaged backend composition', () => {
         Object.defineProperty(window, 'nav', { value: nav, configurable: true })
         Object.defineProperty(globalThis, 'nav', { value: nav, configurable: true })
 
-        const { plansBackend } = (await import('../../plugins/navide-plans/src/backend')) as {
-          plansBackend: {
-            call(name: string, args?: unknown): Promise<unknown>
-          }
-        }
+        const plansBackend = createPluginBackendClient()
 
         const manualResult = await plansBackend.call('plans.update_stage', {
           rel_path: createdRelPath,
@@ -1290,13 +1325,19 @@ describe('Plans packaged backend composition', () => {
         await import(/* @vite-ignore */ pathToFileURL(resolve(dirname(view.entryFile), script![1])).href)
         app = (root as typeof root & { __vue_app__?: { unmount(): void } }).__vue_app__
         expect(app, 'production entry must mount its app').toBeDefined()
-        const config = (await import('../../plugins/navide-plans/vite.config')).default
-        expect(window.__NAVIDE_PLANS_PROVENANCE__).toMatchObject({
-          packageVersion,
-          packageSource: 'factory-bundled',
-          buildId: JSON.parse(config.define!.__NAVIDE_PLANS_BUILD_ID__),
-        })
-        await vi.waitFor(() => expect(root.querySelector('.prt-notes-btn')).not.toBeNull())
+        // The build id the bundle was compiled with (navide-plans' vite.config
+        // defines __NAVIDE_PLANS_BUILD_ID__): a real production build, not the
+        // source fallback, and the very one the staged bundle carries.
+        const provenance = window.__NAVIDE_PLANS_PROVENANCE__
+        expect(provenance).toMatchObject({ packageVersion, packageSource: 'factory-bundled' })
+        expect(provenance!.buildId).toMatch(/^[0-9a-f]{16}$/)
+        const assetsDirectory = join(dirname(dirname(view.entryFile)), 'assets')
+        const emitted = readdirSync(assetsDirectory).filter((name) => name.endsWith('.js'))
+          .map((name) => readFileSync(join(assetsDirectory, name), 'utf8')).join('\n')
+        expect(emitted).toContain(JSON.stringify(provenance!.buildId))
+        // Opening the document is a real round trip through the packaged
+        // child, so a slow runner gets more than one second.
+        await vi.waitFor(() => expect(root.querySelector('.prt-notes-btn')).not.toBeNull(), { timeout: 5_000 })
         const get = (selector: string) => {
           const element = root.querySelector(selector)
           expect(element, selector).not.toBeNull()
@@ -1394,6 +1435,7 @@ describe('Plans packaged backend composition', () => {
       writeFileSync(planFile, initialHtml, 'utf8')
 
       let app: { unmount(): void } | undefined
+      let stagedRun: Awaited<ReturnType<typeof runStagedPlansEntry>> | undefined
       try {
         const manager = new FrontendPluginManager()
         managers.push(manager)
@@ -1511,75 +1553,80 @@ describe('Plans packaged backend composition', () => {
         Object.defineProperty(window, 'nav', { value: nav, configurable: true })
         Object.defineProperty(globalThis, 'nav', { value: nav, configurable: true })
 
-        const { default: PlansApp } = (await import('../../plugins/navide-plans/src/PlansApp.vue')) as {
-          default: any
+        // The staged window view's emitted bundle, mounted by its own entry.
+        const staged = await runStagedPlansEntry('window')
+        stagedRun = staged
+        app = staged.app
+        const { root } = staged
+        const find = (selector: string): Element | null => root.querySelector(selector)
+        const findAll = (selector: string): Element[] => [...root.querySelectorAll(selector)]
+        const get = (selector: string): DOMWrapper<Element> => {
+          const element = find(selector)
+          expect(element, selector).not.toBeNull()
+          return new DOMWrapper(element!)
         }
-        const mountedApp = mount(PlansApp, {
-          attachTo: document.body,
-          global: {
-            plugins: [i18n],
-            stubs: {
-              SafeAiCliPanel: true,
-            },
-          },
-        })
-        app = mountedApp
+        // The document token lives in the preview the frame runs (planRuntime's
+        // todo status runtime declares it); a remount would issue a new one.
+        const frameToken = (): string | undefined =>
+          /var documentToken = "([0-9a-f]+)"/.exec((find('.plan-doc-frame') as HTMLIFrameElement | null)?.srcdoc ?? '')?.[1]
 
-        for (let i = 0; i < 50; i++) {
-          await flushPromises()
-          if (mountedApp.find('.selected-document').exists()) break
-          await new Promise((resolve) => setTimeout(resolve, 20))
-        }
-        expect(mountedApp.find('.selected-document').exists()).toBe(true)
+        // Opening the document is a real round trip through the packaged
+        // child, so a slow runner gets more than one second.
+        await vi.waitFor(() => expect(find('.selected-document')).not.toBeNull(), { timeout: 5_000 })
 
         // Verify todo toggle preserves iframe identity and documentToken without remount/flash
-        const frameElBefore = mountedApp.find('.plan-doc-frame').element
-        const tokenBefore = (mountedApp.vm as any).currentDocumentToken
+        const frameElBefore = find('.plan-doc-frame')!
+        const tokenBefore = frameToken()
         expect(tokenBefore).toBeDefined()
         const postMessageMock = vi.fn()
+        const frameWindow = { postMessage: postMessageMock }
         Object.defineProperty(frameElBefore, 'contentWindow', {
-          value: { postMessage: postMessageMock },
+          value: frameWindow,
           configurable: true,
         })
-        await (mountedApp.vm as any).toggleDocTodo('todo-1')
-        await flushPromises()
-        expect(mountedApp.find('.plan-doc-frame').element).toBe(frameElBefore)
-        expect((mountedApp.vm as any).currentDocumentToken).toBe(tokenBefore)
-        expect(postMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+        // The preview reports a todo click the way its runtime does: a message
+        // from the frame's window carrying the document token.
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'todo-clicked', todoId: 'todo-1', documentToken: tokenBefore },
+          source: frameWindow as unknown as Window,
+        }))
+        await vi.waitFor(() => expect(postMessageMock).toHaveBeenCalledWith(expect.objectContaining({
           type: 'todo-status-updated',
           todoId: 'todo-1',
           status: 'in-progress',
-        }), '*')
+        }), '*'))
+        await flushPromises()
+        expect(find('.plan-doc-frame')).toBe(frameElBefore)
+        expect(frameToken()).toBe(tokenBefore)
 
         // Open Review Notes Panel
-        const reviewNotesOverflow = mountedApp.get('[data-test="review-notes-overflow"]')
+        const reviewNotesOverflow = get('[data-test="review-notes-overflow"]')
         await reviewNotesOverflow.trigger('click')
-        await mountedApp.get('[data-test="review-notes-overflow-item"]').trigger('click')
+        await get('[data-test="review-notes-overflow-item"]').trigger('click')
         await flushPromises()
 
-        const panel = mountedApp.find('.prt > .prt-panel')
-        expect(panel.exists()).toBe(true)
+        const panel = find('.prt > .prt-panel')
+        expect(panel).not.toBeNull()
 
-        const input = mountedApp.find('[data-test="review-note-input"]')
-        expect(input.exists()).toBe(true)
+        const input = get('[data-test="review-note-input"]')
         expect(input.attributes('disabled')).toBeUndefined()
 
         // Enter with IME composing does not submit
         await input.setValue('Draft text')
         await input.trigger('keydown', { key: 'Enter', isComposing: true })
         await flushPromises()
-        expect(mountedApp.findAll('.prt-panel .prt-note')).toHaveLength(0)
+        expect(findAll('.prt-panel .prt-note')).toHaveLength(0)
 
         // Real Enter submits exactly once through the packaged backend child
         await input.trigger('keydown', { key: 'Enter' })
         for (let i = 0; i < 50; i++) {
           await flushPromises()
-          if (mountedApp.findAll('.prt-panel .prt-note').length > 0) break
+          if (findAll('.prt-panel .prt-note').length > 0) break
           await new Promise((resolve) => setTimeout(resolve, 20))
         }
 
-        expect(mountedApp.text()).toContain('Draft text')
-        expect(mountedApp.findAll('.prt-panel .prt-note')).toHaveLength(1)
+        expect(root.textContent).toContain('Draft text')
+        expect(findAll('.prt-panel .prt-note')).toHaveLength(1)
 
         // Drive the controls rather than exposed component methods. A rendered
         // button is not evidence that its edit or confirmation UI is usable —
@@ -1594,59 +1641,73 @@ describe('Plans packaged backend composition', () => {
           // The wait spans a real round trip through the packaged child, so
           // it gets more than waitFor's 1s default on a slow runner.
           await vi.waitFor(() => {
-            expect(mountedApp.get(selector).attributes('disabled')).toBeUndefined()
+            expect(get(selector).attributes('disabled')).toBeUndefined()
           }, { timeout: 5_000 })
-          await mountedApp.get(selector).trigger('click')
+          await get(selector).trigger('click')
         }
         await clickWhenEnabled('[data-test="edit-n1"]')
-        const editInput = mountedApp.get('[data-test="review-note-edit-input"]')
+        const editInput = get('[data-test="review-note-edit-input"]')
         expect(editInput.attributes('disabled')).toBeUndefined()
         expect.soft(document.activeElement, 'Edit must focus its input').toBe(editInput.element)
         await editInput.setValue('Edited through the UI')
-        await mountedApp.get('[data-test="review-note-edit-save"]').trigger('click')
-        await vi.waitFor(() => expect(mountedApp.text()).toContain('Edited through the UI'))
+        await get('[data-test="review-note-edit-save"]').trigger('click')
+        await vi.waitFor(() => expect(root.textContent).toContain('Edited through the UI'))
         await clickWhenEnabled('[data-test="delete-n1"]')
         await flushPromises()
         expect.soft(document.querySelector('.modal .card.confirm'), 'Delete must render the application confirmation').not.toBeNull()
         expect(readFileSync(planFile, 'utf8')).toContain('Edited through the UI')
-        // Cancel via the application service so a red assertion cannot leave
-        // an unresolved confirmation leaking into the rest of the suite.
-        useNotify().resolveDialog(false)
+        // Cancel through the confirmation the bundle rendered, so a red
+        // assertion cannot leave an unresolved confirmation leaking into the
+        // rest of the suite.
+        await vi.waitFor(() => expect(document.querySelector('.modal .ghost')).not.toBeNull())
+        await new DOMWrapper(document.querySelector('.modal .ghost')!).trigger('click')
         await flushPromises()
         await clickWhenEnabled('[data-test="edit-n1"]')
-        await mountedApp.get('[data-test="review-note-edit-input"]').setValue('Draft text')
-        await mountedApp.get('[data-test="review-note-edit-save"]').trigger('click')
-        await vi.waitFor(() => expect(mountedApp.text()).toContain('Draft text'))
+        const backendCalls = (name: string): number => mock.invocations.filter((entry) =>
+          entry.channel === 'plugin:backend:call' && (entry.payload as { name?: string })?.name === name).length
+        const listsBeforeSave = backendCalls('plans.list')
+        const readsBeforeSave = backendCalls('plans.read')
+        await get('[data-test="review-note-edit-input"]').setValue('Draft text')
+        await get('[data-test="review-note-edit-save"]').trigger('click')
+        await vi.waitFor(() => expect(root.textContent).toContain('Draft text'))
+        // The write reaches the app again as plans.changed from the workspace
+        // watcher, which lists the plans and re-reads the open document. Wait
+        // for that re-read: asserting before it lands is what let a re-render
+        // on that path pass or fail by timing alone.
+        await vi.waitFor(() => {
+          expect(backendCalls('plans.list')).toBeGreaterThan(listsBeforeSave)
+          expect(backendCalls('plans.read')).toBeGreaterThan(readsBeforeSave)
+        }, { timeout: 5_000 })
+        await flushPromises()
 
         // Review Notes are metadata-only. They must not cause an incidental iframe
         // reread/remount or materialize note markup into the plan body.
-        const liveSrcdoc = mountedApp.find('.plan-doc-frame').attributes('srcdoc') ?? ''
+        const liveSrcdoc = get('.plan-doc-frame').attributes('srcdoc') ?? ''
         expect(liveSrcdoc).not.toContain('Draft text')
         expect(liveSrcdoc).not.toContain('data-note-id="n1"')
-        expect(mountedApp.find('.plan-doc-frame').element).toBe(frameElBefore)
-        expect((mountedApp.vm as any).currentDocumentToken).toBe(tokenBefore)
+        expect(find('.plan-doc-frame')).toBe(frameElBefore)
+        expect(frameToken()).toBe(tokenBefore)
 
         // Close and reopen panel retains the note
-        const toggleBtn = mountedApp.get('.review-notes-toggle')
+        const toggleBtn = get('.review-notes-toggle')
         await toggleBtn.trigger('click')
         await flushPromises()
-        expect(mountedApp.find('.prt-panel').exists()).toBe(false)
+        expect(find('.prt-panel')).toBeNull()
         await toggleBtn.trigger('click')
         await flushPromises()
-        expect(mountedApp.findAll('.prt-panel .prt-note')).toHaveLength(1)
-        expect(mountedApp.text()).toContain('Draft text')
+        expect(findAll('.prt-panel .prt-note')).toHaveLength(1)
+        expect(root.textContent).toContain('Draft text')
 
         // Re-read document through the UI retains the note in the panel
-        const planRow = mountedApp.find('.plan-row')
-        expect(planRow.exists()).toBe(true)
+        const planRow = get('.plan-row')
         await planRow.trigger('click')
         for (let i = 0; i < 50; i++) {
           await flushPromises()
-          if (mountedApp.findAll('.prt-panel .prt-note').length > 0) break
+          if (findAll('.prt-panel .prt-note').length > 0) break
           await new Promise((resolve) => setTimeout(resolve, 20))
         }
-        expect(mountedApp.findAll('.prt-panel .prt-note')).toHaveLength(1)
-        expect(mountedApp.text()).toContain('Draft text')
+        expect(findAll('.prt-panel .prt-note')).toHaveLength(1)
+        expect(root.textContent).toContain('Draft text')
 
         // Reading the document again returns metadata persisted by the packaged child.
         const diskContent = readFileSync(planFile, 'utf8')
@@ -1654,8 +1715,11 @@ describe('Plans packaged backend composition', () => {
         expect(diskContent).toMatch(/"id":\s*"n1"/)
         expect(diskContent).not.toContain('data-note-id="n1"')
 
-        // An anchored manual note crosses the packaged transport unchanged.
-        expect(await (mountedApp.vm as any).addReviewNote('Anchor preserved', 'Goals')).toBe(true)
+        // An anchored manual note crosses the packaged transport unchanged: the
+        // view's backend client sends it over the same frame bridge.
+        await expect(createPluginBackendClient().call('plans.review_note_add', {
+          rel_path: relPath, text: 'Anchor preserved', anchor: 'Goals',
+        })).resolves.toBeTruthy()
         const diskWithAnchor = readFileSync(planFile, 'utf8')
         expect(diskWithAnchor).toContain('Anchor preserved')
         expect(diskWithAnchor).toMatch(/"anchor":\s*"Goals"/)
@@ -1682,6 +1746,7 @@ describe('Plans packaged backend composition', () => {
         manager.destroyInstance(handle.instanceId)
       } finally {
         app?.unmount()
+        removeStagedEntry(stagedRun)
         rmSync(tempWorkspace, { recursive: true, force: true })
       }
     },

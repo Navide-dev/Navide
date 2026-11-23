@@ -245,3 +245,36 @@ def test_this_machine_is_not_offered_as_a_remote_source():
         local_device_id=LOCAL,
     )
     assert [device["deviceId"] for device in remote_roster.list_devices()] == [FAR]
+
+
+# ---- which segment is down --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "status, host_online, reason",
+    [
+        # The far machine has no connection to the server at all.
+        ("waiting", False, "device-offline"),
+        ("disconnected", False, "device-offline"),
+        # The machine is there; the window holding the pane lost its backend.
+        ("disconnected", True, "window-disconnected"),
+        # The machine is there; the CLI behind the pane is gone.
+        ("exited", True, "session-ended"),
+        ("error", True, "session-ended"),
+        ("stopped", True, "session-ended"),
+    ],
+)
+def test_an_offline_row_names_the_segment_that_is_down(status: str, host_online: bool, reason: str):
+    """2026-11-22: a remote pane read host_online=false and the report could not
+    say whether the far machine, its window or this machine's link was down."""
+    remote_roster.replace([row(status=status, hostOnline=host_online)], local_device_id=LOCAL)
+    (pane,) = remote_roster.list_panes()
+    view = pane.to_dict()
+    assert view["offline"] is True
+    assert view["offline_reason"] == reason
+
+
+def test_a_reachable_row_carries_no_offline_reason():
+    remote_roster.replace([row()], local_device_id=LOCAL)
+    (pane,) = remote_roster.list_panes()
+    assert "offline_reason" not in pane.to_dict()

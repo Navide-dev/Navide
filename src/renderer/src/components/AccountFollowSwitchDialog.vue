@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { DEFAULT_SLOT_ID, type FollowSwitchRow, type QuotaTarget, type SubtreeFixSkip } from '../lib/accountFollowSwitch'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 /** One pane row as shown: the pure row plus its account's display label. */
 export interface FollowDialogRow extends FollowSwitchRow {

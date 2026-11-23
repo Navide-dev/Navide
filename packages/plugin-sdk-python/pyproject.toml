@@ -1,0 +1,38 @@
+# Publication project for the public Python plugin SDK, `navide_plugin_sdk`.
+# The sources stay in backend/navide_plugin_sdk, where the Host and the
+# first-party Plans backend use them; scripts/publish-python-plugin-sdk.sh
+# stages this file, README.md, the repository LICENSE and the SDK's tracked
+# sources into a temporary directory and builds the sdist and wheel there, so
+# both are self-contained. The version is the SDK's API_VERSION (checked by
+# tests/infrastructure/publicPackagesPublication.test.ts).
+[project]
+name = "navide-plugin-sdk"
+version = "1.0.0"
+description = "The public Python SDK a Navide plugin backend builds against."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = []
+keywords = ["navide", "plugin", "sdk"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/Navide-dev/Navide/blob/main/docs/en-US/plugin-development-v2.md"
+Repository = "https://github.com/Navide-dev/Navide"
+Issues = "https://github.com/Navide-dev/Navide/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+exclude = ["**/__pycache__", "**/*.pyc"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["navide_plugin_sdk"]

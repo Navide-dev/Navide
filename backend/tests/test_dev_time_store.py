@@ -512,16 +512,21 @@ async def test_stale_sweeper_broadcasts_for_swept_workspaces(store, ws, monkeypa
     store.beat(ws, "p1", "human", T0)
     monkeypatch.setattr(mod.time, "time", lambda: T0 + HUMAN_GAP_S + 1)
     seen: list[str] = []
+    swept = asyncio.Event()
 
     async def on_change(label: str) -> None:
         seen.append(label)
+        swept.set()
 
     task = asyncio.create_task(store.stale_sweeper(on_change, interval_s=0.01))
-    for _ in range(50):
-        await asyncio.sleep(0.01)
-        if seen:
-            break
-    task.cancel()
+    # The sweep runs on the shared db worker thread, behind any SQLite write
+    # queued before it; a Windows runner's slow disk has taken seconds there.
+    # Wait on the broadcast itself with a generous deadline, not a fixed
+    # number of 10ms sleeps (~0.5s, or ~0.8s at Windows' 15.6ms tick).
+    try:
+        await asyncio.wait_for(swept.wait(), timeout=30)
+    finally:
+        task.cancel()
     assert seen == [ws]
 
 

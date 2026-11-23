@@ -13,6 +13,9 @@ export interface DeveloperPublicState {
    *  this Navide's key was not registered; publishing from here needs the
    *  user's explicit replacement, while the other key keeps working. */
   keyConflictFingerprint: string | null
+  /** 0.2.43 #2b: the Navide Cloud member these tokens came from through the
+   *  Cloud sign-in (no browser); null after a browser sign-in or when signed out. */
+  cloudMemberId: string | null
 }
 
 /** A Registry call's outcome as the renderer sees it. */
@@ -62,6 +65,8 @@ export type DeveloperApplicationStatus = 'none' | 'pending' | 'approved' | 'reje
 export interface DeveloperApi {
   state(): Promise<DeveloperPublicState>
   signIn(scope: 'account' | 'publish'): Promise<DeveloperPublicState>
+  /** 0.2.43 #2b: account-scope sign-in through the Navide Cloud account, no browser; unchanged state when unavailable. */
+  syncCloudAccount(): Promise<DeveloperPublicState>
   signOut(): Promise<DeveloperPublicState>
   registerKey(options?: { replace?: boolean }): Promise<DeveloperPublicState>
   application(): Promise<DeveloperCallResult>
@@ -112,5 +117,27 @@ export function trustedDocUrl(value: unknown): string | null {
   if (url.hostname === 'navide.dev' || url.hostname.endsWith('.navide.dev')) return url.toString()
   return null
 }
+/** The GitHub Release the public plugin packages are installed from; they are
+ * not on npm (docs/en-US/build-for-navide.md, "Five minutes to a running plugin"). */
+export const PLUGIN_PACKAGES_RELEASE_URL = 'https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0'
+/** The entry card's scaffold command: the no-build template, which validates and packages as written. */
+export const PLUGIN_INIT_COMMAND =
+  `npx --yes --package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-contracts-1.0.0.tgz ` +
+  `--package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-sdk-1.0.0.tgz navide-plugin init acme-hello --id acme.hello`
+/** The entry card's self-check, the same checks the Registry runs before review. */
+export const PLUGIN_CHECK_COMMAND = 'navide-plugin validate acme-hello && navide-plugin package acme-hello'
 /** The developer console's open page: the publishing steps, before signing in. */
 export const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
+/** The Official Registry's API. It stays under `/registry` on the Navide
+ * server host; marketplace.navide.dev and developers.navide.dev serve no API. */
+export const OFFICIAL_REGISTRY_API_URL = 'https://server.navide.dev/registry'
+/** Where the Official Registry's sign-in and developer pages live. */
+export const DEVELOPER_CONSOLE_ORIGIN = 'https://developers.navide.dev'
+
+/** The base for browser pages (`/cli/authorize`) of the Registry at
+ * `registryBase`: the developer console for the Official Registry (exact
+ * match), the Registry itself for any other one. The API base is unchanged. */
+export function developerPagesBase(registryBase: string): string {
+  const base = registryBase.replace(/\/+$/, '')
+  return base === OFFICIAL_REGISTRY_API_URL ? DEVELOPER_CONSOLE_ORIGIN : base
+}

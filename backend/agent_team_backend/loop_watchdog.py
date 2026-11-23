@@ -23,8 +23,14 @@ import sys
 import threading
 import time
 import traceback
+from collections.abc import Callable
 
 log = logging.getLogger("agent_team_backend.loop_watchdog")
+
+#: Called from the watcher thread with a stall's length once the loop turns
+#: again (on_recovery). A listener must not block, and must hand anything that
+#: touches loop state to the loop (call_soon_threadsafe).
+_recovery_listeners: list[Callable[[float], None]] = []
 
 #: How often the loop-side task refreshes its liveness stamp, and how often the
 #: watcher thread checks it. Cheap: one monotonic() plus a sleep.
@@ -118,6 +124,7 @@ class _LoopWatchdog:
                     "event loop recovered after %.1fs stalled (process CPU %.1fs)",
                     last_tick - stall_started_at, time.process_time() - stall_cpu,
                 )
+                _tell_recovery(last_tick - stall_started_at)
                 stall_started_at = None
             if stall_started_at is None:
                 healthy_cpu = time.process_time()
@@ -133,6 +140,7 @@ class _LoopWatchdog:
                     "event loop recovered after %.1fs stalled (process CPU %.1fs)",
                     last_tick - stall_started_at, time.process_time() - stall_cpu,
                 )
+                _tell_recovery(last_tick - stall_started_at)
 
     def _loop_stack(self) -> str:
         thread_id = self._loop_thread_id
@@ -142,6 +150,21 @@ class _LoopWatchdog:
         if frame is None:
             return "<loop thread frame unavailable>"
         return "".join(traceback.format_stack(frame))
+
+
+def _tell_recovery(stalled_s: float) -> None:
+    for listener in list(_recovery_listeners):
+        try:
+            listener(stalled_s)
+        except Exception as err:  # noqa: BLE001 — the watcher must survive a listener
+            log.warning("loop watchdog: recovery listener failed: %s", err)
+
+
+def on_recovery(listener: Callable[[float], None]) -> None:
+    """Call ``listener(stalled_seconds)`` from the watcher thread each time the
+    loop recovers from a stall."""
+    if listener not in _recovery_listeners:
+        _recovery_listeners.append(listener)
 
 
 _watchdog = _LoopWatchdog()

@@ -658,6 +658,62 @@ describe('backend Host session registration', () => {
     expect(newSocket.sent.map((raw) => JSON.parse(raw).type)).toContain('host.register')
   })
 
+  // The backend reaches the Host (channel proxy lookups, PDF rendering, agent
+  // tools) only through a registered session, so the Host connects as soon as
+  // the backend is ready -- whether or not a plugin view is open yet.
+  it('registers with no plugin running, in the order main reports url then token', () => {
+    const mgr = new FrontendPluginManager()
+    const before = wsMock.FakeNodeWebSocket.instances.length
+    mgr.setBackendWsUrl('ws://backend-no-plugin')
+    mgr.setBackendHostToken('host-token')
+    expect(wsMock.FakeNodeWebSocket.instances.length).toBe(before + 1)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+
+    const registration = socket.sent
+      .map((raw) => JSON.parse(raw) as { type?: string; payload?: unknown })
+      .find((message) => message.type === 'host.register')
+    expect(registration?.payload).toMatchObject({ token: 'host-token' })
+  })
+
+  it('registers again on every reconnect after the socket drops', async () => {
+    vi.useFakeTimers()
+    try {
+      const mgr = new FrontendPluginManager()
+      mgr.setBackendWsUrl('ws://backend-drops')
+      mgr.setBackendHostToken('host-token')
+      expect(wsMock.FakeNodeWebSocket.instances.at(-1)?.url).toBe('ws://backend-drops')
+      const registrations = (socket: InstanceType<typeof wsMock.FakeNodeWebSocket>) =>
+        socket.sent
+          .map((raw) => JSON.parse(raw) as { id: string; type?: string })
+          .filter((message) => message.type === 'host.register')
+
+      // First drop: the registration was answered.
+      const first = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      first.open()
+      const [answered] = registrations(first)
+      first.receive({ id: answered!.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+      await vi.advanceTimersByTimeAsync(0)
+      first.close()
+      await vi.advanceTimersByTimeAsync(2_000)
+
+      // Second drop: the registration was still in flight.
+      const second = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      expect(second).not.toBe(first)
+      second.open()
+      expect(registrations(second)).toHaveLength(1)
+      second.close()
+      await vi.advanceTimersByTimeAsync(4_000)
+
+      const third = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      expect(third).not.toBe(second)
+      third.open()
+      expect(registrations(third)).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('advertises Plans support only after its exact v2 backend activation is registered', () => {
     const mgr = new FrontendPluginManager()
     mgr.open(
@@ -1168,7 +1224,7 @@ describe('registered receiver frame lifecycle', () => {
     const detailView: PluginViewLaunchDescriptor = {
       id: 'detail', contributionKey: 'acme.receiver-lifecycle.detail', kind: 'custom',
       location: 'detail', title: 'Detail', entryFile,
-      targetSchema: 'plugins/navide-git/schemas/branch-comparison.json',
+      targetSchema: 'tests/fixtures/navide-git/schemas/branch-comparison.json',
     }
     descriptor.views = withDetailPair ? [receiverView, providerView, detailView] : [receiverView, providerView]
     mgr.registerDescriptor(descriptor, { builtin: true })
@@ -3604,7 +3660,7 @@ describe('devPlansPluginDescriptor', () => {
       mkdirSync(join(decoy, 'frontend/left'), { recursive: true })
       mkdirSync(join(decoy, 'frontend/window'), { recursive: true })
       mkdirSync(join(decoy, 'backend'), { recursive: true })
-      writeFileSync(join(decoy, 'manifest.json'), readFileSync('plugins/navide-plans/manifest.json'))
+      writeFileSync(join(decoy, 'manifest.json'), readFileSync('tests/fixtures/navide-plans/manifest.json'))
       writeFileSync(join(decoy, 'frontend/left/index.html'), '<!doctype html>')
       writeFileSync(join(decoy, 'frontend/window/index.html'), '<!doctype html>')
       const backendEntry = join(decoy, 'backend/navide-plans')
@@ -11470,6 +11526,31 @@ describe('first-party Git private bridge', () => {
     expect(socket.sent).toHaveLength(1)
   })
 
+  it('holds a capability call made before the backend first comes up and sends it once it does', async () => {
+    const { mgr, view } = await openGitView()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+
+    const operation = publicCall(view, 'shell', 'gitStatus', { repositoryPath: '.' }, 'early-git-status')
+    await new Promise((r) => setTimeout(r, 20))
+    mgr.setBackendWsUrl('ws://early-git-status-test')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(1))
+    const request = JSON.parse(socket.sent[0]!) as { id: string; type: string }
+    expect(request.type).toBe('git.status')
+    socket.receive({ id: request.id, type: request.type, ok: true, payload: { branch: 'main' }, error: null, timestamp: '' })
+    await expect(operation).resolves.toEqual({ reqId: 'early-git-status', ok: true, result: { branch: 'main' } })
+  })
+
+  it('still fails fast once a backend that was up has stopped', async () => {
+    const { mgr, view } = await openGitView()
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+    mgr.setBackendWsUrl('ws://stopped-backend-test')
+    mgr.setBackendWsUrl(null)
+    await expect(publicCall(view, 'shell', 'gitStatus', { repositoryPath: '.' }, 'stopped-git-status'))
+      .resolves.toMatchObject({ reqId: 'stopped-git-status', ok: false })
+  })
+
   it('passes on the shell.run cut disclosure as the broker sent it, and nothing else changes', async () => {
     const { mgr, view } = await openGitView()
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
@@ -11582,15 +11663,15 @@ describe('first-party Git private bridge', () => {
     const bind = vi.fn()
     const unbind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [{ id: 'account-1', label: 'GitHub', host: 'github.com', username: 'alice', tokenLast4: '1234' }],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind,
       getBinding: () => 'account-1',
-      getCredential: () => null,
+      getCredential: async () => null,
     })
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
 
@@ -11625,15 +11706,15 @@ describe('first-party Git private bridge', () => {
     const { mgr, instanceId } = await openGitView()
     const bind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
     mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
     mgr.setExecutionPolicyResolver(() => ({
@@ -12355,7 +12436,7 @@ describe('first-party Git private bridge', () => {
   it('loads the selected factory contribution with its actual provenance regardless of the development environment flag', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-factory-query-')))
     // The real manifest is copied in below; its version names the artifact.
-    const plansVersion = JSON.parse(readFileSync('plugins/navide-plans/manifest.json', 'utf8')).version as string
+    const plansVersion = JSON.parse(readFileSync('tests/fixtures/navide-plans/manifest.json', 'utf8')).version as string
     const mgr = new FrontendPluginManager()
     try {
       const packageDir = join(
@@ -12371,7 +12452,7 @@ describe('first-party Git private bridge', () => {
       mkdirSync(join(packageDir, 'frontend/left'), { recursive: true })
       mkdirSync(join(packageDir, 'frontend/window'), { recursive: true })
       mkdirSync(join(packageDir, 'backend'), { recursive: true })
-      writeFileSync(join(packageDir, 'manifest.json'), readFileSync('plugins/navide-plans/manifest.json'))
+      writeFileSync(join(packageDir, 'manifest.json'), readFileSync('tests/fixtures/navide-plans/manifest.json'))
       writeFileSync(join(packageDir, 'frontend/left/index.html'), '<!doctype html>')
       writeFileSync(join(packageDir, 'frontend/window/index.html'), '<!doctype html>')
       copyFileSync(process.execPath, join(packageDir, backendEntryOnDisk('backend/navide-plans')))
@@ -14195,15 +14276,15 @@ describe('first-party Git private bridge', () => {
     dateNow.mockRestore()
 
     first.mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
     const clonePick = await call(first.view, 'git.contribution', { operation: 'pick_workspace', payload: {} }, 'clone-pick')
     await expect(call(first.view, 'git.request', {
@@ -14753,15 +14834,15 @@ describe('first-party Git private bridge', () => {
     const bind = vi.fn()
     const unbind = vi.fn()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [{ id: 'account-1', label: 'GitHub', host: 'github.com', username: 'alice', tokenLast4: '1234' }],
-      add: () => ({ id: 'account-2', label: 'GitLab', host: 'gitlab.com', username: 'bob', tokenLast4: '5678' }),
-      update: () => undefined,
+      add: async () => ({ id: 'account-2', label: 'GitLab', host: 'gitlab.com', username: 'bob', tokenLast4: '5678' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind,
       unbind,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }),
     })
 
     const listed = await call(view, 'git.account', { operation: 'list', payload: {} }, 'git-list')
@@ -14819,15 +14900,15 @@ describe('first-party Git private bridge', () => {
   it('limits account actions to Git left and window audiences', async () => {
     const { mgr, view } = await openGitView('/workspace', 'git-history')
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(view, 'git.account', {
@@ -14961,15 +15042,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: (workspacePath) => workspacePath === resolve('/workspace')
+      getCredential: async (workspacePath) => workspacePath === resolve('/workspace')
         ? { username: 'alice', token: 'secret-token', expectedHost: 'github.com' }
         : null,
     })
@@ -15077,12 +15158,12 @@ describe('first-party Git private bridge', () => {
     mgr.setBackendWsUrl('ws://git-credential-required-test')
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
-    const getCredential = vi.fn(() => null)
+    const getCredential = vi.fn(async () => null)
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
@@ -15117,16 +15198,18 @@ describe('first-party Git private bridge', () => {
 
   it('releases an interactive credential owner when the backend is unavailable', async () => {
     const { mgr, view } = await openGitView()
+    mgr.setBackendWsUrl('ws://git-stopped-backend-test')
+    mgr.setBackendWsUrl(null)
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(view, 'git.request', {
@@ -15155,15 +15238,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     first.mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => null,
-      getCredential: () => null,
+      getCredential: async () => null,
     })
 
     await expect(call(first.view, 'git.request', {
@@ -15981,15 +16064,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
 
     await expect(call(view, 'git.request', {
@@ -16059,15 +16142,15 @@ describe('first-party Git private bridge', () => {
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,
       getBinding: () => 'account-1',
-      getCredential: () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
+      getCredential: async () => ({ username: 'alice', token: 'fixture-secret', expectedHost: 'github.com' }),
     })
 
     const picked = await call(view, 'git.contribution', { operation: 'pick_workspace', payload: {} }, 'window-clone-pick')
@@ -16132,12 +16215,12 @@ describe('first-party Git private bridge', () => {
     mgr.setBackendWsUrl('ws://git-issues-test')
     const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
     socket.open()
-    const getCredential = vi.fn(() => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }))
+    const getCredential = vi.fn(async () => ({ username: 'alice', token: 'secret-token', expectedHost: 'github.com' }))
     mgr.setGitAccountHandlers({
-      available: () => true,
+      available: async () => true,
       list: () => [],
-      add: () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
-      update: () => undefined,
+      add: async () => ({ id: 'unused', label: 'unused', host: 'github.com', username: 'unused', tokenLast4: '0000' }),
+      update: async () => undefined,
       remove: () => undefined,
       bind: () => undefined,
       unbind: () => undefined,

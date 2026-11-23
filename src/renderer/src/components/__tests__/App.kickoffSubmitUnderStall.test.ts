@@ -15,6 +15,7 @@ import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import * as injectEcho from '../../lib/injectEcho'
+import * as injectChunkSend from '../../lib/injectChunkSend'
 import * as submitTurnConfirm from '../../lib/submitTurnConfirm'
 import * as submitStall from '../../lib/submitStall'
 import { awaitTurnAfterFailure, busyLines, newBusyLine, SUBMIT_STALL_GRACE_MS } from '../../lib/submitStall'
@@ -98,7 +99,7 @@ async function run(events: Event[], opts: { aboveBefore?: string[] } = {}) {
     awaitingKind: null,
   }
   const { injectText } = await loadInjectText({
-    ...injectEcho, ...submitTurnConfirm, ...submitStall,
+    ...injectEcho, ...submitTurnConfirm, ...submitStall, ...injectChunkSend,
     backend,
     paneRefs: { p1: ref },
     panes: { value: [{ id: 'p1', agentKey: 'claude' }] },

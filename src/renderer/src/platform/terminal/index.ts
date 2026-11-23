@@ -87,6 +87,7 @@ export type {
   DockAgentMessage,
   DockPaneRegistration,
   TerminalCreateRequest,
+  TerminalRemoteTarget,
   TerminalCreateResult,
   TerminalDockPort,
   TerminalExitEvent,

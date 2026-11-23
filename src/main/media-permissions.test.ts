@@ -18,6 +18,11 @@ describe('media permission decisions', () => {
     expect(decideMediaPermission({ mediaTypes: ['video'], fromMainRenderer: true })).toBe(false)
     expect(decideMediaPermission({ mediaTypes: ['audio', 'video'], fromMainRenderer: true })).toBe(false)
   })
+
+  it('display-capture (Electron 45+ screen capture) keeps the old media rule: main renderer only', () => {
+    expect(decidePermission('display-capture', () => ({ mediaTypes: [], fromMainRenderer: true }))).toBe(true)
+    expect(decidePermission('display-capture', () => ({ mediaTypes: [], fromMainRenderer: false }))).toBe(false)
+  })
 })
 
 describe('installMediaPermissionHandlers', () => {
@@ -45,6 +50,8 @@ describe('installMediaPermissionHandlers', () => {
     expect(ask(7, 'media', { mediaTypes: ['audio'] })).toBe(false)
     expect(ask(1, 'media', { mediaTypes: ['video'] })).toBe(false)
     expect(ask(7, 'notifications', {})).toBe(true)
+    expect(ask(1, 'display-capture', {})).toBe(true)
+    expect(ask(7, 'display-capture', {})).toBe(false)
   })
 
   it('check handler: same rule, other permissions untouched', () => {
@@ -53,5 +60,6 @@ describe('installMediaPermissionHandlers', () => {
     expect(probe(1, 'media', { mediaType: 'video' })).toBe(false)
     expect(probe(null, 'media', { mediaType: 'audio' })).toBe(false)
     expect(probe(null, 'clipboard-read', {})).toBe(true)
+    expect(probe(null, 'display-capture', {})).toBe(false)
   })
 })

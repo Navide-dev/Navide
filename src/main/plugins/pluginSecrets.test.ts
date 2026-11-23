@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -21,16 +21,18 @@ import {
   validateSecretsRequest,
   type PluginSecretsCrypto,
 } from './pluginSecrets'
+import { safeStorageCrypto } from '../safeStorageCrypto'
+import { fakeSafeStorage, legacyCiphertext } from '../safeStorageCrypto.fake'
 
 // Test values are built at run time, never written out as literals.
 const fakeSecret = (label: string): string => ['sk', 'test', label, String(process.pid)].join('-')
 
 /** Reversible stand-in for safeStorage: the stored text never contains the plain value. */
-function fakeCrypto(available = true): PluginSecretsCrypto & { available: boolean } {
+function fakeCrypto(available = true): PluginSecretsCrypto {
   return {
-    available,
-    encrypt: (plain) => `enc:${Buffer.from([...plain].reverse().join(''), 'utf8').toString('base64')}`,
-    decrypt: (enc) => {
+    available: async () => available,
+    encrypt: async (plain) => `enc:${Buffer.from([...plain].reverse().join(''), 'utf8').toString('base64')}`,
+    decrypt: async (enc) => {
       if (!enc.startsWith('enc:')) throw new Error('not ciphertext')
       return [...Buffer.from(enc.slice(4), 'base64').toString('utf8')].reverse().join('')
     },
@@ -50,10 +52,10 @@ afterEach(() => {
 })
 
 describe('plugin secret store', () => {
-  it('writes only ciphertext, owner-only, and reads the value back', () => {
+  it('writes only ciphertext, owner-only, and reads the value back', async () => {
     const { store: secrets, root } = store()
     const value = fakeSecret('a')
-    expect(secrets.set('acme.tokens', 'API_KEY', value)).toEqual({ ok: true })
+    expect(await secrets.set('acme.tokens', 'API_KEY', value)).toEqual({ ok: true })
     const file = join(root, 'acme.tokens.json')
     const text = readFileSync(file, 'utf8')
     expect(text).not.toContain(value)
@@ -63,80 +65,80 @@ describe('plugin secret store', () => {
       expect(statSync(root).mode & 0o777).toBe(0o700)
     }
     expect(readdirSync(root)).toEqual(['acme.tokens.json'])
-    expect(secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
-    expect(secrets.get('acme.tokens', 'OTHER')).toEqual({ present: false })
+    expect(await secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
+    expect(await secrets.get('acme.tokens', 'OTHER')).toEqual({ present: false })
   })
 
-  it('keeps every plugin in its own namespace', () => {
+  it('keeps every plugin in its own namespace', async () => {
     const { store: secrets } = store()
     const value = fakeSecret('b')
-    secrets.set('acme.tokens', 'API_KEY', value)
-    expect(secrets.get('other.plugin', 'API_KEY')).toEqual({ present: false })
+    await secrets.set('acme.tokens', 'API_KEY', value)
+    expect(await secrets.get('other.plugin', 'API_KEY')).toEqual({ present: false })
     expect(secrets.list('other.plugin')).toEqual({ names: [] })
-    secrets.set('other.plugin', 'API_KEY', fakeSecret('c'))
-    expect(secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
+    await secrets.set('other.plugin', 'API_KEY', fakeSecret('c'))
+    expect(await secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
     secrets.clear('other.plugin')
-    expect(secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
+    expect(await secrets.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
   })
 
-  it('keys the file by plugin id only, so another version of the package reads the same secrets', () => {
+  it('keys the file by plugin id only, so another version of the package reads the same secrets', async () => {
     const crypto = fakeCrypto()
     const { store: first, root } = store(crypto)
     const value = fakeSecret('d')
-    first.set('acme.tokens', 'API_KEY', value)
+    await first.set('acme.tokens', 'API_KEY', value)
     const restarted = new PluginSecretStore(root, crypto)
-    expect(restarted.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
+    expect(await restarted.get('acme.tokens', 'API_KEY')).toEqual({ present: true, value })
   })
 
-  it('refuses instead of writing plain text when secure storage is unavailable', () => {
+  it('refuses instead of writing plain text when secure storage is unavailable', async () => {
     const crypto = fakeCrypto(false)
     const { store: secrets, root } = store(crypto)
     const unavailable = { ok: false, code: 'SECRETS_UNAVAILABLE' }
-    expect(secrets.set('acme.tokens', 'API_KEY', fakeSecret('e'))).toEqual(unavailable)
-    expect(secrets.get('acme.tokens', 'API_KEY')).toEqual(unavailable)
+    expect(await secrets.set('acme.tokens', 'API_KEY', fakeSecret('e'))).toEqual(unavailable)
+    expect(await secrets.get('acme.tokens', 'API_KEY')).toEqual(unavailable)
     expect(() => readdirSync(root)).toThrow()
-    expect(secrets.values('acme.tokens')).toEqual([])
+    expect(await secrets.values('acme.tokens')).toEqual([])
   })
 
-  it('answers unavailable for a value that no longer decrypts', () => {
+  it('answers unavailable for a value that no longer decrypts', async () => {
     const crypto = fakeCrypto()
     const { store: secrets } = store(crypto)
-    secrets.set('acme.tokens', 'API_KEY', fakeSecret('f'))
-    crypto.decrypt = () => { throw new Error('keychain changed') }
-    expect(secrets.get('acme.tokens', 'API_KEY')).toEqual({ ok: false, code: 'SECRETS_UNAVAILABLE' })
+    await secrets.set('acme.tokens', 'API_KEY', fakeSecret('f'))
+    crypto.decrypt = async () => { throw new Error('keychain changed') }
+    expect(await secrets.get('acme.tokens', 'API_KEY')).toEqual({ ok: false, code: 'SECRETS_UNAVAILABLE' })
   })
 
-  it('lists names only, never values', () => {
+  it('lists names only, never values', async () => {
     const { store: secrets } = store()
     const value = fakeSecret('g')
-    secrets.set('acme.tokens', 'b_key', value)
-    secrets.set('acme.tokens', 'a_key', value)
+    await secrets.set('acme.tokens', 'b_key', value)
+    await secrets.set('acme.tokens', 'a_key', value)
     const listed = secrets.list('acme.tokens')
     expect(listed).toEqual({ names: ['a_key', 'b_key'] })
     expect(JSON.stringify(listed)).not.toContain(value)
   })
 
-  it('deletes one name, and the file when none is left', () => {
+  it('deletes one name, and the file when none is left', async () => {
     const { store: secrets, root } = store()
-    secrets.set('acme.tokens', 'API_KEY', fakeSecret('h'))
+    await secrets.set('acme.tokens', 'API_KEY', fakeSecret('h'))
     expect(secrets.delete('acme.tokens', 'MISSING')).toEqual({ ok: true })
     expect(secrets.delete('acme.tokens', 'API_KEY')).toEqual({ ok: true })
     expect(readdirSync(root)).toEqual([])
     expect(secrets.count('acme.tokens')).toBe(0)
   })
 
-  it('limits value size and count', () => {
+  it('limits value size and count', async () => {
     const { store: secrets } = store()
-    expect(() => secrets.set('acme.tokens', 'BIG', 'x'.repeat(MAX_SECRET_VALUE_BYTES + 1))).toThrow(PluginSecretsLimitError)
-    for (let index = 0; index < MAX_SECRETS_PER_PLUGIN; index++) secrets.set('acme.tokens', `K${index}`, fakeSecret(String(index)))
-    expect(() => secrets.set('acme.tokens', 'ONE_MORE', fakeSecret('i'))).toThrow(PluginSecretsLimitError)
+    await expect(secrets.set('acme.tokens', 'BIG', 'x'.repeat(MAX_SECRET_VALUE_BYTES + 1))).rejects.toThrow(PluginSecretsLimitError)
+    for (let index = 0; index < MAX_SECRETS_PER_PLUGIN; index++) await secrets.set('acme.tokens', `K${index}`, fakeSecret(String(index)))
+    await expect(secrets.set('acme.tokens', 'ONE_MORE', fakeSecret('i'))).rejects.toThrow(PluginSecretsLimitError)
     // Replacing an existing name is not a new secret.
-    expect(secrets.set('acme.tokens', 'K0', fakeSecret('j'))).toEqual({ ok: true })
+    expect(await secrets.set('acme.tokens', 'K0', fakeSecret('j'))).toEqual({ ok: true })
   })
 
-  it('never resolves a plugin id to a path outside its directory', () => {
+  it('never resolves a plugin id to a path outside its directory', async () => {
     const { store: secrets } = store()
-    expect(() => secrets.set('../escape', 'API_KEY', fakeSecret('k'))).toThrow(/invalid plugin id/)
+    await expect(secrets.set('../escape', 'API_KEY', fakeSecret('k'))).rejects.toThrow(/invalid plugin id/)
     expect(() => secrets.list('acme/../../x')).toThrow(/invalid plugin id/)
   })
 })
@@ -164,7 +166,7 @@ describe('secrets request validation', () => {
     expect(validateSecretsRequest(address, args)).toBe(false)
   })
 
-  it('validates Bridge operations by name', () => {
+  it('validates Bridge operations by name', async () => {
     expect(validateSecretsOperation('get', { name: 'API_KEY' })).toBe(true)
     expect(validateSecretsOperation('dump', {})).toBe(false)
   })
@@ -186,7 +188,7 @@ describe('secrets catalog, disclosure and policy', () => {
   const snapshot = (mode: 'full' | 'allowlist' | 'denylist', system: string[]) =>
     ({ policy: { schemaVersion: 1, mode, system, shell: [] }, revision: 1, state: 'user' }) as never
 
-  it('lists four plugin-scoped public methods, since API 1.3.0, in both catalogs', () => {
+  it('lists four plugin-scoped public methods, since API 1.3.0, in both catalogs', async () => {
     expect(SECRETS_METHODS).toEqual(['secrets.set', 'secrets.get', 'secrets.delete', 'secrets.list'])
     const json = capabilitiesV1 as { methods: Array<{ address: string; since: string; permission: unknown }> }
     for (const address of SECRETS_METHODS) {
@@ -199,7 +201,7 @@ describe('secrets catalog, disclosure and policy', () => {
     }
   })
 
-  it('needs the declaration and the user grant, without a workspace', () => {
+  it('needs the declaration and the user grant, without a workspace', async () => {
     const policy = manifestV2CapabilityPolicy({ system: ['secrets'] })
     expect(planPublicCapabilityCall(call('secrets.get', { name: 'API_KEY' }), policy, context(['secrets'], {
       runtimeBinding: { ...binding, workspaceId: null },
@@ -212,7 +214,7 @@ describe('secrets catalog, disclosure and policy', () => {
       .toMatchObject({ kind: 'deny', response: { error: { code: 'INVALID_ARGUMENT' } } })
   })
 
-  it('never gives an agent secrets by omission, and the Host default names them', () => {
+  it('never gives an agent secrets by omission, and the Host default names them', async () => {
     expect(executionPolicyAllows(agent, snapshot('denylist', []), 'secrets')).toBe(false)
     expect(executionPolicyAllows(agent, snapshot('allowlist', ['fs']), 'secrets')).toBe(false)
     expect(executionPolicyAllows(agent, snapshot('allowlist', ['secrets']), 'secrets')).toBe(true)
@@ -220,7 +222,7 @@ describe('secrets catalog, disclosure and policy', () => {
     expect(HOST_DEFAULT_EXECUTION_POLICY.system).toContain('secrets')
   })
 
-  it('discloses secrets as high risk and asks the second confirmation', () => {
+  it('discloses secrets as high risk and asks the second confirmation', async () => {
     const disclosure = computeDisclosure({
       schemaVersion: 2, id: 'acme.tokens', permissions: { system: ['secrets'] },
     } as unknown as DisclosureManifestInput)
@@ -230,7 +232,7 @@ describe('secrets catalog, disclosure and policy', () => {
     expect(SENSITIVE_CAPABILITIES).toContain('secrets')
   })
 
-  it('accepts secrets in a manifest', () => {
+  it('accepts secrets in a manifest', async () => {
     const manifest = parseManifestV2({
       schemaVersion: 2, apiVersion: '^1.3.0', id: 'acme.tokens', name: 'Tokens', version: '1.0.0', publisher: 'acme',
       permissions: { system: ['fs', 'ui', 'aiCli', 'web', 'agents', 'agentMessages', 'secrets'] },
@@ -240,7 +242,7 @@ describe('secrets catalog, disclosure and policy', () => {
     expect(manifest.permissions.system).toContain('secrets')
   })
 
-  it('records only the address in Activity, never the name or value', () => {
+  it('records only the address in Activity, never the name or value', async () => {
     const value = fakeSecret('l')
     const row = activityRowFor({
       pluginId: binding.pluginId,
@@ -256,7 +258,7 @@ describe('secrets catalog, disclosure and policy', () => {
 })
 
 describe('agent tool result redaction', () => {
-  it('removes the plugin secret from results and error text, keeping the JSON shape', () => {
+  it('removes the plugin secret from results and error text, keeping the JSON shape', async () => {
     const value = fakeSecret('m')
     const response = {
       ok: true,
@@ -270,13 +272,13 @@ describe('agent tool result redaction', () => {
     expect(redactSecretValues({ ok: false, error: `failed with ${value}` }, [value]).error).not.toContain(value)
   })
 
-  it('returns the same object when nothing matches', () => {
+  it('returns the same object when nothing matches', async () => {
     const response = { ok: true, result: { a: '1,2' } }
     expect(redactSecretValues(response, [fakeSecret('n')])).toBe(response)
     expect(redactSecretValues(response, [])).toBe(response)
   })
 
-  it('cannot break the JSON structure with a value that looks like syntax', () => {
+  it('cannot break the JSON structure with a value that looks like syntax', async () => {
     const response = { ok: true, result: [1, 2, { a: '{"x":1}' }] }
     expect(redactSecretValues(response, ['1,2', '{', '"'])).toEqual({ ok: true, result: [1, 2, { a: '[secret redacted][secret redacted]x[secret redacted]:1}' }] })
   })
@@ -285,7 +287,7 @@ describe('agent tool result redaction', () => {
 describe('secrets bound to the package trust identity', () => {
   const mismatch = { ok: false, code: 'SECRETS_IDENTITY_MISMATCH' }
 
-  it('maps installed sources to identities, a developer folder and a local file to their own', () => {
+  it('maps installed sources to identities, a developer folder and a local file to their own', async () => {
     expect(secretsIdentity('marketplace')).toBe('registry')
     expect(secretsIdentity('prerelease')).toBe('registry')
     expect(secretsIdentity('testplace')).toBe('registry')
@@ -295,7 +297,7 @@ describe('secrets bound to the package trust identity', () => {
     expect(secretsIdentity(undefined)).toBeNull()
   })
 
-  it('never hands an unsigned local file or a developer folder another package\'s secrets (MED-4)', () => {
+  it('never hands an unsigned local file or a developer folder another package\'s secrets (MED-4)', async () => {
     const digestA = 'a'.repeat(64)
     const digestB = 'b'.repeat(64)
     expect(secretsIdentity('local-unsigned', { contentDigest: digestA })).toBe(`local-unsigned:${digestA}`)
@@ -311,25 +313,25 @@ describe('secrets bound to the package trust identity', () => {
 
     const { store: secrets } = store()
     const value = fakeSecret('med4')
-    secrets.run('acme.tokens', `local-unsigned:${digestA}`, 'set', { name: 'API_KEY', value })
-    const other = secrets.run('acme.tokens', `local-unsigned:${digestB}`, 'get', { name: 'API_KEY' })
+    await secrets.run('acme.tokens', `local-unsigned:${digestA}`, 'set', { name: 'API_KEY', value })
+    const other = await secrets.run('acme.tokens', `local-unsigned:${digestB}`, 'get', { name: 'API_KEY' })
     expect(other).toEqual(mismatch)
     expect(JSON.stringify(other)).not.toContain(value)
   })
 
-  it('binds on the first write and keeps serving the same identity (an upgrade or rollback)', () => {
+  it('binds on the first write and keeps serving the same identity (an upgrade or rollback)', async () => {
     const { store: secrets, root } = store()
     const value = fakeSecret('id-a')
-    expect(secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })).toEqual({ ok: true })
+    expect(await secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })).toEqual({ ok: true })
     expect(JSON.parse(readFileSync(join(root, 'acme.tokens.json'), 'utf8')).identity).toBe('registry')
-    expect(secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
+    expect(await secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
   })
 
-  it('refuses every operation for another identity, and neither reads, writes nor deletes', () => {
+  it('refuses every operation for another identity, and neither reads, writes nor deletes', async () => {
     for (const other of ['developer-unpacked:x', 'local-unsigned:y', 'local-signed:acme:k2']) {
       const { store: secrets, root } = store()
       const value = fakeSecret(`id-${other}`)
-      secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })
+      await secrets.run('acme.tokens', 'registry', 'set', { name: 'API_KEY', value })
       const file = join(root, 'acme.tokens.json')
       const before = readFileSync(file, 'utf8')
       const onMismatch = vi.fn()
@@ -337,7 +339,7 @@ describe('secrets bound to the package trust identity', () => {
         ['get', { name: 'API_KEY' }], ['set', { name: 'API_KEY', value: fakeSecret('new') }],
         ['delete', { name: 'API_KEY' }], ['list', {}],
       ] as const) {
-        const answer = secrets.run('acme.tokens', other, operation, args, onMismatch)
+        const answer = await secrets.run('acme.tokens', other, operation, args, onMismatch)
         expect(answer).toEqual(mismatch)
         expect(JSON.stringify(answer)).not.toContain(value)
       }
@@ -350,13 +352,41 @@ describe('secrets bound to the package trust identity', () => {
     }
   })
 
-  it('refuses when the Host cannot tell the identity, and binds a file written before identities', () => {
+  it('refuses when the Host cannot tell the identity, and binds a file written before identities', async () => {
     const { store: secrets } = store()
-    expect(secrets.run('acme.tokens', null, 'list', {})).toEqual({ ok: false, code: 'SECRETS_UNAVAILABLE' })
+    expect(await secrets.run('acme.tokens', null, 'list', {})).toEqual({ ok: false, code: 'SECRETS_UNAVAILABLE' })
     const value = fakeSecret('legacy')
-    secrets.set('acme.tokens', 'API_KEY', value)
-    expect(secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
-    secrets.run('acme.tokens', 'registry', 'set', { name: 'OTHER', value })
-    expect(secrets.run('acme.tokens', 'developer-unpacked', 'list', {})).toEqual(mismatch)
+    await secrets.set('acme.tokens', 'API_KEY', value)
+    expect(await secrets.run('acme.tokens', 'registry', 'get', { name: 'API_KEY' })).toEqual({ present: true, value })
+    await secrets.run('acme.tokens', 'registry', 'set', { name: 'OTHER', value })
+    expect(await secrets.run('acme.tokens', 'developer-unpacked', 'list', {})).toEqual(mismatch)
+  })
+})
+
+describe('PluginSecretStore upgrade from the synchronous safeStorage API', () => {
+  it('reads a secret an earlier build wrote with encryptString, without rewriting the file', async () => {
+    const fake = fakeSafeStorage()
+    const value = fakeSecret('legacy')
+    const parent = mkdtempSync(join(tmpdir(), 'navide-plugin-secrets-upgrade-'))
+    roots.push(parent)
+    const root = join(parent, 'plugin-secrets')
+    mkdirSync(root, { recursive: true })
+    const file = join(root, 'com.example.secrets.json')
+    const onDisk = JSON.stringify({ schemaVersion: 1, identity: 'registry', secrets: { API_KEY: legacyCiphertext(fake, value) } })
+    writeFileSync(file, onDisk)
+
+    const secrets = new PluginSecretStore(root, safeStorageCrypto(fake))
+    await expect(secrets.run('com.example.secrets', 'registry', 'get', { name: 'API_KEY' })).resolves.toEqual({ present: true, value })
+    await expect(secrets.values('com.example.secrets')).resolves.toEqual([value])
+    expect(readFileSync(file, 'utf8')).toBe(onDisk)
+  })
+
+  it('stores a new value in the format an earlier build wrote', async () => {
+    const fake = fakeSafeStorage()
+    const value = fakeSecret('new')
+    const { store: secrets, root } = store(safeStorageCrypto(fake))
+    await secrets.run('com.example.secrets', 'registry', 'set', { name: 'API_KEY', value })
+    const written = JSON.parse(readFileSync(join(root, 'com.example.secrets.json'), 'utf8')).secrets.API_KEY
+    expect(written).toBe(legacyCiphertext(fake, value))
   })
 })

@@ -94,6 +94,9 @@ class InboundMessage:
     reply_to_self: bool = False
     # Files the message carries; the manager downloads them only for an allowed sender.
     attachments: list[InboundAttachment] = field(default_factory=list)
+    # A message of a kind Navide cannot hand to a pane (a poll, a dice roll, ...): its kind,
+    # for the chat to be told so; "" for everything else. It carries no text.
+    unsupported_kind: str = ""
     # The channel_inbound rows this message stands for (several once debounced lines join);
     # set by the manager, deleted when the message is settled.
     inbound_ids: tuple[int, ...] = ()

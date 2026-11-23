@@ -93,6 +93,14 @@ status changes only Registry trust and marketplace classification; it does not
 grant access to private Host modules or force an official package to be
 installed. The base App must remain usable with an empty plugin catalog.
 
+The `@navide/plugin-ui/shared/testing` subpath (0.2.45) is for tests only:
+`__resetSettingsForTest`, `_resetRegistry` and `_resetKeybindingsState` put
+the shared settings, command registry and keybinding state back between test
+cases. It is built as its own entry that shares its modules with
+`@navide/plugin-ui/shared`, so it resets the very state a plugin's code uses;
+a plugin's production code never imports it. It is part of the 1.x surface
+like every other subpath.
+
 The `@navide/plugin-ui/editor` subpath provides the shared text editor and a
 typed consumer-injected `EditorPort`. It does not expose Host transports,
 diagnostics stores, window state, or filesystem authority. See
@@ -136,6 +144,72 @@ the 1.x line Navide commits to:
 The static scan, the Registry's manifest validation and the Host's disclosure
 contract are versioned with the packages, so a manifest that `navide-plugin
 validate` accepts at 1.x is accepted by the Registry of the same 1.x line.
+
+### Publishing the public packages to npm
+
+The three packages are not on npm until the user publishes them; nothing in
+the repository holds an npm token. Two paths exist, and both start from the
+same checks:
+
+- `scripts/publish-public-packages.sh` (dry run by default) builds the
+  packages, packs them into `dist/npm/`, writes each tarball's file list next
+  to it as `<tarball>.files.txt`, and refuses a tarball that holds a `src/`
+  tree, a test, snapshot or fixture file (`*.test.*`, `__tests__/`,
+  `__snapshots__/`, `test-fixtures/`), a private file (`.env*`, `*.pem`,
+  `*.key`, `.npmrc`) or a `workspace:`/`link:` specifier. The packages
+  themselves declare plain SemVer ranges (`^1.x` peers), so `npm pack` ships
+  their manifests unchanged; only the private repository root uses `link:`.
+- `node scripts/verify-public-packages-external.mjs` is the acceptance check:
+  it copies `examples/third-party-files/` to a temporary directory outside the
+  repository, installs it with plain npm — the three Navide packages from the
+  tarballs in `dist/npm/`, everything else from the registry — and runs
+  `typecheck`, `build`, `check` (`navide-plugin validate`) and `package`. With
+  `--registry` it installs the published versions instead, to confirm a
+  publication.
+
+**Local publication** (the first release, and the fallback): after
+`npm login`, `scripts/publish-public-packages.sh --publish`. The manifests set
+`publishConfig.provenance`, which only a supported CI runner can satisfy, so
+the local path passes `--provenance=false`.
+
+**Provenance publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-public-packages.yml` publishes through npm
+trusted publishing (OIDC, `id-token: write`) with `--provenance`, triggered by
+a tag `plugin-packages-v<version>` and gated by a `npm-publish` environment
+with required reviewers. It holds no npm token and reads no repository secret.
+To enable it, move it to `.github/workflows/publish-public-packages.yml` and
+register that file name as each package's trusted publisher on npmjs.com.
+
+### Publishing the Python plugin SDK to PyPI
+
+`navide_plugin_sdk`, the Python surface a plugin backend imports (the path
+guard, the staged write path and plan versions; standard library only), is
+published as `navide-plugin-sdk` at its `API_VERSION`, which shares its major
+with the npm packages. It is not on PyPI until the user publishes it. The
+sources stay in `backend/navide_plugin_sdk`; `packages/plugin-sdk-python/`
+holds only the publication metadata (`pyproject.toml`, `README.md`).
+
+- `scripts/publish-python-plugin-sdk.sh` (dry run by default) stages the
+  metadata, the repository `LICENSE` and the SDK's git-tracked sources in a
+  temporary directory, builds the sdist and the wheel into `dist/pypi/`,
+  writes each archive's file list next to it, and refuses a version other
+  than `API_VERSION`, an archive holding anything beyond the SDK sources and
+  their metadata (tests, caches, fixtures or private files), and a wheel that
+  declares a dependency.
+- [navide-plans](https://github.com/Navide-dev/navide-plans) builds its
+  backend in its own uv environment, locked to that wheel as attached to the
+  `plugin-packages-1.0.0` GitHub Release.
+
+**Local publication** (the first release): `scripts/publish-python-plugin-sdk.sh
+--publish`, which runs `uv publish` with the user's own PyPI credential.
+
+**Trusted publication** (later releases): the inactive draft
+`.github/workflow-drafts/publish-python-plugin-sdk.yml` publishes through PyPI
+trusted publishing (OIDC, `id-token: write`) on a tag
+`python-plugin-sdk-v<version>`, gated by a `pypi-publish` environment with
+required reviewers. It holds no PyPI token and reads no repository secret. To
+enable it, move it to `.github/workflows/publish-python-plugin-sdk.yml` and
+register that file name as the project's trusted publisher on pypi.org.
 
 ## Recommended source project
 
@@ -2730,18 +2804,59 @@ is left on disk with its lifecycle record untouched and is reconsidered on the
 next start, so a later App that bundles an older version hands the id back to
 it.
 
+The bundled copy is the installer's fallback, not the version Navide keeps
+running (0.2.45). After the trust refresh at launch and every 15 minutes, the
+Host looks up each first-party plugin that runs from its bundled copy (not
+disabled, nothing staged, no install in progress) on the configured
+Marketplace, only when that is the Official Registry, and only for stable
+versions newer than the bundled one. A newer version is downloaded and
+verified exactly as a user's install is (digest, package signature,
+root-signed trust metadata, disclosure signature, `engines.navide`) and must
+be an official package. When it discloses exactly what the bundled copy does
+(no permission, backend, agent tool or network item added or removed, the
+same risk level, the same views), it is staged without asking: the user
+accepted that disclosure with the App, the same rule an agent's unchanged
+update follows. The running bundled copy is never replaced mid-session; the
+next launch switches to the staged version as Restart would, and keeps loading
+it from then on. A version that discloses anything else is not installed; it
+appears as an ordinary update (`permissionChange: "more"`) for the user to
+review and approve. Offline, a Registry error, a 15-second timeout or any
+verification failure writes nothing, and the bundled copy keeps serving, so a
+first launch without a network works as before. Removing a bundled plugin
+(the opt-out) still leaves the id alone.
+
 Because the installed copy wins a tie, content must never change under a
-released version. `plugins/official-plugin-fingerprints.json` is the release
-baseline: each plugin's version and a fingerprint of the tracked sources its
-package is built from (its directory, the `packages/plugin-*` workspace packages
-and, for Plans, the core modules its backend bundles; tests and Markdown
-excluded) as of the last App release tag. When a plugin's content differs from
-that baseline, its version must be higher than the baseline version: bump it
-once in the plugin's `manifest.json`, its `package.json` and
-`officialPluginVersions.ts`, and later changes in the same release cycle need
-no further bump. A version below the baseline is always refused.
-`tests/infrastructure/officialPluginFingerprints.test.ts` checks this on every
-PR; only `release.sh` rewrites the baseline (see `RELEASING.md`).
+released version. The first-party plugins are built in their own
+repositories and the App bundles the version `officialPluginVersions.ts`
+pins, as the official Registry signed it; the Registry refuses to publish a
+version twice, so a released version's content cannot change.
+
+navide.git reaches its Git operations over a first-party bridge, not a
+public capability: the Host maps the `git.*` requests in
+`src/shared/gitBridgeContract.json` (78 requests and 3 events, version 1.0.0)
+for that package alone, and there is no public `git` namespace. The plugin
+keeps a copy of the contract it is built against (in
+[Navide-dev/navide-git](https://github.com/Navide-dev/navide-git),
+`src/git-feature/gitBridgeContract.json`, `GIT_BRIDGE_VERSION`); both sides
+test their copy against a frozen digest, the Host additionally against its
+capability map and backend handlers, and the Host serves a plugin built
+against the same major and a lower or equal minor.patch. Adding a message is a minor
+contract version and removing or renaming one a major, released in the Host
+before a Git version that needs it (raising Git's `engines.navide`). See
+`RELEASING.md` ("Releasing navide.git on its own").
+
+UI strings are split the same way. `@navide/plugin-ui` ships only the strings
+its own components use (`packages/plugin-ui/src/foundation/i18n/locales`), and
+its `enUSMessages`, `zhTWMessages` and `jaJPMessages` exports are those
+catalogs alone. The Host merges its own strings into the shared `i18n`
+instance from `src/renderer/src/i18n/locales`, and each first-party plugin
+merges its own from `plugins/<dir>/src/locales` before it mounts (Git and
+Mini-IDE in `gitMessages.ts` and `miniIdeMessages.ts`, Plans and Browser in
+`plansI18n.ts` and `browserI18n.ts`). A string the Host and a plugin both
+show stays in plugin-ui. `tests/infrastructure/i18nOwnership.test.ts` fails
+when code references a string its own catalogs do not ship.
+
+Each first-party plugin runs its own tests in its own repository.
 
 ### First-party production Plans package
 
@@ -2750,7 +2865,13 @@ consumes the shared agent Execution Policy. One active Manifest v2 package
 version supplies both custom Plans contributions (`left` and `window`) and the
 self-contained Backend Wire executable. The package imports only the public SDK
 and UI packages; the Host selects its exact package/version, grant, workspace
-binding, backend methods, events, and private Bridge ports.
+binding, backend methods, events, and private Bridge ports. Its backend bundles
+the Python plugin SDK, `backend/navide_plugin_sdk`, which holds the path
+guard, write path, Git-internal path check and plan versions itself
+(`path_guard.py`, `fs_write.py`, `git_security.py`, `plan_versions.py`,
+standard library only) and imports nothing of `agent_team_backend`; the core
+backend imports the same modules under their old `agent_team_backend` names,
+which resolve to these.
 
 MCP integration uses the core backend architecture. The core owns the single server and endpoint, authentication, caller
 identity, tool registration lifecycle, and authenticated Host handoff. The
@@ -2817,16 +2938,19 @@ They must not introduce an IDE-specific policy, permission, or Initiator model.
 
 #### Checking that a worktree Plans build is the one loaded
 
-Rebuilding `dist-plugins/navide-plans` does not prove that a running app loaded
-it. A verified installed copy of the same or a newer version is used instead of
-the factory bundle (see the version rule above), so a profile that has ever
-installed Plans can keep running an older build. Do not remove or overwrite an
-installed package to diagnose this. Start a fresh named development profile
-with its own state instead, and read what the Host selected before trusting any
-manual check.
+navide.plans is built in
+[Navide-dev/navide-plans](https://github.com/Navide-dev/navide-plans); the App
+build stages the version `src/main/plugins/officialPluginVersions.ts` pins,
+downloaded and verified from the official Registry. Staging that version does
+not prove that a running app loaded it. A verified installed copy of the same
+or a newer version is used instead of the factory bundle (see the version rule
+above), so a profile that has ever installed Plans can keep running an older
+build. Do not remove or overwrite an installed package to diagnose this. Start
+a fresh named development profile with its own state instead, and read what
+the Host selected before trusting any manual check.
 
 ```sh
-pnpm run build:plans
+pnpm run build:official-plugins
 AGENT_TEAM_PLUGIN_DEV=1 \
 NAVIDE_PLANS_DEV_PROFILE=plans-check \
 AGENT_TEAM_DATA_DIR="$(mktemp -d)" \
@@ -2844,22 +2968,26 @@ Host then prints a `navide.plans dev provenance` line (to the terminal and
 - `selectionOrigin` and `descriptorSource` are `factory-bundle`. An installed
   package that was originally acquired from a factory bundle still shows
   `installed-catalog`; `acquisitionProvenance` records that separately.
-- `packageDirectory` is this checkout's `dist-plugins/navide-plans`, and
-  `packageVersion` matches its built manifest.
+- `packageDirectory` is this checkout's staged
+  `dist-plugins/official-artifacts/factory-resources/navide.plans/<pinned>/<platform>-<arch>/package`,
+  and `packageVersion` matches its manifest.
 - `frontendEntries["navide.plans.window"]` is the built window entry, and
   `backendExecutable` is the executable inside the same package directory.
 - In the Plans window's developer console, `window.__NAVIDE_PLANS_PROVENANCE__`
   has `packageSource: "factory-bundled"` (the renderer's spelling of the Host's
-  `factory-bundle`), the same `packageVersion`, and a `buildId`. These
-  diagnostics are opt-in; a normal launch does not publish them.
-
-The automated artifact test compares the loaded `buildId` with the one computed
-from the current sources, so it fails on a stale build. It needs the production
-backend that `pnpm run build:plans` produces. No script prints the current
-`buildId` by itself; the test is the supported comparison.
+  `factory-bundle`), the same `packageVersion`, and the `buildId` the staged
+  bundle carries, which this prints. These diagnostics are opt-in; a normal
+  launch does not publish them.
 
 ```sh
-NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 pnpm test:run tests/integration/plansPackagedRoundtrip.test.ts -t 'loads the Host-selected worktree frontend artifact'
+node -e 'const { readdirSync, readFileSync } = require("fs"); const v = /.navide\.plans.: .([^\x27]+)./.exec(readFileSync("src/main/plugins/officialPluginVersions.ts", "utf8"))[1]; const d = `dist-plugins/official-artifacts/factory-resources/navide.plans/${v}/${process.platform}-${process.arch}/package/frontend/assets`; for (const f of readdirSync(d).filter((f) => f.endsWith(".js"))) for (const m of readFileSync(`${d}/${f}`, "utf8").matchAll(/"([0-9a-f]{16})"/g)) console.log(f, m[1])'
+```
+
+The automated artifact tests load the staged package's emitted bundles and its
+packaged backend, never plugin sources. Run them after staging:
+
+```sh
+pnpm test:packaged-plans
 ```
 
 `src/main/plugins/plansProvenance.test.ts` covers the Host's provenance record.
@@ -2884,7 +3012,7 @@ Notes appearing in the toolbar or the overflow, never both; the section Comment
 action with the panel closed and open; IME Enter, plain Enter and Escape, where
 each Escape closes one state only; and switching plans mid-edit without any
 draft or delayed operation leaking into the next plan. The package's
-[v1 test coverage matrix](../../plugins/navide-plans/tests/parity-coverage.md)
+[v1 test coverage matrix](https://github.com/Navide-dev/navide-plans/blob/main/tests/parity-coverage.md)
 lists what each automated test does and does not prove.
 
 ### Independent plugin windows and editor capability adapters
@@ -3454,7 +3582,11 @@ and agent tools; it cannot be removed.
   path is part of its identity, so another path on the same host is not
   official. The Marketplace website (`https://marketplace.navide.dev`) and
   developer console (`https://developers.navide.dev`) serve no API and are not
-  Registry identities.
+  Registry identities. Browser pages are the only thing that moved: the App's
+  developer sign-in and `navide-plugin login` open `/cli/authorize` on the
+  developer console for the Official Registry (exact match), and the
+  Registry redirects the old `/registry` sign-in, developer and publisher pages
+  to the same path there, query kept.
 - Registry envelope signatures identify the Registry signer key ID. Root-signed
   trust metadata records active,
   rotating, expired, and revoked keys. Rotation has a bounded old/new overlap.
@@ -3725,7 +3857,10 @@ window is not the third-party API support policy, which is the one above.
 
 An external frontend plugin follows this workflow:
 
-1. Install the three public packages from their SemVer registry ranges.
+1. Install the three public packages. They are not on npm yet: install the
+   tarballs of the GitHub Release `plugin-packages-1.0.0` (see
+   [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin));
+   once they are published to npm, their SemVer ranges work the same way.
 2. Declare the smallest permissions and run `navide-plugin validate <directory>`.
 3. Run the plugin project's `typecheck` and `build` scripts to create a
    frontend-only staging directory.
@@ -3737,6 +3872,10 @@ An external frontend plugin follows this workflow:
 Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
+[Build for Navide](build-for-navide.md#the-whole-path-at-a-glance) lists the
+whole path from `navide-plugin init` to a reviewed listing, with the Navide
+screen and the MCP tool for each step; Settings → Navide Marketplace →
+Developer shows the same steps in the app.
 
 An agent learns this workflow from the skill that ships with Navide: it calls
 `skills_prepare_install` with the source `navide:plugin-authoring`, and the

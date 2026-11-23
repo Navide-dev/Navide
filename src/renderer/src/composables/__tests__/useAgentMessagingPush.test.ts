@@ -26,6 +26,8 @@ describe('useAgentMessaging — push channels', () => {
   let pushResult: PushOutcome
   let typed: Array<{ paneId: string; text: string }>
   let pushed: Array<{ paneId: string; text: string }>
+  let pushIds: string[]
+  let pushResults: PushOutcome[]
   let reports: Array<{ msgKey: string; ok: boolean; reason: MessageReason | null }>
   let updates: Array<{ uid: string; status?: string }>
   let m: ReturnType<typeof useAgentMessaging>
@@ -42,9 +44,10 @@ describe('useAgentMessaging — push channels', () => {
       const kind = pushablePanes.get(paneId)
       return kind ? { kind } : null
     },
-    pushDeliver: async (paneId, text) => {
+    pushDeliver: async (paneId, text, pushId) => {
       pushed.push({ paneId, text })
-      return pushResult
+      pushIds.push(pushId)
+      return pushResults.shift() ?? pushResult
     },
     reportDelivery: (msgKey, ok, reason) => {
       reports.push({ msgKey, ok, reason })
@@ -63,6 +66,8 @@ describe('useAgentMessaging — push channels', () => {
     pushResult = 'landed'
     typed = []
     pushed = []
+    pushIds = []
+    pushResults = []
     reports = []
     updates = []
     m = useAgentMessaging()
@@ -322,5 +327,61 @@ describe('useAgentMessaging — push channels', () => {
     await flush()
     const mine = updates.filter((u) => u.uid === sent.uid).map((u) => u.status)
     expect(mine).toEqual(['delivering', 'queued'])
+  })
+
+  describe('a push whose answer was lost', () => {
+    // The backend runs a push to its end and keeps its outcome under the
+    // push id for 120 s; a lost answer says nothing about whether the CLI
+    // took the text. Typing it in, or pushing under a fresh id, could deliver
+    // it twice.
+
+    it('is asked about again under the same push id, never typed', async () => {
+      pushablePanes.set('p2', 'tui-http')
+      pushResults = ['lost', 'landed']
+      const sent = m.sendMessage('sender', 'target', 'hello')
+      m.pump()
+      await flush()
+      const row = m.messages.value.find((x) => x.id === sent.id)!
+      expect(row.status).toBe('queued')
+      expect(typed).toEqual([])
+
+      // The channel has since closed (cooldown, a gate): still asked, not typed.
+      pushablePanes.delete('p2')
+      clock += 30_000
+      m.pump()
+      await flush()
+      expect(pushIds).toHaveLength(2)
+      expect(pushIds[1]).toBe(pushIds[0])
+      expect(typed).toEqual([])
+      expect(row.status).toBe('delivered')
+    })
+
+    it('a later, separate push of another message gets its own id', async () => {
+      pushablePanes.set('p2', 'tui-http')
+      m.sendMessage('sender', 'target', 'one')
+      m.pump()
+      await flush()
+      m.sendMessage('sender', 'target', 'two')
+      m.pump()
+      await flush()
+      expect(pushIds).toHaveLength(2)
+      expect(pushIds[1]).not.toBe(pushIds[0])
+    })
+
+    it('past the backend\'s memory of it, is marked possibly delivered and not sent again', async () => {
+      pushablePanes.set('p2', 'tui-http')
+      pushResult = 'lost'
+      const sent = m.sendMessage('sender', 'target', 'hello')
+      m.pump()
+      await flush()
+      clock += 101_000
+      m.pump()
+      await flush()
+      expect(pushIds).toHaveLength(1)
+      expect(typed).toEqual([])
+      const row = m.messages.value.find((x) => x.id === sent.id)!
+      expect(row.status).toBe('delivered')
+      expect(row.reason).toEqual({ key: 'delivery-unconfirmed' })
+    })
   })
 })

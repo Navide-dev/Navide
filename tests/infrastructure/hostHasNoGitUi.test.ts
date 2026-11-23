@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import path, { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// Git's interface belongs to the navide.git plugin (plugins/navide-git). The
+// Git's interface belongs to the navide.git plugin (Navide-dev/navide-git). The
 // Host keeps only the generic plugin host, the backend git.* service, the
 // Explorer's status badges and the notice shown when the plugin fails to
 // start. A second copy of the Git interface in the Host drifted from the
@@ -54,7 +54,7 @@ describe('the Host carries no Git interface of its own', () => {
       for (const [, specifier] of source.matchAll(IMPORT_SPECIFIER)) {
         const target = path.posix.basename(specifier!)
         const named = GIT_UI_FILES.has(target) || GIT_UI_FILES.has(`${target}.ts`)
-        if (named || specifier!.includes('plugins/navide-git/')) offenders.push(`${file} -> ${specifier}`)
+        if (named || specifier!.includes('navide-git')) offenders.push(`${file} -> ${specifier}`)
       }
     }
     expect(offenders).toEqual([])
