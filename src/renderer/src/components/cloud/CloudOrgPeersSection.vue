@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import SettingsCard from '../settings/SettingsCard.vue'
+import SettingsEmptyState from '../settings/SettingsEmptyState.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
 
 export interface OrgPeerRow {
@@ -102,6 +103,12 @@ const grants = computed(() => [
   ...allGrants.value.filter((g) => !g.sameOrg),
 ])
 const revokedGrants = computed(() => org.value?.revokedGrants ?? [])
+/** Which empty state applies, or '' when there is something to list. */
+const emptyNotice = computed(() => {
+  if (!loaded.value) return ''
+  if (!joined.value) return 'not-joined'
+  return grants.value.length || revokedGrants.value.length ? '' : 'not-exposed'
+})
 const localOrgName = computed(() => grants.value.find((g) => g.localOrg?.name)?.localOrg?.name ?? '')
 
 /** The same confirmation the account window uses for trust-changing acts. */
@@ -202,12 +209,20 @@ function initial(name: string): string {
 
 <template>
   <SettingsSection :label="t('settings.cloud.org.title')">
-    <div class="org-head">
+    <!-- Nothing to list: one empty state with the way to set it up inside it,
+         rather than a sentence that contradicts the page around it. -->
+    <SettingsEmptyState
+      v-if="emptyNotice"
+      class="org-empty"
+      :data-notice="emptyNotice"
+      :message="t('settings.cloud.org.' + emptyNotice)"
+    >
+      <button type="button" class="org-manage" data-action="manage" @click="manage">
+        {{ t('settings.cloud.org.manage') }} ↗
+      </button>
+    </SettingsEmptyState>
+    <div v-else class="org-head">
       <p v-if="!loaded" class="org-hint">{{ t('settings.cloud.org.loading') }}</p>
-      <p v-else-if="!joined" class="org-hint" data-notice="not-joined">{{ t('settings.cloud.org.not-joined') }}</p>
-      <p v-else-if="!grants.length && !revokedGrants.length" class="org-hint" data-notice="not-exposed">
-        {{ t('settings.cloud.org.not-exposed') }}
-      </p>
       <p v-else class="org-hint">
         {{ localOrgName ? t('settings.cloud.org.intro', { org: localOrgName }) : t('settings.cloud.org.intro-generic') }}
       </p>
@@ -222,10 +237,12 @@ function initial(name: string): string {
     <SettingsCard v-for="grant in grants" :key="grant.grantId" class="org-card" :data-grant-id="grant.grantId">
       <div class="org-card-head">
         <span class="org-avatar" aria-hidden="true">{{ initial(grant.peerOrg.name) }}</span>
-        <span class="org-name" v-truncate>
-          {{ grant.sameOrg ? t('settings.cloud.org.same-org-title', { org: grant.peerOrg.name }) : grant.peerOrg.name }}
+        <span class="org-title">
+          <span class="org-name" v-truncate>
+            {{ grant.sameOrg ? t('settings.cloud.org.same-org-title', { org: grant.peerOrg.name }) : grant.peerOrg.name }}
+          </span>
+          <span class="org-sub">{{ t('settings.cloud.org.machines', { count: grant.peers.filter((p) => p.listed).length }) }}</span>
         </span>
-        <span class="org-sub">{{ t('settings.cloud.org.machines', { count: grant.peers.filter((p) => p.listed).length }) }}</span>
         <span class="org-badge ok" :data-same-org="grant.sameOrg ? '' : undefined">
           {{ grant.sameOrg ? t('settings.cloud.org.same-org-badge') : t('settings.cloud.org.linked') }}
         </span>
@@ -338,10 +355,22 @@ function initial(name: string): string {
 <style scoped>
 .org-head {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 8px;
+}
+.org-head > .org-hint {
+  flex: 1 1 320px;
+}
+.org-empty {
+  margin-bottom: 10px;
+}
+.org-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .org-hint,
 .org-note {
@@ -370,12 +399,12 @@ function initial(name: string): string {
   padding: 6px var(--space-row-x) 0;
 }
 .org-card-head > .org-badge {
-  grid-column: 4;
+  grid-column: 3;
   justify-self: end;
 }
 .org-card-head {
   display: grid;
-  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   padding: var(--space-row-y) var(--space-row-x);
