@@ -5707,7 +5707,7 @@ ipcMain.handle('legal:open', async (_event, route: unknown) => {
   }
 })
 
-// "Manage on org.navide.dev": the same handoff as navide://org/login. The
+// "Manage on teams.navide.dev": the same handoff as navide://org/login. The
 // renderer names nothing; the address and the secrets stay in main.
 ipcMain.handle('org:open-site', async (event) => {
   if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
@@ -6159,7 +6159,7 @@ app.on('open-file', (event, p) => {
 // created for it once startup has opened (or skipped) its own.
 let startupWindowsSettled = false
 // Signing in to the organisation site from the app (navide://org/login and
-// "Manage on org.navide.dev"). The address can be overridden while the site is
+// "Manage on teams.navide.dev"). The address can be overridden while the site is
 // not live yet; see orgHandoff.ts.
 const orgHandoff = createOrgHandoff({
   assertion: (challenge) => frontendPluginManager.requestCloudOrgAssertion(challenge),
