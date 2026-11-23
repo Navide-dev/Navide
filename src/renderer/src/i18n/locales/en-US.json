@@ -6916,7 +6916,9 @@
         "act-failed": "Not completed: {reason}",
         "manage-opening": "Opening…",
         "manage-hint-signin": "sign this machine in to Navide Cloud, then try again.",
-        "manage-hint-unreachable": "the organization site could not be reached right now; try again in a moment."
+        "manage-hint-unreachable": "the organization site could not be reached right now; try again in a moment.",
+        "reshare-hint": "Its owner can share this machine again on teams.navide.dev; pair with six digits after that",
+        "rejoin-hint": "Once its owner is back in the organization and shares this machine, pair with six digits again"
       }
     },
     "sync": {

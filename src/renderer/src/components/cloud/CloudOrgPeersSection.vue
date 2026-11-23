@@ -203,6 +203,14 @@ function subline(row: OrgPeerRow): string {
   return [owner, extra].filter(Boolean).join(' · ')
 }
 
+/** How this row can be paired again: re-sharing and re-joining are the other
+ *  side's to do; only a lapsed link is fixed by linking again. */
+function repairHint(row: OrgPeerRow): string {
+  if (row.revoked?.reason === 'exposure-withdrawn') return t('settings.cloud.org.reshare-hint')
+  if (row.revoked?.reason === 'member-removed') return t('settings.cloud.org.rejoin-hint')
+  return t('settings.cloud.org.repair-hint')
+}
+
 /** Offline, and otherwise ready to pair: the one case the row has to explain. */
 function offlineHint(row: OrgPeerRow): boolean {
   return !row.online && row.canTrust && row.trustState !== 'trusted' && !pairingFor(row.deviceId)
@@ -306,7 +314,7 @@ function initial(name: string): string {
             :aria-describedby="offlineHint(row) ? 'org-offline-' + row.deviceId : undefined"
             data-action="pair"
             :disabled="!!pending || !row.canTrust || !!pairingFor(row.deviceId)"
-            :title="!row.listed ? t('settings.cloud.org.repair-hint') : !row.online ? t('settings.cloud.org.offline-title') : undefined"
+            :title="!row.listed ? repairHint(row) : !row.online ? t('settings.cloud.org.offline-title') : undefined"
             @click="pair(row)"
           >
             {{ t('settings.cloud.org.pair') }}
