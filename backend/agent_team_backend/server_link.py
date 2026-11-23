@@ -2691,10 +2691,12 @@ class ServerLink:
     async def _refresh_peers(self) -> None:
         """Read ``peers.list``, then downgrade the pins it no longer backs.
 
-        Never raises. A server that does not know ``peers.list`` (older than
-        organisations) or answers NOT_FOUND leaves the org view saying "not in
-        an organisation" and changes nothing else — in particular it does not
-        reconcile, because "no answer" is not "every grant is gone".
+        Never raises. Every refusal leaves the org view saying "not in an
+        organisation". NOT_FOUND, from a server that knows ``peers.list``,
+        means this device is in no organisation, so the grant pins are
+        reconciled against an empty list and downgraded. A server that does
+        not know ``peers.list`` (UNKNOWN_TYPE, BAD_REQUEST) or no answer at all
+        changes nothing, because "no answer" is not "every grant is gone".
         """
         try:
             reply = await self._request("peers.list", {})
