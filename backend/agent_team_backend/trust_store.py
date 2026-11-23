@@ -1596,6 +1596,10 @@ def pin_paired_device(
         if isinstance(existing, dict):
             if existing.get("approved") is True:
                 return False
+            # A pin a grant earned is approved again only through a grant;
+            # without one it would be approved still carrying the old grant.
+            if existing.get("grantId") and not (org and org.get("grantId")):
+                return False
             existing["approved"] = True
             if org and org.get("grantId"):
                 existing["grantId"] = org["grantId"]
