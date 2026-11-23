@@ -486,3 +486,56 @@ async def test_a_refused_second_request_does_not_rewrite_the_grant_of_the_runnin
         assert link._pairing_grants[ORG_PEER.device_id] == "g_1"
     finally:
         await link.stop()
+
+
+async def test_confirms_on_either_side_of_a_revocation_still_end_without_a_pin():
+    """They confirm first (nothing completes), the grant is revoked, then this
+    side confirms: the second, completing call must still see the check."""
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state)
+    try:
+        conn = server.opened[0]
+        assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is True
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_RESPONSE, "pair-resp-x",
+            nonce="bm9uY2U=", signKey=ORG_PEER.sign_key, encKey=ORG_PEER.enc_key)})
+        await _until(lambda: bool((device_pairing.get(ORG_PEER.device_id) or None)
+                                  and device_pairing.get(ORG_PEER.device_id).their_key))
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_CONFIRM, "pair-confirm-x")})
+        await _until(lambda: any(a.get("msgKey") == "pair-confirm-x" for a in conn.acks))
+        assert device_pairing.get(ORG_PEER.device_id) is not None
+        state["grants"] = []
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "grant", "reason": "link-revoked", "at": 1})
+        await link.confirm_pairing(ORG_PEER.device_id, accept=True)
+        assert trust_store.pin_for(ORG_PEER.device_id) is None
+        assert ORG_PEER.device_id not in link._pairing_grants
+    finally:
+        await link.stop()
+
+
+async def test_a_revocation_leaves_the_grant_unusable_even_if_the_reread_fails():
+    state = {"grants": [_grant("g_1", ORG_PEER, OTHER_ORG_PEER)]}
+    server, link = await _link_with(state)
+    try:
+        state["error"] = "INTERNAL"  # the follow-up peers.list fails
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [OTHER_ORG_PEER.device_id], "reason": "member-removed", "at": 1})
+        assert link._org_peer(OTHER_ORG_PEER.device_id) is None
+        assert link._org_peer(ORG_PEER.device_id) is not None
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "grant", "reason": "link-revoked", "at": 2})
+        assert link._org_peer(ORG_PEER.device_id) is None
+        assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is False
+    finally:
+        await link.stop()
+
+
+async def test_a_dropped_connection_forgets_the_grants():
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        assert link._org_grants
+        await server.opened[0].close()
+        await _until(lambda: not link._org_grants)
+        assert link._org_status in (org_peers.STATUS_UNKNOWN, org_peers.STATUS_OK)
+    finally:
+        await link.stop()

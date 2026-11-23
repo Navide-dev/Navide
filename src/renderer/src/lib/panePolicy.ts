@@ -19,6 +19,10 @@ export interface PolicyRule {
   from: { memberId: string; deviceId: string }
   to: { workspace: string; paneName: string }
   action: 'allow'
+  /** Set on a rule written for another organization's machine: it applies
+   *  only through that grant, and must survive every rewrite of the document
+   *  or the rule would outlive the grant (backend pane_policy.for_grant). */
+  grantId?: string
 }
 
 export interface PolicyDocument {
@@ -42,7 +46,13 @@ function readRule(raw: unknown): PolicyRule | null {
   const workspace = text(to.workspace)
   const paneName = text(to.paneName)
   if (!memberId || !deviceId || !workspace || !paneName) return null
-  return { from: { memberId, deviceId }, to: { workspace, paneName }, action: 'allow' }
+  const grantId = text(rule.grantId)
+  return {
+    from: { memberId, deviceId },
+    to: { workspace, paneName },
+    action: 'allow',
+    ...(grantId ? { grantId } : {}),
+  }
 }
 
 /**
@@ -93,7 +103,8 @@ export function sameRule(a: PolicyRule, b: PolicyRule): boolean {
     a.from.memberId === b.from.memberId &&
     a.from.deviceId === b.from.deviceId &&
     a.to.workspace === b.to.workspace &&
-    a.to.paneName === b.to.paneName
+    a.to.paneName === b.to.paneName &&
+    (a.grantId ?? '') === (b.grantId ?? '')
   )
 }
 

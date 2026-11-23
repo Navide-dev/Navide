@@ -1205,6 +1205,11 @@ class ServerLink:
                 await _quiet(reader)
                 self._ws = None
                 self._authenticated = False
+                # Grants are only as good as the connection that read them: a
+                # revocation pushed while this is down would be missed, so none
+                # stays usable until the next peers.list.
+                self._org_grants = []
+                self._org_status = org_peers.STATUS_UNKNOWN
                 self._fail_pending(ConnectionError("navide-server link closed"))
         return authenticated
 
@@ -2761,7 +2766,26 @@ class ServerLink:
         if changed:
             log.info("grant %s revoked (%s): downgraded %d pin(s)", grant_id, reason, len(changed))
             await self._announce_trust_notices()
+        # Off the local copy before asking again, so a refresh that fails
+        # cannot leave the revoked grant (or devices) available to pair through.
+        self._drop_from_grants(grant_id, device_ids)
         await self._refresh_peers()
+
+    def _drop_from_grants(self, grant_id: str, device_ids: list[str] | None) -> None:
+        whole = device_ids is None or (bool(self._device_id) and self._device_id in device_ids)
+        kept = []
+        for grant in self._org_grants:
+            if grant["grantId"] != grant_id:
+                kept.append(grant)
+            elif not whole:
+                gone = set(device_ids or [])
+                kept.append({**grant, "peers": [p for p in grant["peers"] if p["deviceId"] not in gone]})
+        self._org_grants = kept
+
+    def _cancel_exchange(self, device_id: str) -> Any:
+        """End a pairing exchange, and forget which grant it began through."""
+        self._pairing_grants.pop(device_id, None)
+        return device_pairing.cancel(device_id)
 
     def _note_pairing_grant(self, device_id: str) -> None:
         """Remember which grant, if any, a pairing with *device_id* begins through."""
@@ -3872,7 +3896,7 @@ class ServerLink:
         """
         if pairing is None or device_pairing.get(device_id) is not pairing:
             return False
-        device_pairing.cancel(device_id)
+        self._cancel_exchange(device_id)
         self._pairing_failures[device_id] = {
             "deviceId": device_id,
             "deviceName": pairing.device_name or self._device_name_for(device_id),
@@ -4012,7 +4036,7 @@ class ServerLink:
                 device_pairing.note_peer_confirmed(device_id)
                 await self._finish_pairing(device_id, member_id=member_id)
             elif kind == device_pairing.PAIR_REJECT:
-                if device_pairing.cancel(device_id) is not None:
+                if self._cancel_exchange(device_id) is not None:
                     await asyncio.to_thread(
                         trust_store.note_pairing, device_id, kind="refused", device_name=name
                     )
@@ -4020,7 +4044,7 @@ class ServerLink:
                 # They unpaired. Dropping our side too keeps the two machines
                 # from disagreeing about whether they are paired — a state in
                 # which one of them silently refuses everything the other sends.
-                device_pairing.cancel(device_id)
+                self._cancel_exchange(device_id)
                 removed = await asyncio.to_thread(trust_store.forget_device, device_id)
                 if removed.get("found"):
                     await asyncio.to_thread(
@@ -4057,23 +4081,26 @@ class ServerLink:
             held = trust_store.pin_for(device_id)
         except trust_store.TrustStoreLocked:
             held = None  # the pin write below meets the same lock and says so
-        began_through = self._pairing_grants.pop(device_id, "")
+        # Read, not taken: this runs once per confirm and only the second one
+        # completes, so the check has to still be there for that one.
+        began_through = self._pairing_grants.get(device_id, "")
         if began_through and (found is None or found[0]["grantId"] != began_through):
             # The exchange began through a grant that is gone (or replaced)
             # by now: finishing it would pin the device outside any grant.
-            device_pairing.cancel(device_id)
+            self._cancel_exchange(device_id)
             log.info("not pairing %s: the organisation grant it began through ended", device_id)
             return False
         if held is not None and held.get("grantId") and found is None:
             # A pin a grant earned can only be re-approved through a grant that
             # is live now; otherwise a revoked organisation machine could pair
             # its way back without the organisations linking again.
-            device_pairing.cancel(device_id)
+            self._cancel_exchange(device_id)
             log.info("not re-pairing %s: no live organisation grant reaches it", device_id)
             return False
         pairing = device_pairing.complete(device_id)
         if pairing is None:
             return False
+        self._pairing_grants.pop(device_id, None)
         try:
             await asyncio.to_thread(
                 trust_store.pin_paired_device,
@@ -4170,7 +4197,7 @@ class ServerLink:
         if not sent:
             # Nothing is left half-started: the other side has heard nothing, so
             # a card here waiting on a reply would be waiting for ever.
-            device_pairing.cancel(device_id)
+            self._cancel_exchange(device_id)
             return self._unavailable()
         return {"ok": True, "payload": {"state": pairing.state}}
 
@@ -4182,7 +4209,7 @@ class ServerLink:
         said what that side wants — see ``device_pairing.complete``.
         """
         if not accept:
-            pairing = device_pairing.cancel(device_id)
+            pairing = self._cancel_exchange(device_id)
             if pairing is not None:
                 await self._send_pair_frame(device_id, device_pairing.PAIR_REJECT)
             await self._announce_trust_notices()
@@ -4205,7 +4232,7 @@ class ServerLink:
 
     async def revoke_pairing(self, device_id: str) -> None:
         """Tell the other side we unpaired, so the two do not disagree."""
-        device_pairing.cancel(device_id)
+        self._cancel_exchange(device_id)
         await self._send_pair_frame(device_id, device_pairing.PAIR_REVOKED)
 
     def pairing_rows(self) -> list[dict[str, Any]]:
@@ -4213,7 +4240,12 @@ class ServerLink:
         our_key = device_signing.public_key()
         our_enc_key = device_crypto.public_key()
         rows = []
-        for pairing in device_pairing.active():
+        live = device_pairing.active()
+        # An exchange that timed out leaves nothing to finish; neither should
+        # the note of which grant it began through.
+        for stale in set(self._pairing_grants) - {p.device_id for p in live}:
+            self._pairing_grants.pop(stale, None)
+        for pairing in live:
             rows.append(
                 {
                     "deviceId": pairing.device_id,

@@ -210,6 +210,7 @@ import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
 import { ORG_SITE_ENV, createOrgHandoff } from './orgHandoff'
+import { orgHandoffStrings } from './orgHandoffStrings'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
 import {
   GitAccountsStore,
@@ -6163,9 +6164,18 @@ let startupWindowsSettled = false
 const orgHandoff = createOrgHandoff({
   assertion: (challenge) => frontendPluginManager.requestCloudOrgAssertion(challenge),
   openExternal: (url) => shell.openExternal(url),
-  siteUrl: () => process.env[ORG_SITE_ENV],
+  // The override is for development builds only; a packaged app always
+  // talks to the public site.
+  siteUrl: () => (app.isPackaged ? undefined : process.env[ORG_SITE_ENV]),
   log: (message) => console.log(message),
 })
+/** The deep-link path has no window to report into, so a failure is a notice. */
+async function openOrgSiteFromLink(): Promise<void> {
+  const result = await orgHandoff.open()
+  if (result.ok || !Notification.isSupported()) return
+  const strings = orgHandoffStrings(currentUiLocale())
+  new Notification({ title: strings.title, body: strings.body }).show()
+}
 const deepLinks = createDeepLinkRouter({
   pickTarget: (ready) => {
     if (mainWindow && !mainWindow.isDestroyed() && ready.has(mainWindow.webContents.id)) {
@@ -6182,7 +6192,7 @@ const deepLinks = createDeepLinkRouter({
     if (startupWindowsSettled) focusOrCreateMainWindow()
   },
   log: (message) => console.log(message),
-  onOrgLogin: () => void orgHandoff.open(),
+  onOrgLogin: () => void openOrgSiteFromLink(),
 })
 // macOS delivers the scheme through this event, on a cold start too (before
 // ready), so it is registered at the top level like open-file.

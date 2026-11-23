@@ -10720,6 +10720,12 @@ export class FrontendPluginManager {
   async requestCloudOrgAssertion(
     challenge: string,
   ): Promise<{ ok: true; assertion: string; memberId: string } | { ok: false; code: string; message: string }> {
+    // A navide://org/login link can start the app; give the Host session the
+    // time a cold start needs rather than failing before it exists.
+    const deadline = Date.now() + 20_000
+    while ((!this.wsClient || !this.hostSessionRegistered) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
     const client = this.wsClient
     if (!client || !this.hostSessionRegistered) return { ok: false, code: 'HOST_NOT_READY', message: 'Navide Host session is not ready' }
     const response = await client.send('host.cloud.org_assertion', { challenge }, 20_000)

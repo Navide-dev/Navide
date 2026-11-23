@@ -5866,7 +5866,12 @@ async def p2p_access_requests_approve(
         }
         # A knock from another organisation's machine: the rule is tied to the
         # grant it was paired through and lapses with it (pane_policy.for_grant).
-        grant_id = str((request.get("org") or {}).get("grantId") or "")
+        # From the pin, the same record pane_policy.for_grant is read against.
+        try:
+            pin = trust_store.pin_for(str(request["deviceId"])) or {}
+        except trust_store.TrustStoreLocked:
+            pin = {}
+        grant_id = str(pin.get("grantId") or "")
         if grant_id:
             rule["grantId"] = grant_id
         if rule not in policy["rules"]:

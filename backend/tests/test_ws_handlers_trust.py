@@ -216,12 +216,10 @@ async def test_approving_an_organisation_knock_ties_the_rule_to_its_grant(link, 
     """A knock from another organisation's machine writes the same narrow rule,
     plus the grant it was paired through, so the rule lapses with that grant."""
     key = _knock(link)
-    rows = link.requests.list
+    from agent_team_backend import trust_store
 
-    def with_org():
-        return [{**row, "org": {"grantId": "g_1", "orgName": "o", "ownerName": "w"}} for row in rows()]
-
-    monkeypatch.setattr(server_link, "access_requests", with_org)
+    pins = {THEIR_BOX: {"grantId": "g_1", "approved": True}}
+    monkeypatch.setattr(trust_store, "pin_for", lambda device_id: pins.get(device_id))
     reply = await _call("p2p.access_requests.approve", {"key": key})
     assert reply["ok"] is True
     (rule,) = link.writes[-1]["rules"]
