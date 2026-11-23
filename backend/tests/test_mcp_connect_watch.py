@@ -164,15 +164,16 @@ async def test_the_notifier_tells_the_windows_and_the_chats(monkeypatch: pytest.
 
     events: list[dict[str, Any]] = []
     chats: list[str] = []
-    scopes: list[tuple[str, str]] = []
+    scopes: list[tuple[str, str, str]] = []
 
     async def broadcast(event: dict[str, Any]) -> None:
         events.append(event)
 
     class Manager:
-        async def notify_mcp_never_connected(self, pane: str, pane_id: str, workspace_path: str) -> None:
+        async def notify_mcp_never_connected(self, pane: str, pane_id: str, workspace_path: str,
+                                             parent_pane_id: str) -> None:
             chats.append(pane)
-            scopes.append((pane_id, workspace_path))
+            scopes.append((pane_id, workspace_path, parent_pane_id))
 
     monkeypatch.setattr(app, "broadcast", broadcast)
     monkeypatch.setattr(channels, "get_manager", lambda: Manager())
@@ -183,7 +184,7 @@ async def test_the_notifier_tells_the_windows_and_the_chats(monkeypatch: pytest.
     assert events[0]["type"] == "mcp.never_connected"
     assert events[0]["payload"] == {"pane_id": "p9", "name": "n9", "workspace_path": "/ws", "agent_key": "claude"}
     assert chats == ["n9"]
-    assert scopes == [("p9", "/ws")]
+    assert scopes == [("p9", "/ws", "")]
 
 
 def test_a_reported_pane_that_connects_is_cleared_once() -> None:
@@ -323,15 +324,16 @@ async def test_the_disconnect_notifier_tells_the_windows_and_the_chats(monkeypat
 
     events: list[dict[str, Any]] = []
     chats: list[str] = []
-    scopes: list[tuple[str, str]] = []
+    scopes: list[tuple[str, str, str]] = []
 
     async def broadcast(event: dict[str, Any]) -> None:
         events.append(event)
 
     class Manager:
-        async def notify_mcp_disconnected(self, pane: str, pane_id: str, workspace_path: str) -> None:
+        async def notify_mcp_disconnected(self, pane: str, pane_id: str, workspace_path: str,
+                                          parent_pane_id: str) -> None:
             chats.append(pane)
-            scopes.append((pane_id, workspace_path))
+            scopes.append((pane_id, workspace_path, parent_pane_id))
 
     monkeypatch.setattr(app, "broadcast", broadcast)
     monkeypatch.setattr(channels, "get_manager", lambda: Manager())
@@ -342,7 +344,7 @@ async def test_the_disconnect_notifier_tells_the_windows_and_the_chats(monkeypat
     assert events[0]["type"] == "mcp.disconnected"
     assert events[0]["payload"]["pane_id"] == "p9"
     assert chats == ["n9"]
-    assert scopes == [("p9", "/ws")]
+    assert scopes == [("p9", "/ws", "")]
 
 
 @pytest.mark.asyncio

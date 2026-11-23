@@ -12,7 +12,8 @@ import pytest
 from agent_team_backend import agent_messaging
 from agent_team_backend.channels.manager import ChannelManager
 
-PANES = {"org-cmd": "/ws/navide-org", "org-dev": "/ws/navide-org", "client": "/ws/client"}
+PANES = {"org-cmd": "/ws/navide-org", "org-dev": "/ws/navide-org", "client": "/ws/client",
+         "nav-cmd": "/ws/agent-team", "nav-dev": "/ws/agent-team", "child": "/ws/b"}
 
 
 def _binding(chat: str, pane_id: str, kind: str = "direct") -> Any:
@@ -51,7 +52,8 @@ def wired(monkeypatch: pytest.MonkeyPatch):
         events.append(event)
 
     bindings = [_binding("org-chat", "org-dev"), _binding("client-chat", "client"),
-                _binding("gone-chat", "closed-pane")]
+                _binding("gone-chat", "closed-pane"), _binding("nav-chat", "nav-cmd"),
+                _binding("nav-dev-chat", "nav-dev")]
     monkeypatch.setattr(app, "broadcast", broadcast)
     monkeypatch.setattr(channels, "get_manager", lambda: _manager(bindings, sent))
     return app, sent, events
@@ -88,3 +90,14 @@ async def test_no_chat_in_the_workspace_means_no_chat_notice(wired, monkeypatch)
 
     assert sent == []
     assert events[0]["type"] == "mcp.never_connected"
+
+
+async def test_the_pane_that_opened_it_hears_too_but_not_its_workspace(wired) -> None:
+    # Org指揮 was opened by Navide指揮 from another workspace: the parent's own chat
+    # hears, the parent's workspace and every other chat do not.
+    app, sent, _ = wired
+    entry = agent_messaging.RegisteredPane(pane_id="child", name="Org指揮", workspace_path="/ws/b",
+                                           agent_key="claude", spawned_by="nav-cmd")
+    await app._notify_mcp_never_connected(entry)
+
+    assert [chat for chat, _ in sent] == ["nav-chat"]
