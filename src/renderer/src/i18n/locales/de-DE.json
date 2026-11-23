@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Ja, löschen und neu beginnen",
         "rebuild-cancel": "Angehalten lassen",
         "rebuild-done": "Der Vertrauenseintrag wurde gelöscht. Koppeln Sie Ihre Geräte erneut, wenn Sie so weit sind.",
-        "locked-retrying": "Dies ist möglicherweise vorübergehend – ein gesperrter Schlüsselbund oder ein weggeklickter Berechtigungsdialog sieht von hier aus genauso aus. Es wird weiter versucht; wenn es sich klärt, ist nichts verloren."
+        "locked-retrying": "Dies ist möglicherweise vorübergehend – ein gesperrter Schlüsselbund oder ein weggeklickter Berechtigungsdialog sieht von hier aus genauso aus. Es wird weiter versucht; wenn es sich klärt, ist nichts verloren.",
+        "approve-trust-unavailable": "Dieser Rechner kann seinen Vertrauenseintrag derzeit nicht lesen, daher wurde keine Regel geschrieben. Kümmern Sie sich zuerst um die Karte „Navide Cloud ist angehalten“ unten (klicken Sie zum Beispiel auf „Neu beginnen“) und erlauben Sie die Anfrage dann erneut."
       },
       "link": {
         "pause": "Ausschalten",

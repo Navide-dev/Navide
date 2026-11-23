@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Oui, effacer et recommencer",
         "rebuild-cancel": "Laisser arrêté",
         "rebuild-done": "Le registre de confiance a été effacé. Appairez de nouveau vos appareils quand vous serez prêt.",
-        "locked-retrying": "Cela peut être temporaire – un trousseau verrouillé ou une boîte de dialogue d’autorisation fermée produisent le même résultat vu d’ici. De nouvelles tentatives sont en cours ; si la situation se rétablit, rien n’est perdu."
+        "locked-retrying": "Cela peut être temporaire – un trousseau verrouillé ou une boîte de dialogue d’autorisation fermée produisent le même résultat vu d’ici. De nouvelles tentatives sont en cours ; si la situation se rétablit, rien n’est perdu.",
+        "approve-trust-unavailable": "Cette machine ne peut pas lire son registre de confiance pour l’instant ; aucune règle n’a donc été écrite. Traitez d’abord la carte « Navide Cloud est arrêté » ci-dessous (par exemple, cliquez sur « Recommencer »), puis autorisez à nouveau la demande."
       },
       "link": {
         "pause": "Désactiver",

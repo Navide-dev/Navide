@@ -1140,6 +1140,7 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
     if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
     if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
     if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
+    if (type === 'p2p.access_requests.approve' && resp.error?.code === 'TRUST_UNAVAILABLE') error.value = t('settings.p2p.trust.approve-trust-unavailable')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {

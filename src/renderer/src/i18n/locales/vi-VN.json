@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Có, xóa và bắt đầu lại",
         "rebuild-cancel": "Giữ trạng thái dừng",
         "rebuild-done": "Đã xóa bản ghi tin cậy. Hãy ghép đôi lại các thiết bị khi bạn sẵn sàng.",
-        "locked-retrying": "Có thể chỉ là tạm thời — keychain bị khóa hoặc hộp thoại cấp quyền bị đóng đều trông giống nhau từ đây. Hệ thống vẫn đang thử lại; nếu ổn trở lại, sẽ không mất gì."
+        "locked-retrying": "Có thể chỉ là tạm thời — keychain bị khóa hoặc hộp thoại cấp quyền bị đóng đều trông giống nhau từ đây. Hệ thống vẫn đang thử lại; nếu ổn trở lại, sẽ không mất gì.",
+        "approve-trust-unavailable": "Máy này hiện không đọc được bản ghi tin cậy của nó, nên chưa ghi quy tắc nào. Hãy xử lý thẻ “Navide Cloud đã dừng” bên dưới trước (ví dụ nhấn “Bắt đầu lại”), rồi cho phép yêu cầu này lần nữa."
       },
       "link": {
         "pause": "Tắt",

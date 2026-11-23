@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Sí, borrar y empezar de nuevo",
         "rebuild-cancel": "Mantenerlo detenido",
         "rebuild-done": "Se ha borrado el registro de confianza. Vuelve a emparejar tus dispositivos cuando quieras.",
-        "locked-retrying": "Puede que sea temporal: un llavero bloqueado o un cuadro de permiso descartado se ven igual desde aquí. Se sigue reintentando; si se resuelve, no se habrá perdido nada."
+        "locked-retrying": "Puede que sea temporal: un llavero bloqueado o un cuadro de permiso descartado se ven igual desde aquí. Se sigue reintentando; si se resuelve, no se habrá perdido nada.",
+        "approve-trust-unavailable": "Este equipo no puede leer ahora su registro de confianza, así que no se escribió ninguna regla. Resuelve primero la tarjeta «Navide Cloud está detenido» de abajo (por ejemplo, pulsa «Empezar de nuevo») y luego vuelve a permitir la solicitud."
       },
       "link": {
         "pause": "Desactivar",

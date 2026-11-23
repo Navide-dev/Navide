@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Sim, apagar e recomeçar",
         "rebuild-cancel": "Manter parado",
         "rebuild-done": "O registro de confiança foi limpo. Pareie seus dispositivos de novo quando quiser.",
-        "locked-retrying": "Isto pode ser temporário: um chaveiro bloqueado ou uma caixa de permissão dispensada têm a mesma aparência daqui. Ainda há novas tentativas; se resolver, nada terá sido perdido."
+        "locked-retrying": "Isto pode ser temporário: um chaveiro bloqueado ou uma caixa de permissão dispensada têm a mesma aparência daqui. Ainda há novas tentativas; se resolver, nada terá sido perdido.",
+        "approve-trust-unavailable": "Esta máquina não consegue ler o registro de confiança agora, então nenhuma regra foi gravada. Resolva primeiro o cartão “O Navide Cloud está parado” abaixo (por exemplo, pressione “Recomeçar”) e depois permita a solicitação de novo."
       },
       "link": {
         "pause": "Desativar",

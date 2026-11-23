@@ -7431,7 +7431,8 @@
         "rebuild-confirm": "Yes, Erase and Start Over",
         "rebuild-cancel": "Keep It Stopped",
         "rebuild-done": "The trust record was cleared. Pair your devices again when you are ready.",
-        "locked-retrying": "This may be temporary — a locked keychain or a dismissed permission dialog reads the same way from here. It is still being retried; if it clears, nothing was lost."
+        "locked-retrying": "This may be temporary — a locked keychain or a dismissed permission dialog reads the same way from here. It is still being retried; if it clears, nothing was lost.",
+        "approve-trust-unavailable": "This machine cannot read its trust record right now, so no rule was written. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start Over”), then allow the request again."
       },
       "link": {
         "pause": "Turn Off",

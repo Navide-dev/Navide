@@ -145,7 +145,20 @@ describe('a knock from another organization', () => {
     })
     wrapper = mount(AccountModal, { props: { open: true, backend: mock.backend as never }, global: { plugins: [i18n] } })
     await flushPromises()
+    return mock
   }
+
+  it('explains a refusal while the trust record cannot be read', async () => {
+    const mock = await mountKnock({ grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' })
+    mock.setResponse('p2p.access_requests.approve', null, {
+      ok: false,
+      error: { code: 'TRUST_UNAVAILABLE', message: 'the device trust store could not be opened' },
+    })
+    const allow = wrapper!.findAll('button').find((b) => b.text() === t('settings.cloud.org.allow-one'))!
+    await allow.trigger('click')
+    await flushPromises()
+    expect(wrapper!.text()).toContain(t('settings.p2p.trust.approve-trust-unavailable'))
+  })
 
   it('says which organization and offers to allow just that pane', async () => {
     await mountKnock({ grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' })
