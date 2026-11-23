@@ -1,7 +1,7 @@
 // Opening the organisation site already signed in, from the app.
 //
 // Triggered by the `navide://org/login` deep link (the site's "open from the
-// Navide app" button) and by "Manage on org.navide.dev" in Settings. Steps:
+// Navide app" button) and by "Manage on teams.navide.dev" in Settings. Steps:
 //   1. a PKCE verifier is made here and never leaves this process except in the
 //      exchange below; its S256 challenge goes to the server with
 //      `auth.assertion.issue` (aud "org"), which returns a short-lived assertion;
@@ -12,7 +12,7 @@
 // string: the ticket rides in the fragment, which the browser does not send.
 import { createHash, randomBytes } from 'crypto'
 
-export const ORG_SITE_DEFAULT = 'https://org.navide.dev'
+export const ORG_SITE_DEFAULT = 'https://teams.navide.dev'
 /** Overrides the site address (the site is not live yet; tests and staging). */
 export const ORG_SITE_ENV = 'NAVIDE_ORG_SITE_URL'
 export const ORG_EXCHANGE_TIMEOUT_MS = 15_000
