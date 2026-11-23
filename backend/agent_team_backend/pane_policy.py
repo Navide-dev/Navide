@@ -152,9 +152,10 @@ def for_grant(policy: Any, grant_id: str) -> Any:
     rule must not come back to life if the machine is paired again under a
     new one, so rules naming a different grant are left out. A rule with no
     ``grantId`` (written by hand, or for this account's own machines) applies
-    as it always did, and with no grant to compare the policy is unchanged.
+    as it always did. A sender with no grant at all is held to none of the
+    grant-tagged rules.
     """
-    if not grant_id or not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
+    if not isinstance(policy, dict) or not isinstance(policy.get("rules"), list):
         return policy
     rules = policy["rules"]
     kept = [

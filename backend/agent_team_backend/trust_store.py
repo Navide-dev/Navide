@@ -1597,7 +1597,7 @@ def pin_paired_device(
             if existing.get("approved") is True:
                 return False
             existing["approved"] = True
-            if org and existing.get("grantId"):
+            if org and org.get("grantId"):
                 existing["grantId"] = org["grantId"]
                 existing["org"] = _pin_org_fields(org)
                 existing.pop("orgRevoked", None)

@@ -401,8 +401,19 @@ def test_a_grant_scoped_rule_only_applies_through_its_grant():
                    workspace="proj-a", pane_name="reviewer")
     assert pane_policy.is_allowed(pane_policy.for_grant(policy, "g_1"), **request) is True
     assert pane_policy.is_allowed(pane_policy.for_grant(policy, "g_new"), **request) is False
-    # No grant to compare: unchanged.
-    assert pane_policy.for_grant(policy, "") is policy
+    # A sender with no grant gets none of the grant-tagged rules…
+    assert pane_policy.is_allowed(pane_policy.for_grant(policy, ""), **request) is False
+    # …and a policy with no grant-tagged rules is passed through untouched.
+    plain = {"version": 1, "default": "deny", "rules": [{k: v for k, v in rule.items() if k != "grantId"}]}
+    assert pane_policy.for_grant(plain, "") is plain
+
+
+def test_org_pairing_over_an_older_unapproved_pin_records_the_grant():
+    trust_store.pin_device(ORG_PEER.device_id, sign_key=ORG_PEER.sign_key, member_id=ORG_MEMBER)
+    _pin_org()
+    pin = trust_store.pin_for(ORG_PEER.device_id)
+    assert pin["approved"] is True
+    assert pin["grantId"] == "g_1"
 
 
 # ---- remote targets -----------------------------------------------------------
@@ -433,3 +444,27 @@ def test_parse_drops_unaddressable_rows():
     assert [g["grantId"] for g in grants] == ["g"]
     assert grants[0]["peers"][0]["online"] is False
     assert org_peers.parse(None) == []
+
+
+async def test_a_grant_revoked_mid_exchange_ends_the_pairing_without_a_pin():
+    """Began through a grant, finished after it ended: no pin at all, rather
+    than one outside every grant."""
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state)
+    try:
+        conn = server.opened[0]
+        assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is True
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_RESPONSE, "pair-resp-mid",
+            nonce="bm9uY2U=", signKey=ORG_PEER.sign_key, encKey=ORG_PEER.enc_key)})
+        await _until(lambda: bool((device_pairing.get(ORG_PEER.device_id) or None)
+                                  and device_pairing.get(ORG_PEER.device_id).their_key))
+        state["grants"] = []
+        await link._refresh_peers()
+        assert (await link.confirm_pairing(ORG_PEER.device_id, accept=True))["ok"] is True
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_CONFIRM, "pair-confirm-mid")})
+        await _until(lambda: device_pairing.get(ORG_PEER.device_id) is None)
+        assert trust_store.pin_for(ORG_PEER.device_id) is None
+    finally:
+        await link.stop()

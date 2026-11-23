@@ -929,6 +929,10 @@ class ServerLink:
         self._org_status = org_peers.STATUS_UNKNOWN
         self._org_grants: list[dict[str, Any]] = []
         self._org_as_of = 0
+        #: device id -> the grant a pairing exchange with it began through.
+        #: Completing that exchange requires the same grant to still be live,
+        #: so a grant revoked mid-exchange cannot end in a pin outside it.
+        self._pairing_grants: dict[str, str] = {}
         self.terminated_reason = ""
         # Why the last dial or session failed, kept so `state()` can tell a
         # server that is not answering apart from one that has not been tried
@@ -2759,6 +2763,14 @@ class ServerLink:
             await self._announce_trust_notices()
         await self._refresh_peers()
 
+    def _note_pairing_grant(self, device_id: str) -> None:
+        """Remember which grant, if any, a pairing with *device_id* begins through."""
+        found = self._org_peer(device_id)
+        if found is not None and found[1]["memberId"] != self._own_member:
+            self._pairing_grants[device_id] = found[0]["grantId"]
+        else:
+            self._pairing_grants.pop(device_id, None)
+
     def _org_peer(self, device_id: str) -> tuple[dict, dict] | None:
         return org_peers.find(self._org_grants, device_id)
 
@@ -3951,6 +3963,7 @@ class ServerLink:
         their_enc_key = str(frame.get("encKey") or "")
         try:
             if kind == device_pairing.PAIR_REQUEST:
+                self._note_pairing_grant(device_id)
                 pairing = device_pairing.accept_request(
                     device_id,
                     device_name=name,
@@ -4041,6 +4054,13 @@ class ServerLink:
             held = trust_store.pin_for(device_id)
         except trust_store.TrustStoreLocked:
             held = None  # the pin write below meets the same lock and says so
+        began_through = self._pairing_grants.pop(device_id, "")
+        if began_through and (found is None or found[0]["grantId"] != began_through):
+            # The exchange began through a grant that is gone (or replaced)
+            # by now: finishing it would pin the device outside any grant.
+            device_pairing.cancel(device_id)
+            log.info("not pairing %s: the organisation grant it began through ended", device_id)
+            return False
         if held is not None and held.get("grantId") and found is None:
             # A pin a grant earned can only be re-approved through a grant that
             # is live now; otherwise a revoked organisation machine could pair
@@ -4136,6 +4156,7 @@ class ServerLink:
             return {"ok": False, "error": {"code": "PAIRING_BUSY", "message": str(err)}}
         # A new round: what was said about how the last one ended is history.
         self._pairing_failures.pop(device_id, None)
+        self._note_pairing_grant(device_id)
         sent = await self._send_pair_frame(
             device_id,
             device_pairing.PAIR_REQUEST,
