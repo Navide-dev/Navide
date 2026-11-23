@@ -113,6 +113,17 @@ export function parseDeepLink(input: unknown): DeepLinkParseResult {
   return { ok: true, target: { namespace: id.slice(0, dot), name: id.slice(dot + 1) } }
 }
 
+/**
+ * `navide://org/login` (the organisation site's "open from the Navide app"
+ * button). Exactly that, with at most one trailing slash: it carries nothing,
+ * and only starts the app-to-site sign-in handoff (main/orgHandoff.ts).
+ */
+export function isOrgLoginDeepLink(input: unknown): boolean {
+  if (typeof input !== 'string' || input.length > 64) return false
+  const lower = input.toLowerCase()
+  return lower === `${DEEP_LINK_SCHEME}://org/login` || lower === `${DEEP_LINK_SCHEME}://org/login/`
+}
+
 /** The first navide:// argument in a process argv (Windows/Linux launches). */
 export function deepLinkFromArgv(argv: readonly string[]): string | null {
   const prefix = `${DEEP_LINK_SCHEME}:`

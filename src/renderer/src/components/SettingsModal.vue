@@ -148,6 +148,7 @@ import SyncSettings from './SyncSettings.vue'
 import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
 import CloudInventorySection from './cloud/CloudInventorySection.vue'
 import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
+import CloudOrgPeersSection from './cloud/CloudOrgPeersSection.vue'
 import ShareLinksPane from './cloud/ShareLinksPane.vue'
 import { useShareLinks } from '../composables/useShareLinks'
 import { forgetSyncInventory } from '../composables/useSyncInventory'
@@ -2174,7 +2175,7 @@ const cloudLinkUp = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
 const shareProbe = useShareLinks(props.backend)
 const cloudSubtabsShown = computed(() => cloudLinkUp.value && shareProbe.supported.value)
 const cloudTabs = computed<CloudSubtab[]>(() =>
-  shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
+  shareProbe.supported.value ? ['sync', 'share', 'devices', 'org'] : ['sync', 'devices', 'org']
 )
 watch(cloudLinkUp, (up) => {
   if (up) {
@@ -4607,6 +4608,9 @@ watch(activeTab, (tab) => {
           </template>
           <template #devices>
             <CloudDevicesSection :backend="props.backend" />
+          </template>
+          <template #org>
+            <CloudOrgPeersSection :backend="props.backend" />
           </template>
           </CloudSubtabs>
         </div>

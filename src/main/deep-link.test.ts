@@ -280,6 +280,30 @@ describe('createDeepLinkRouter', () => {
     expect(ensureWindow).toHaveBeenCalledTimes(1)
   })
 
+  it('starts the organisation sign-in for navide://org/login, once per burst, with no window', () => {
+    const onOrgLogin = vi.fn()
+    const r = createDeepLinkRouter({
+      pickTarget: () => null,
+      reveal: () => {},
+      ensureWindow,
+      log: (m) => log.push(m),
+      now: () => clock,
+      onOrgLogin,
+    })
+    r.handle('navide://org/login')
+    r.handle('NAVIDE://org/login/')
+    expect(onOrgLogin).toHaveBeenCalledTimes(1)
+    clock += DEEP_LINK_REPEAT_MS
+    r.handle('navide://org/login')
+    expect(onOrgLogin).toHaveBeenCalledTimes(2)
+    expect(r.pending()).toEqual([])
+    expect(ensureWindow).not.toHaveBeenCalled()
+    // Anything carrying more than the bare link is not this link.
+    r.handle('navide://org/login?t=abc')
+    r.handle('navide://org/login#t=abc')
+    expect(onOrgLogin).toHaveBeenCalledTimes(2)
+  })
+
   it('never exposes an install path: only the open-detail channel is ever sent', () => {
     const r = router()
     const win = fakeContents(1)

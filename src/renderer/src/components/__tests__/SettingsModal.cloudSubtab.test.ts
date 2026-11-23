@@ -131,7 +131,7 @@ describe('SettingsModal Navide Cloud page', () => {
     const b = await mountModal('connected')
     const tabs = body().find('[role="tablist"]')
     expect(tabs.exists()).toBe(true)
-    expect(tabs.findAll('[role="tab"]').map((t) => t.text())).toEqual(['Sync', 'Share', 'Devices'])
+    expect(tabs.findAll('[role="tab"]').map((t) => t.text())).toEqual(['Sync', 'Share', 'Devices', 'Organizations'])
     expect(b.send.mock.calls.filter(([t]) => t === 'sync.inventory').map(([, p]) => p)).toEqual([
       { scope: 'prompts' },
       { scope: 'mcp' },

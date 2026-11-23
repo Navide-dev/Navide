@@ -209,6 +209,7 @@ import { hwndArg, runHelper, WindowsHello, windowsHelloHelperPath } from './wind
 import { registerAppLockIpc } from './app-lock-ipc'
 import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
+import { ORG_SITE_ENV, createOrgHandoff } from './orgHandoff'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
 import {
   GitAccountsStore,
@@ -5705,6 +5706,13 @@ ipcMain.handle('legal:open', async (_event, route: unknown) => {
   }
 })
 
+// "Manage on org.navide.dev": the same handoff as navide://org/login. The
+// renderer names nothing; the address and the secrets stay in main.
+ipcMain.handle('org:open-site', async (event) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
+  return orgHandoff.open()
+})
+
 // Memory page "Undo create": only a file the backend recorded creating, and
 // only ever to the Trash (memoryUndoCreate.ts).
 ipcMain.handle('memory:trashCreated', async (event, path: unknown, acceptChanged: unknown) => {
@@ -6149,6 +6157,15 @@ app.on('open-file', (event, p) => {
 // a main window can show it waits in the router's queue; windows are only
 // created for it once startup has opened (or skipped) its own.
 let startupWindowsSettled = false
+// Signing in to the organisation site from the app (navide://org/login and
+// "Manage on org.navide.dev"). The address can be overridden while the site is
+// not live yet; see orgHandoff.ts.
+const orgHandoff = createOrgHandoff({
+  assertion: (challenge) => frontendPluginManager.requestCloudOrgAssertion(challenge),
+  openExternal: (url) => shell.openExternal(url),
+  siteUrl: () => process.env[ORG_SITE_ENV],
+  log: (message) => console.log(message),
+})
 const deepLinks = createDeepLinkRouter({
   pickTarget: (ready) => {
     if (mainWindow && !mainWindow.isDestroyed() && ready.has(mainWindow.webContents.id)) {
@@ -6165,6 +6182,7 @@ const deepLinks = createDeepLinkRouter({
     if (startupWindowsSettled) focusOrCreateMainWindow()
   },
   log: (message) => console.log(message),
+  onOrgLogin: () => void orgHandoff.open(),
 })
 // macOS delivers the scheme through this event, on a cold start too (before
 // ready), so it is registered at the top level like open-file.

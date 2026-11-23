@@ -1,0 +1,435 @@
+"""Cross-organisation peers: ``peers.list``, its two pushes, and the pin rules.
+
+What is pinned here:
+
+* an older server (no ``peers.list``) or NOT_FOUND leaves the org view at
+  "unsupported" and touches nothing else;
+* a machine a live grant reaches can be paired with the same six-digit
+  exchange, and its pin records the grant — yet it lands in the member ring,
+  never the own-device one;
+* ``org.grant.revoked`` and the reconnect read downgrade (never delete) only
+  the pins of that grant, and a downgraded pin is refused as ``not-paired``;
+* a one-click rule written for such a machine is tied to its grant;
+* ``remote_targets`` names the organisation and owner of such a machine.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from agent_team_backend import (
+    agent_messaging,
+    device_identity,
+    device_pairing,
+    org_peers,
+    pane_policy,
+    remote_roster,
+    trust_store,
+)
+
+from .test_server_link import (  # noqa: F401 - fixtures are used by name
+    ALLOW_ALL_POLICY,
+    PEER,
+    FakeServer,
+    Peer,
+    _clean_registry,
+    _connected,
+    _fast_timers,
+    _ok,
+    _paired_peer,
+    _pending,
+    _until,
+    broadcasts,
+    default_responder,
+)
+
+ORG_PEER = Peer("dev-org-1", name="設計部 iMac")
+OTHER_ORG_PEER = Peer("dev-org-2", name="陳怡君 的 MacBook Air")
+ORG_MEMBER = "m-org"
+
+
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_exchanges():
+    device_pairing._reset_for_test()
+    yield
+    device_pairing._reset_for_test()
+
+
+def _grant(grant_id: str = "g_1", *peers: Peer, online: bool = True) -> dict:
+    return {
+        "grantId": grant_id,
+        "linkId": "lnk_1",
+        "version": 1,
+        "expiresAt": 4_000_000_000_000,
+        "localOrg": {"orgId": "org_a", "name": "星河工作室"},
+        "peerOrg": {"orgId": "org_b", "name": "北辰設計"},
+        "peers": [
+            {
+                "deviceId": peer.device_id,
+                "deviceName": peer.name,
+                "memberId": ORG_MEMBER,
+                "ownerName": "陳怡君",
+                "online": online,
+                "publicKey": peer.enc_key,
+                "signPublicKey": peer.sign_key,
+            }
+            for peer in (peers or (ORG_PEER,))
+        ],
+    }
+
+
+def _org_responder(server_state: dict):
+    """default_responder plus ``peers.list``, answered from *server_state*.
+
+    ``grants`` None stands for a server that predates organisations: it
+    answers the way an unknown type is answered.
+    """
+
+    def responder(conn, message):
+        if message.get("type") == "peers.list":
+            server_state["calls"] = server_state.get("calls", 0) + 1
+            code = server_state.get("error")
+            if code:
+                return {"id": message["id"], "type": "peers.list.result", "ok": False,
+                        "error": {"code": code, "message": "no"}}
+            if server_state.get("grants") is None:
+                return default_responder(conn, message)
+            return _ok(message, {"asOf": 1, "grants": server_state["grants"]})
+        return default_responder(conn, message)
+
+    return responder
+
+
+def _pin_org(peer: Peer = ORG_PEER, grant_id: str = "g_1") -> None:
+    trust_store.pin_paired_device(
+        peer.device_id,
+        sign_key=peer.sign_key,
+        enc_key=peer.enc_key,
+        member_id=ORG_MEMBER,
+        own_member_id="m1",
+        org={"grantId": grant_id, "orgId": "org_b", "orgName": "北辰設計", "ownerName": "陳怡君"},
+    )
+
+
+async def _link_with(state: dict, **kwargs):
+    server = FakeServer(responder=_org_responder(state), **kwargs)
+    link = await _connected(server)
+    await _until(lambda: link._org_status != org_peers.STATUS_UNKNOWN)
+    return server, link
+
+
+# ---- compatibility ------------------------------------------------------------
+
+
+async def test_a_server_without_peers_list_reads_as_not_in_an_organisation():
+    server, link = await _link_with({"grants": None})
+    try:
+        _pin_org()
+        snapshot = link.network_snapshot()
+        assert snapshot["org"]["status"] == org_peers.STATUS_UNSUPPORTED
+        assert snapshot["org"]["grants"] == []
+        # Nothing else changed: the personal device list is what it was, and no
+        # pin was downgraded for want of an answer.
+        assert [d["deviceId"] for d in snapshot["devices"] if not d["isLocal"]] == [PEER.device_id]
+        assert trust_store.pin_for(ORG_PEER.device_id)["approved"] is True
+    finally:
+        await link.stop()
+
+
+async def test_not_found_also_reads_as_not_in_an_organisation():
+    server, link = await _link_with({"error": "NOT_FOUND"})
+    try:
+        assert link.network_snapshot()["org"]["status"] == org_peers.STATUS_UNSUPPORTED
+    finally:
+        await link.stop()
+
+
+async def test_peers_list_fills_the_org_view_and_offers_pairing():
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        org = link.network_snapshot()["org"]
+        assert org["status"] == org_peers.STATUS_OK
+        (grant,) = org["grants"]
+        assert grant["peerOrg"]["name"] == "北辰設計"
+        (peer,) = grant["peers"]
+        assert peer["deviceId"] == ORG_PEER.device_id
+        assert peer["ownerName"] == "陳怡君"
+        assert peer["trustState"] == "pending"
+        assert peer["canTrust"] is True
+        assert peer["signFingerprint"]
+    finally:
+        await link.stop()
+
+
+async def test_can_trust_on_the_device_list_widens_to_a_reachable_org_machine():
+    state = {"grants": [_grant()]}
+    server = FakeServer(responder=_org_responder(state))
+    server.directory = [
+        PEER.session_row(),
+        ORG_PEER.session_row(sessionId="s-org", hostMemberId=ORG_MEMBER),
+    ]
+    link = await _connected(server)
+    try:
+        await _until(lambda: link._org_status == org_peers.STATUS_OK)
+        link._online_devices = {PEER.device_id, ORG_PEER.device_id}
+        rows = {d["deviceId"]: d for d in link.network_snapshot()["devices"]}
+        assert rows[ORG_PEER.device_id]["canTrust"] is True
+        # A stranger outside every grant is still not offered.
+        state["grants"] = []
+        await link._refresh_peers()
+        rows = {d["deviceId"]: d for d in link.network_snapshot()["devices"]}
+        assert rows[ORG_PEER.device_id]["canTrust"] is False
+    finally:
+        await link.stop()
+
+
+# ---- pairing ------------------------------------------------------------------
+
+
+def _frame(peer: Peer, kind: str, msg_key: str, **fields) -> dict:
+    text = device_pairing.envelope(kind, **fields)
+    return {
+        "msgKey": msg_key,
+        "text": text,
+        "from": {"deviceId": peer.device_id, "memberId": ORG_MEMBER},
+        "to": {"deviceId": device_identity.device_id(), "workspace": "", "paneName": ""},
+        "sig": peer.sign(msg_key=msg_key, to_device=device_identity.device_id(),
+                         kind="text", body=text),
+    }
+
+
+async def _pair(link, conn, peer: Peer = ORG_PEER, tag: str = "1") -> None:
+    reply = await link.start_pairing(peer.device_id)
+    assert reply["ok"] is True, reply
+    await conn.push({"type": "messages.pending", "payload": _frame(
+        peer, device_pairing.PAIR_RESPONSE, f"pair-resp-{tag}",
+        nonce="bm9uY2U=", signKey=peer.sign_key, encKey=peer.enc_key)})
+    await _until(lambda: (device_pairing.get(peer.device_id) or None) is not None
+                 and bool(device_pairing.get(peer.device_id).their_key))
+    assert (await link.confirm_pairing(peer.device_id, accept=True))["ok"] is True
+    await conn.push({"type": "messages.pending", "payload": _frame(
+        peer, device_pairing.PAIR_CONFIRM, f"pair-confirm-{tag}")})
+    await _until(lambda: (trust_store.pin_for(peer.device_id) or {}).get("approved") is True)
+
+
+async def test_pairing_an_org_machine_records_the_grant_and_stays_in_the_member_ring(broadcasts):
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        conn = server.opened[0]
+        await _pair(link, conn)
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin["grantId"] == "g_1"
+        assert pin["org"]["orgName"] == "北辰設計"
+        assert pin["org"]["ownerName"] == "陳怡君"
+        # Paired, yet not one of this account's own machines.
+        assert link._own_device(pin) is False
+        assert link.pairing_rows() == []
+    finally:
+        await link.stop()
+
+
+async def test_the_pairing_card_names_the_organisation():
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is True
+        (row,) = link.pairing_rows()
+        assert row["org"] == {"grantId": "g_1", "orgName": "北辰設計", "ownerName": "陳怡君"}
+    finally:
+        await link.stop()
+
+
+async def test_personal_pairing_rows_carry_no_org_field():
+    server, link = await _link_with({"grants": [_grant()]})
+    try:
+        link._online_devices = {PEER.device_id}
+        trust_store.forget_device(PEER.device_id)
+        assert (await link.start_pairing(PEER.device_id))["ok"] is True
+        (row,) = link.pairing_rows()
+        assert "org" not in row
+    finally:
+        await link.stop()
+
+
+async def test_an_org_pin_messages_through_the_pane_policy(broadcasts):
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server, link = await _link_with(
+        {"grants": [_grant()]}, policy={"version": 1, "default": "deny", "rules": []}
+    )
+    try:
+        _pin_org()
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:org:1", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0]["reason"] == "policy-denied"
+        (knock,) = link.access_requests()
+        assert knock["org"]["orgName"] == "北辰設計"
+        assert knock["org"]["grantId"] == "g_1"
+    finally:
+        await link.stop()
+
+
+# ---- revocation ---------------------------------------------------------------
+
+
+async def test_grant_revoked_downgrades_that_grant_only_and_refuses_as_not_paired(broadcasts):
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state)
+    try:
+        _pin_org()
+        _pin_org(OTHER_ORG_PEER, grant_id="g_other")
+        conn = server.opened[0]
+        state["grants"] = [_grant("g_other", OTHER_ORG_PEER)]
+        await conn.push({"type": "org.grant.revoked", "payload": {
+            "grantId": "g_1", "scope": "grant", "deviceIds": [],
+            "reason": "link-revoked", "at": 1763870000000}})
+        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id)["approved"] is False)
+
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin["orgRevoked"] == {"reason": "link-revoked", "at": 1763870000000}
+        assert pin["signKey"] == ORG_PEER.sign_key  # kept, not deleted
+        assert trust_store.pin_for(OTHER_ORG_PEER.device_id)["approved"] is True
+        # This account's own pin is never touched by a grant.
+        own = trust_store.pin_for(PEER.device_id)
+        assert "grantId" not in own and "orgRevoked" not in own
+
+        await conn.push({"type": "messages.pending",
+                         "payload": _pending("pa:org:2", member_id=ORG_MEMBER, peer=ORG_PEER)})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0] == {"msgKey": "pa:org:2", "state": "rejected", "reason": "not-paired"}
+
+        await _until(lambda: bool(link.network_snapshot()["org"]["revokedGrants"]))
+        (gone,) = link.network_snapshot()["org"]["revokedGrants"]
+        assert gone["grantId"] == "g_1"
+        assert gone["peers"][0]["trustState"] == "revoked"
+        # The personal pending list is not where this is answered.
+        assert ORG_PEER.device_id not in {r["deviceId"] for r in trust_store.unapproved_devices()}
+    finally:
+        await link.stop()
+
+
+async def test_devices_scope_downgrades_only_the_listed_devices():
+    server, link = await _link_with({"grants": [_grant("g_1", ORG_PEER, OTHER_ORG_PEER)]})
+    try:
+        _pin_org(ORG_PEER)
+        _pin_org(OTHER_ORG_PEER)
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [OTHER_ORG_PEER.device_id],
+                                      "reason": "member-removed", "at": 5})
+        assert trust_store.pin_for(ORG_PEER.device_id)["approved"] is True
+        assert trust_store.pin_for(OTHER_ORG_PEER.device_id)["orgRevoked"]["reason"] == "member-removed"
+    finally:
+        await link.stop()
+
+
+async def test_devices_scope_naming_this_device_downgrades_every_pin_of_the_grant():
+    server, link = await _link_with({"grants": [_grant("g_1", ORG_PEER, OTHER_ORG_PEER)]})
+    try:
+        _pin_org(ORG_PEER)
+        _pin_org(OTHER_ORG_PEER)
+        await link._on_grant_revoked({"grantId": "g_1", "scope": "devices",
+                                      "deviceIds": [device_identity.device_id()],
+                                      "reason": "exposure-withdrawn", "at": 5})
+        assert trust_store.pin_for(ORG_PEER.device_id)["approved"] is False
+        assert trust_store.pin_for(OTHER_ORG_PEER.device_id)["approved"] is False
+    finally:
+        await link.stop()
+
+
+async def test_reconnect_reconciles_pins_whose_grant_is_gone():
+    _pin_org(ORG_PEER, grant_id="g_gone")
+    _pin_org(OTHER_ORG_PEER, grant_id="g_1")
+    server, link = await _link_with({"grants": [_grant("g_1", OTHER_ORG_PEER)]})
+    try:
+        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id)["approved"] is False)
+        assert trust_store.pin_for(ORG_PEER.device_id)["orgRevoked"]["reason"] == org_peers.REASON_LAPSED
+        assert trust_store.pin_for(OTHER_ORG_PEER.device_id)["approved"] is True
+        assert trust_store.pin_for(PEER.device_id).get("grantId") is None
+    finally:
+        await link.stop()
+
+
+async def test_peers_changed_rereads_the_list():
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state)
+    try:
+        before = state["calls"]
+        state["grants"] = []
+        await server.opened[0].push({"type": "peers.changed",
+                                     "payload": {"grantId": "g_1", "version": 2}})
+        await _until(lambda: state["calls"] > before and not link._org_grants)
+    finally:
+        await link.stop()
+
+
+async def test_a_revoked_org_machine_can_pair_again_only_through_a_live_grant():
+    state = {"grants": []}
+    server, link = await _link_with(state)
+    try:
+        _pin_org()
+        trust_store.revoke_org_pins("g_1", device_ids=None, local_device_id="",
+                                    reason="link-revoked", at=1)
+        reply = await link.start_pairing(ORG_PEER.device_id)
+        assert reply["error"]["code"] == "ORG_LINK_REVOKED"
+
+        state["grants"] = [_grant("g_new")]
+        await link._refresh_peers()
+        await _pair(link, server.opened[0], tag="again")
+        pin = trust_store.pin_for(ORG_PEER.device_id)
+        assert pin["grantId"] == "g_new"
+        assert "orgRevoked" not in pin
+    finally:
+        await link.stop()
+
+
+# ---- policy -------------------------------------------------------------------
+
+
+def test_a_grant_scoped_rule_only_applies_through_its_grant():
+    rule = {"from": {"memberId": ORG_MEMBER, "deviceId": ORG_PEER.device_id},
+            "to": {"workspace": "proj-a", "paneName": "reviewer"},
+            "action": "allow", "grantId": "g_1"}
+    policy = {"version": 1, "default": "deny", "rules": [rule]}
+    assert pane_policy.validate(policy) == ""
+    request = dict(member_id=ORG_MEMBER, device_id=ORG_PEER.device_id,
+                   workspace="proj-a", pane_name="reviewer")
+    assert pane_policy.is_allowed(pane_policy.for_grant(policy, "g_1"), **request) is True
+    assert pane_policy.is_allowed(pane_policy.for_grant(policy, "g_new"), **request) is False
+    # No grant to compare: unchanged.
+    assert pane_policy.for_grant(policy, "") is policy
+
+
+# ---- remote targets -----------------------------------------------------------
+
+
+def test_remote_targets_name_the_organisation_and_owner():
+    remote_roster.replace(
+        [
+            {**PEER.session_row()},
+            {**ORG_PEER.session_row(sessionId="s-org"), "grantId": "g_1",
+             "peerOrg": {"orgId": "org_b", "name": "北辰設計"}, "hostOwnerName": "陳怡君"},
+        ],
+        local_device_id="self",
+    )
+    rows = {row["address"].split("/")[0]: row for row in
+            (pane.to_dict() for pane in remote_roster.list_panes())}
+    assert rows[ORG_PEER.device_id]["org"] == "北辰設計"
+    assert rows[ORG_PEER.device_id]["owner"] == "陳怡君"
+    assert "org" not in rows[PEER.device_id] and "owner" not in rows[PEER.device_id]
+
+
+def test_parse_drops_unaddressable_rows():
+    grants = org_peers.parse({"grants": [
+        {"grantId": "", "peers": []},
+        {"grantId": "g", "peers": [{"deviceId": ""}, {"deviceId": "d", "online": "yes"}]},
+        "junk",
+    ]})
+    assert [g["grantId"] for g in grants] == ["g"]
+    assert grants[0]["peers"][0]["online"] is False
+    assert org_peers.parse(None) == []

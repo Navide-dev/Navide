@@ -212,6 +212,25 @@ async def test_approving_writes_one_narrow_allow_rule(link) -> None:
     )
 
 
+async def test_approving_an_organisation_knock_ties_the_rule_to_its_grant(link, monkeypatch) -> None:
+    """A knock from another organisation's machine writes the same narrow rule,
+    plus the grant it was paired through, so the rule lapses with that grant."""
+    key = _knock(link)
+    rows = link.requests.list
+
+    def with_org():
+        return [{**row, "org": {"grantId": "g_1", "orgName": "o", "ownerName": "w"}} for row in rows()]
+
+    monkeypatch.setattr(server_link, "access_requests", with_org)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["ok"] is True
+    (rule,) = link.writes[-1]["rules"]
+    assert rule["grantId"] == "g_1"
+    from agent_team_backend import pane_policy
+
+    assert pane_policy.validate(link.writes[-1]) == ""
+
+
 async def test_approving_one_pane_grants_nothing_next_door(link) -> None:
     key = _knock(link, pane="reviewer")
     await _call("p2p.access_requests.approve", {"key": key})
