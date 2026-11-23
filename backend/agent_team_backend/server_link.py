@@ -3963,7 +3963,6 @@ class ServerLink:
         their_enc_key = str(frame.get("encKey") or "")
         try:
             if kind == device_pairing.PAIR_REQUEST:
-                self._note_pairing_grant(device_id)
                 pairing = device_pairing.accept_request(
                     device_id,
                     device_name=name,
@@ -3972,6 +3971,10 @@ class ServerLink:
                     their_nonce=str(frame.get("nonce") or ""),
                 )
                 self._pairing_failures.pop(device_id, None)
+                # Only once the request is accepted: a refused one (an exchange
+                # already running) must not rewrite which grant that one began
+                # through.
+                self._note_pairing_grant(device_id)
                 await self._send_pair_frame(
                     device_id,
                     device_pairing.PAIR_RESPONSE,

@@ -468,3 +468,21 @@ async def test_a_grant_revoked_mid_exchange_ends_the_pairing_without_a_pin():
         assert trust_store.pin_for(ORG_PEER.device_id) is None
     finally:
         await link.stop()
+
+
+async def test_a_refused_second_request_does_not_rewrite_the_grant_of_the_running_exchange():
+    state = {"grants": [_grant()]}
+    server, link = await _link_with(state)
+    try:
+        conn = server.opened[0]
+        assert (await link.start_pairing(ORG_PEER.device_id))["ok"] is True
+        assert link._pairing_grants[ORG_PEER.device_id] == "g_1"
+        state["grants"] = []
+        await link._refresh_peers()
+        await conn.push({"type": "messages.pending", "payload": _frame(
+            ORG_PEER, device_pairing.PAIR_REQUEST, "pair-req-2",
+            nonce="bm9uY2U=", signKey=ORG_PEER.sign_key, encKey=ORG_PEER.enc_key)})
+        await _until(lambda: any(a.get("msgKey") == "pair-req-2" for a in conn.acks))
+        assert link._pairing_grants[ORG_PEER.device_id] == "g_1"
+    finally:
+        await link.stop()
