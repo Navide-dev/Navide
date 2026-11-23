@@ -2713,11 +2713,20 @@ class ServerLink:
             )
             if self._org_status == org_peers.STATUS_UNSUPPORTED:
                 self._org_grants = []
+            if code == "NOT_FOUND":
+                # A server that knows peers.list saying this device is in no
+                # organisation: every grant pin it held is gone. Only a server
+                # that predates organisations (or no answer) skips this.
+                await self._reconcile_org_pins()
             return
         payload = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
         self._org_grants = org_peers.parse(payload)
         self._org_as_of = payload.get("asOf") if isinstance(payload.get("asOf"), int) else 0
         self._org_status = org_peers.STATUS_OK
+        await self._reconcile_org_pins()
+
+    async def _reconcile_org_pins(self) -> None:
+        """Downgrade the pins the current grant list no longer backs."""
         try:
             changed = await asyncio.to_thread(
                 trust_store.reconcile_org_pins,
@@ -4429,6 +4438,17 @@ class ServerLink:
             return
         await self._remember_inbound(msg_key)
         await self._ensure_policy()
+        # An organisation machine is judged by the member id its grant named
+        # when it was paired, not the one in the frame, which the relay writes:
+        # otherwise a frame claiming this account's member id would match the
+        # "my own devices" rule. A frame that disagrees with the pin is refused.
+        if held is not None and held.get("grantId"):
+            pinned_member = str(held.get("memberId") or "")
+            if not pinned_member or sender_member != pinned_member:
+                log.warning("refusing message %s: its member id does not match the pinned one", msg_key)
+                await self._ack(msg_key, "rejected", reason=REASON_UNAUTHENTICATED)
+                return
+            sender_member = pinned_member
         # Three rings, not one condition: your own machines are one trust
         # domain and never consult the rules, a blocked device is refused ahead
         # of everything including that shortcut, and everyone else is what the
