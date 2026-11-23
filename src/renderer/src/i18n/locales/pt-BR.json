@@ -6913,7 +6913,10 @@
         "state-ended": "Pareamento encerrado",
         "revoked-since": "desde {when}",
         "offline-note": "A outra máquina está offline; o pareamento termina quando ela ficar online",
-        "act-failed": "Não concluído: {reason}"
+        "act-failed": "Não concluído: {reason}",
+        "manage-opening": "Abrindo…",
+        "manage-hint-signin": "confira se esta máquina está conectada ao Navide Cloud e tente de novo.",
+        "manage-hint-unreachable": "não foi possível alcançar o site da organização agora; tente de novo em instantes."
       }
     },
     "sync": {

@@ -6913,7 +6913,10 @@
         "state-ended": "Pairing ended",
         "revoked-since": "since {when}",
         "offline-note": "The other machine is offline; pairing can finish once it is online",
-        "act-failed": "Not completed: {reason}"
+        "act-failed": "Not completed: {reason}",
+        "manage-opening": "Opening…",
+        "manage-hint-signin": "sign this machine in to Navide Cloud, then try again.",
+        "manage-hint-unreachable": "the organization site could not be reached right now; try again in a moment."
       }
     },
     "sync": {

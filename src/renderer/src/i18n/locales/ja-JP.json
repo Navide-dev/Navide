@@ -6913,7 +6913,10 @@
         "state-ended": "ペアリング終了",
         "revoked-since": "{when} から",
         "offline-note": "相手がオフラインです。オンラインになるとペアリングを完了できます",
-        "act-failed": "完了しませんでした：{reason}"
+        "act-failed": "完了しませんでした：{reason}",
+        "manage-opening": "開いています…",
+        "manage-hint-signin": "このマシンが Navide Cloud にサインインしていることを確認して、もう一度お試しください。",
+        "manage-hint-unreachable": "組織サイトに今は接続できません。しばらくしてからもう一度お試しください。"
       }
     },
     "sync": {

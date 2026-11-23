@@ -6913,7 +6913,10 @@
         "state-ended": "Appairage terminé",
         "revoked-since": "depuis le {when}",
         "offline-note": "L’autre machine est hors ligne ; l’appairage pourra se terminer quand elle sera en ligne",
-        "act-failed": "Non terminé : {reason}"
+        "act-failed": "Non terminé : {reason}",
+        "manage-opening": "Ouverture…",
+        "manage-hint-signin": "vérifiez que cette machine est connectée à Navide Cloud, puis réessayez.",
+        "manage-hint-unreachable": "le site de l’organisation est injoignable pour le moment ; réessayez dans un instant."
       }
     },
     "sync": {
