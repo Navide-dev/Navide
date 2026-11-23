@@ -6916,7 +6916,9 @@
         "act-failed": "完了しませんでした：{reason}",
         "manage-opening": "開いています…",
         "manage-hint-signin": "このマシンが Navide Cloud にサインインしていることを確認して、もう一度お試しください。",
-        "manage-hint-unreachable": "組織サイトに今は接続できません。しばらくしてからもう一度お試しください。"
+        "manage-hint-unreachable": "組織サイトに今は接続できません。しばらくしてからもう一度お試しください。",
+        "reshare-hint": "所有者が teams.navide.dev でこのマシンを再び公開したら、もう一度 6 桁でペアリングしてください",
+        "rejoin-hint": "所有者が組織に戻ってこのマシンを公開したら、もう一度 6 桁でペアリングしてください"
       }
     },
     "sync": {

@@ -6916,7 +6916,9 @@
         "act-failed": "這個動作沒有完成：{reason}",
         "manage-opening": "正在開啟…",
         "manage-hint-signin": "請確認這台機器已登入 Navide Cloud，再試一次。",
-        "manage-hint-unreachable": "組織網站暫時連不上，請稍後再試。"
+        "manage-hint-unreachable": "組織網站暫時連不上，請稍後再試。",
+        "reshare-hint": "擁有者在 teams.navide.dev 重新公開這台機器後，再走一次六碼配對",
+        "rejoin-hint": "擁有者重新加入組織並公開這台機器後，再走一次六碼配對"
       }
     },
     "sync": {

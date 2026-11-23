@@ -6916,7 +6916,9 @@
         "act-failed": "Chưa hoàn tất: {reason}",
         "manage-opening": "Đang mở…",
         "manage-hint-signin": "hãy kiểm tra máy này đã đăng nhập Navide Cloud rồi thử lại.",
-        "manage-hint-unreachable": "hiện không kết nối được trang tổ chức; hãy thử lại sau ít phút."
+        "manage-hint-unreachable": "hiện không kết nối được trang tổ chức; hãy thử lại sau ít phút.",
+        "reshare-hint": "Khi chủ máy chia sẻ lại máy này trên teams.navide.dev, hãy ghép đôi lại bằng sáu chữ số",
+        "rejoin-hint": "Khi chủ máy quay lại tổ chức và chia sẻ máy này, hãy ghép đôi lại bằng sáu chữ số"
       }
     },
     "sync": {

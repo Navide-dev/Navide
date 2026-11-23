@@ -6916,7 +6916,9 @@
         "act-failed": "Não concluído: {reason}",
         "manage-opening": "Abrindo…",
         "manage-hint-signin": "confira se esta máquina está conectada ao Navide Cloud e tente de novo.",
-        "manage-hint-unreachable": "não foi possível alcançar o site da organização agora; tente de novo em instantes."
+        "manage-hint-unreachable": "não foi possível alcançar o site da organização agora; tente de novo em instantes.",
+        "reshare-hint": "Quando o dono compartilhar esta máquina de novo em teams.navide.dev, pareie outra vez com seis dígitos",
+        "rejoin-hint": "Quando o dono voltar à organização e compartilhar esta máquina, pareie outra vez com seis dígitos"
       }
     },
     "sync": {

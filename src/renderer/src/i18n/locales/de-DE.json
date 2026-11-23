@@ -6916,7 +6916,9 @@
         "act-failed": "Nicht abgeschlossen: {reason}",
         "manage-opening": "Wird geöffnet …",
         "manage-hint-signin": "prüfe, ob dieser Rechner bei Navide Cloud angemeldet ist, und versuche es erneut.",
-        "manage-hint-unreachable": "die Organisationsseite ist gerade nicht erreichbar; versuche es gleich noch einmal."
+        "manage-hint-unreachable": "die Organisationsseite ist gerade nicht erreichbar; versuche es gleich noch einmal.",
+        "reshare-hint": "Sobald der Besitzer diesen Rechner auf teams.navide.dev wieder freigibt, erneut mit sechs Ziffern koppeln",
+        "rejoin-hint": "Sobald der Besitzer wieder in der Organisation ist und diesen Rechner freigibt, erneut mit sechs Ziffern koppeln"
       }
     },
     "sync": {
