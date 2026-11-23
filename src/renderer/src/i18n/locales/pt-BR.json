@@ -6887,8 +6887,7 @@
         "reason-org-deleted": "Organização excluída",
         "reason-lapsed": "Vínculo de organização expirado",
         "revoked-on": "{when} {reason}",
-        "revoked-title": "Vínculo de organização revogado",
-        "revoked-body": "Os pareamentos com todas as máquinas desta organização voltaram para “não aprovado”; o histórico fica abaixo. As mensagens delas agora são recusadas como not-paired. Para restaurar, vincule as organizações de novo em teams.navide.dev e pareie outra vez com seis dígitos.",
+        "revoked-body": "Os pareamentos com todas as máquinas desta organização voltaram para “não aprovado” e as mensagens delas não são mais entregues. O histórico fica abaixo. Para restaurar, vincule as organizações de novo em teams.navide.dev e pareie outra vez com seis dígitos.",
         "repair-hint": "Vincule as organizações de novo em teams.navide.dev e pareie outra vez com seis dígitos",
         "pair": "Parear",
         "unpair": "Desfazer pareamento",
@@ -6909,7 +6908,10 @@
         "same-org-hint": "Máquinas que membros da sua própria organização escolheram compartilhar. O pareamento continua usando a comparação de seis dígitos e só termina quando os dois lados tocam em “Coincidem”.",
         "same-org-badge": "Mesma organização",
         "same-org-tag": "Membro da sua organização · {org}",
-        "knock-paired-same": "Pareada (mesma organização)"
+        "knock-paired-same": "Pareada (mesma organização)",
+        "state-pairing": "Comparando",
+        "state-ended": "Pareamento encerrado",
+        "revoked-since": "desde {when}"
       }
     },
     "sync": {

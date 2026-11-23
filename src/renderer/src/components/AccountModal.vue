@@ -2853,6 +2853,12 @@ input:focus {
 .dev-tag.ts-revoked { color: var(--danger-fg); }
 /* Another organization's machine, on the pairing and knock cards. */
 .dev-tag.org-tag { color: var(--accent-fg, var(--text-bright)); align-self: flex-start; }
+/* On a device row the organization gives way before the name does: the name is
+   what identifies the machine, the organization only qualifies it. */
+.dev-head .dev-tag.org-tag {
+  align-self: center; flex: 0 999 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .org-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-muted); border-radius: 6px; }
 .org-facts dt { color: var(--text-secondary); }
 .org-facts dd { margin: 0; }

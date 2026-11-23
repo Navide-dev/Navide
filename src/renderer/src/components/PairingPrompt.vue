@@ -302,6 +302,12 @@ function grouped(value: string | undefined): string {
             { device: card.row.deviceName || card.row.deviceId },
           ) }}
         </p>
+        <!-- Whose machine this is, before anyone compares digits: an
+             organization's machine must never read as one of your own. -->
+        <p v-if="card.row.org" class="pp-org" data-org-tag>
+          {{ t(card.row.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: card.row.org.orgName }) }}<template
+            v-if="card.row.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: card.row.org.ownerName }) }}</template>
+        </p>
         <p class="pp-label">{{ t('settings.p2p.pair.code-label') }}</p>
         <p class="pp-code">{{ card.row.code }}</p>
         <p class="pp-body">
@@ -410,6 +416,7 @@ function grouped(value: string | undefined): string {
   font-size: 24px; letter-spacing: 0.18em; user-select: text;
   color: var(--text-bright); font-variant-numeric: tabular-nums;
 }
+.pp-org { margin: 4px 0 0; font-size: 12px; color: var(--accent-fg, var(--text-primary)); line-height: 1.4; overflow-wrap: anywhere; }
 .pp-body { margin: 6px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
 .pp-fp { margin: 2px 0 0; font-size: 12px; }
 .pp-fp code { user-select: text; letter-spacing: 0.06em; }

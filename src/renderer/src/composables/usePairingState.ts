@@ -31,6 +31,8 @@ export interface PairingRow {
   startedAt?: number
   /** When it stops waiting, in seconds since the epoch. */
   expiresAt?: number
+  /** Set only for a machine reached through an organization. */
+  org?: { grantId: string; orgName: string; ownerName: string; sameOrg?: boolean }
 }
 
 /** A round that ended because one side refused a frame of it. */
