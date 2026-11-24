@@ -317,7 +317,7 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   })
 })
 
-describe('0.2.47 — SSH Remote terminal panes', () => {
+describe('0.2.47 — Organization Cloud and SSH Remote terminal panes', () => {
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.47')
 
@@ -333,7 +333,7 @@ describe('0.2.47 — SSH Remote terminal panes', () => {
     expect(en).toContain('opens a terminal pane whose shell runs there')
     expect(en).toContain('reconnects on its own')
     expect(en).toContain('SSH agent forwarding is always off')
-    expect(entry!.title['zh-TW']).toBe('SSH Remote：在遠端主機開終端機分格（實驗功能）')
+    expect(entry!.title['zh-TW']).toContain('SSH Remote')
     for (const text of [entry!.title, ...entry!.highlights]) {
       expect(text['en-US']).not.toContain('not supported yet')
       expect(text['zh-TW']).not.toContain('尚未支援')
@@ -343,6 +343,15 @@ describe('0.2.47 — SSH Remote terminal panes', () => {
 
   it('puts a no-break space before French : ; ? !', () => {
     for (const text of [entry!.title, ...entry!.highlights]) expect(text['fr-FR']).not.toMatch(/ [:;?!»]|« /)
+  })
+
+  it('leads with Organization Cloud: the title and the first highlights', () => {
+    expect(entry!.title['zh-TW']).toBe('組織 Cloud：和組織成員、互連組織的機器配對，另有 SSH Remote 終端機分格（實驗功能）')
+    expect(entry!.title['en-US']).toMatch(/^Organization Cloud: /)
+    expect(entry!.highlights[0]['en-US']).toContain('teams.navide.dev')
+    expect(entry!.highlights[0]['en-US']).toContain('six-digit comparison')
+    expect(entry!.highlights[1]['en-US']).toContain('downgraded')
+    expect(entry!.highlights[2]['en-US']).toMatch(/^SSH Remote: /)
   })
 
   it('shows once to someone updating from 0.2.46', () => {
