@@ -28,11 +28,14 @@ import asyncio
 import json
 import re
 import sqlite3
+from functools import partial
 from typing import Any
 
 from .db import Database
 
 _COMPONENT = "scheduler"
+#: The kv row holding the user's run caps (Settings → Scheduler).
+SETTINGS_KEY = "scheduler.settings"
 
 #: Run-history rows kept per job; older rows are pruned on append.
 RUNS_PER_JOB = 200
@@ -78,6 +81,16 @@ def _add_owners(cur: sqlite3.Cursor) -> None:
 
 def _create_usage(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE TABLE scheduler_usage (day TEXT PRIMARY KEY, runs INTEGER NOT NULL)")
+
+
+def _drop_default_run_caps(cur: sqlite3.Cursor) -> None:
+    """A job saved before the cap became a setting carries the old default (24)
+    in its policy; dropped, it follows the setting, whose default is 24 too."""
+    for row in cur.execute("SELECT id, policy FROM scheduler_jobs").fetchall():
+        policy = _loads_or(row[1], None)
+        if policy is not None and policy.get("max_runs_per_day") == 24:
+            policy.pop("max_runs_per_day")
+            cur.execute("UPDATE scheduler_jobs SET policy = ? WHERE id = ?", (_dumps(policy), row[0]))
 
 
 def _dumps(value: Any) -> str:
@@ -130,6 +143,7 @@ class SchedulerStore:
         db.migrate(_COMPONENT, 1, _create_scheduler_schema)
         db.migrate(_COMPONENT, 2, _add_owners)
         db.migrate(_COMPONENT, 3, _create_usage)
+        db.migrate(_COMPONENT, 4, _drop_default_run_caps)
 
     # ── sync bodies (always called through to_thread) ────────────────────
 
@@ -306,3 +320,10 @@ class SchedulerStore:
 
     async def add_usage(self, day: str) -> None:
         await asyncio.to_thread(self._add_usage, day)
+
+    async def get_settings(self) -> dict[str, Any]:
+        stored = await asyncio.to_thread(self.db.kv_get, SETTINGS_KEY, None)
+        return stored if isinstance(stored, dict) else {}
+
+    async def set_settings(self, settings: dict[str, Any], now: int) -> None:
+        await asyncio.to_thread(partial(self.db.kv_set, SETTINGS_KEY, settings, now=now))

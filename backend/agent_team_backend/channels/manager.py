@@ -36,11 +36,11 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, shipped_cmds, wake
+from . import account_menu, held, inbound, media, model_menu, pdf, plugin_cmds, quick_menu, redact, relay, report, resend, share_cmds, shipped_cmds, status_card, wake
 from .. import error_ledger, prompt_skills
 from ..db_executor import run_in_db_thread
 from .mirror import (
-    CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
+    CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, status_word, summarize,
 )
 from .base import ChannelAdapter, InboundMessage, Location, MediaTooLarge, is_shared_sender
 from .pairing import LinkInvites, SenderGate, normalize_code, parse_link_code
@@ -334,6 +334,15 @@ class Seams:
     # from, to, fixedCount} or {status: "stale" | "needs-window" | "refused" | ..., code?};
     # the window's own switch, audited as from `who`
     switch_account: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_account()
+    # pane_id -> what /status shows of one pane (channels.status_card): {agent, agent_label?,
+    # model?, effort?, status?, prompt?, last?: {type, text?, age_seconds}, account?: {name,
+    # email?}, quota?: {window, used_percent, resets_at, stale}}; {} when unknown. One window
+    # probe plus cached reads, never a quota fetch; a sign-in pane's texts are left out
+    pane_card: Callable[[str], Awaitable[dict[str, Any]]] = lambda _p: _no_card()
+
+
+async def _no_card() -> dict[str, Any]:
+    return {}
 
 
 async def _no_set_model() -> dict[str, Any]:
@@ -2834,6 +2843,22 @@ class ChannelManager:
                 last = last[:STATUS_LAST_CHARS - 1] + "…"
             lines.append(held.text(lang, "status_last", text=last))
         return lines
+
+    async def status_cards(self, rows: list[dict[str, Any]], loc: Location) -> str:
+        """What /status adds after its details: one card per pane of the tree (bound pane
+        first), the idle ones folded when there are many (channels.status_card). Account
+        emails are whole only in a chat known to be direct."""
+        lang = prompt_skills.language(await self._ui_settings())
+
+        async def one(pid: str) -> dict[str, Any]:
+            try:
+                return await self._seams.pane_card(pid)
+            except Exception as exc:  # noqa: BLE001 - a pane without a card still has its tree line
+                log.warning("channels: /status card for %s failed: %s", pid, exc)
+                return {}
+
+        infos = await asyncio.gather(*(one(str(r["pane_id"])) for r in rows))
+        return status_card.render(lang, list(zip(rows, infos)), status_word, group=self._kind_at(loc) != "direct")
 
     async def _list_pending(self, msg: InboundMessage) -> None:
         """/pending: send this chat's waiting prompts again, each with its buttons. The new

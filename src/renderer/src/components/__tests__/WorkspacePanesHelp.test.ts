@@ -18,7 +18,7 @@ function mountHelp(): VueWrapper {
 }
 
 // Row counts per table, in document order.
-const TABLE_ROWS = [6, 4, 3, 5, 3, 4, 15]
+const TABLE_ROWS = [6, 5, 3, 5, 3, 4, 15]
 
 // Every interface label this topic quotes, paired with the key the product
 // renders it from. The topic must print whatever that key says — in either

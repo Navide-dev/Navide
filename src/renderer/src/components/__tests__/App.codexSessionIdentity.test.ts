@@ -114,6 +114,7 @@ function harness() {
     restorePinGate: () => ({ loaded: () => true, load: async () => {}, disclose: vi.fn() }),
     accountFollow: { add: vi.fn(), remove: vi.fn(), has: () => false },
     acp: { owns: () => false, claim: () => false }, // lib/acpHost.ts: no ACP pane here
+    savedSshTarget: () => undefined, // no SSH remote on these saved panes
   }
   const actions = new Function(...Object.keys(deps), `${javascript}; return {
     spawnPane, onManualSpawn, rebuildPaneClean, performRealizeRestoredPane,

@@ -183,6 +183,58 @@ describe('Testplace join, list and leave', () => {
   })
 })
 
+describe('Testplace invites (the developer form)', () => {
+  it('sends more than 100 invitees in one request: the Registry has no cap on testers', async () => {
+    register()
+    const labels = Array.from({ length: 150 }, (_, i) => `t${i}@example.com`)
+    registry.fetch = vi.fn(async () => ({ status: 200, body: { invites: labels.map((label, id) => ({ id, label, join_token: `tpi_${id}` })) } }))
+    const result = (await call('plugins:testplaceInvite', { id: ID, labels })) as { ok: boolean }
+    expect(result.ok).toBe(true)
+    expect(registry.fetch).toHaveBeenCalledWith('/api/testplace/acme/beta/invites', { method: 'POST', json: { labels } }, 'account')
+  })
+
+  it('still refuses an empty list and a blank or overlong label', async () => {
+    register()
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: [] })).rejects.toThrow(/one or more non-empty labels/)
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: ['  '] })).rejects.toThrow(/one or more non-empty labels/)
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: ['x'.repeat(121)] })).rejects.toThrow(/one or more non-empty labels/)
+  })
+})
+
+describe('the Testplace manager (the developer page)', () => {
+  it("lists builds and codes, promotes a build and creates and revokes a code with the user's account", async () => {
+    register()
+    registry.fetch = vi.fn(async () => ({ status: 200, body: { ok: true } }))
+    await call('plugins:testplaceManage', { id: ID, action: 'versions' })
+    await call('plugins:testplaceManage', { id: ID, action: 'codes' })
+    await call('plugins:testplaceManage', { id: ID, action: 'promote', version: '0.3.0-beta.1' })
+    await call('plugins:testplaceManage', { id: ID, action: 'code-create', maxTesters: 500 })
+    const result = (await call('plugins:testplaceManage', { id: ID, action: 'code-revoke', codeId: 7 })) as { ok: boolean }
+    expect(result.ok).toBe(true)
+    expect(registry.fetch.mock.calls).toEqual([
+      ['/api/testplace/acme/beta/versions', {}, 'account'],
+      ['/api/testplace/acme/beta/codes', {}, 'account'],
+      ['/api/testplace/acme/beta/versions/0.3.0-beta.1/promote', { method: 'POST' }, 'account'],
+      ['/api/testplace/acme/beta/codes', { method: 'POST', json: { max_testers: 500 } }, 'account'],
+      ['/api/testplace/acme/beta/codes/7/revoke', { method: 'POST' }, 'account'],
+    ])
+  })
+
+  it('returns the Registry refusal and refuses a malformed call before any request', async () => {
+    register()
+    registry.fetch = vi.fn(async () => ({ status: 403, body: { detail: { code: 'OWNER_ONLY', message: 'only the namespace owner' } } }))
+    expect(await call('plugins:testplaceManage', { id: ID, action: 'promote', version: '0.3.0' }))
+      .toMatchObject({ ok: false, status: 403, code: 'OWNER_ONLY' })
+    registry.fetch.mockClear()
+    await expect(call('plugins:testplaceManage', { id: 'not an id', action: 'versions' })).rejects.toThrow(/invalid plugin id/)
+    await expect(call('plugins:testplaceManage', { id: ID, action: 'delete-everything' })).rejects.toThrow(/invalid testplace action/)
+    await expect(call('plugins:testplaceManage', { id: ID, action: 'code-create', maxTesters: 0 })).rejects.toThrow(/positive whole number/)
+    await expect(call('plugins:testplaceManage', { id: ID, action: 'code-create', maxTesters: 2.5 })).rejects.toThrow(/positive whole number/)
+    await expect(call('plugins:testplaceManage', { id: ID, action: 'promote', version: '' })).rejects.toThrow(/invalid version/)
+    expect(registry.fetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('installing a Testplace build', () => {
   it("fetches with the user's account and runs the same verified install", async () => {
     register()

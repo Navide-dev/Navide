@@ -11211,7 +11211,7 @@ async def project_set_layout_mode(session: "Session", msg_id: str, msg_type: str
 
     ws_raw = payload.get("workspace_path", "") or ""
     mode = payload.get("layout_mode", "grid")
-    if mode not in ("auto", "grid", "spotlight", "fullscreen"):
+    if mode not in ("auto", "grid", "spotlight", "fullscreen", "persona"):
         mode = "grid"
     await run_in_db_thread(app.project_store.set_layout_mode, ws_raw, mode)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
@@ -12660,11 +12660,16 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
 
     remote_target: dict[str, Any] | None = None
     if payload.get("remote") is not None:
-        from . import remote_devcontainer
+        from . import remote_devcontainer, remote_ssh
 
         try:
-            remote_target = remote_devcontainer.parse_remote(payload.get("remote"))
-        except remote_devcontainer.RemoteSpecError as err:
+            raw_remote = payload.get("remote")
+            remote_target = (
+                remote_ssh.record_spec(remote_ssh.parse_spec(raw_remote))
+                if isinstance(raw_remote, dict) and raw_remote.get("kind") == "ssh"
+                else remote_devcontainer.parse_remote(raw_remote)
+            )
+        except (remote_devcontainer.RemoteSpecError, remote_ssh.SshTargetError) as err:
             await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
             return
     manual_pin = _profile_pin_for_bookkeeping(
@@ -14308,6 +14313,28 @@ async def scheduler_list(session: "Session", msg_id: str, msg_type: str, payload
     await session.send_json(
         make_response(msg_id, msg_type, await scheduler.get_service().list())
     )
+
+
+@handler("scheduler.settings.get")
+async def scheduler_settings_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's run counts (Settings → Scheduler); None means no cap."""
+    from . import scheduler
+
+    settings = await scheduler.get_service().settings()
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "settings": settings}))
+
+
+@handler("scheduler.settings.set")
+async def scheduler_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Change any of the run counts: ``settings`` holds the keys that change."""
+    from . import scheduler
+
+    try:
+        result = await scheduler.get_service().set_settings(payload.get("settings"))
+    except scheduler.JobInvalid as err:
+        await _scheduler_bad_request(session, msg_id, msg_type, str(err))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 @handler("scheduler.upsert")

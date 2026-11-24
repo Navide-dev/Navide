@@ -30,7 +30,7 @@ import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../s
 import type { AppLockApi, AppLockStatus } from '../shared/appLock'
 import { DEEP_LINK_OPEN_CHANNEL, DEEP_LINK_PUBLISH_CHANNEL, DEEP_LINK_READY_CHANNEL, type DeepLinkApi } from '../shared/deepLink'
 import type { LocalInstallDetails, PluginSource } from '../shared/pluginSource'
-import type { DeveloperApi, DeveloperCallResult } from '../shared/marketplaceDeveloper'
+import type { DeveloperApi, DeveloperCallResult, TestplaceManageRequest } from '../shared/marketplaceDeveloper'
 
 /** Which Electron-owned cache groups to clear. Never touches user state. */
 export interface ClearElectronCachesOptions {
@@ -1663,6 +1663,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     /** The invite form's Send: the join tokens come back to that form only. */
     testplaceInvite: (id: string, labels: string[]): Promise<DeveloperCallResult> =>
       ipcRenderer.invoke('plugins:testplaceInvite', { id, labels }),
+    /** The developer page's Testplace manager: test builds, promotion and public test codes. */
+    testplaceManage: (id: string, request: TestplaceManageRequest): Promise<DeveloperCallResult> =>
+      ipcRenderer.invoke('plugins:testplaceManage', { id, ...request }),
     /** D3: expired Testplace builds, stopped with their data kept, and "keep using". */
     expiredTestplace: (): Promise<ExpiredTestplaceBuild[]> => ipcRenderer.invoke('plugins:expiredTestplace'),
     /** Installed Registry packages stopped because trust data fails against this computer's clock. */

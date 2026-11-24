@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Chaque icône de bouton de l’interface – son nom, son emplacement et l’effet d’un clic."
+        },
+        "general-scheduler-runs": {
+          "title": "Exécutions quotidiennes du planificateur",
+          "summary": "Combien de fois par jour s’exécutent les tâches planifiées et celles des agents"
         }
       },
       "no-results": "Aucun paramètre correspondant"
@@ -4686,7 +4690,7 @@
             "role": "En haut, la liste déroulante <strong>Sélectionner un rôle…</strong> – choisissez un rôle prédéfini.",
             "cliList": "En dessous, la liste est divisée en deux blocs titrés. <strong>{cli}</strong> regroupe les CLI de développement ; ceux qui ne sont pas installés sont signalés. <strong>{agents}</strong> affiche vos agents permanents (OpenClaw, Hermes Agent) par leur nom : choisir un agent ouvert vous y amène, choisir un agent fermé reprend sa conversation. Une entrée <em>Nouveau …</em> demande d’abord un nom, et les agents ACP figurent aussi dans ce bloc. Une note sous la liste rappelle que les agents cloud comme Grok Bot et dots sont fournis sous forme de plugins Navide.",
             "terminal": "En bas, <strong>Terminal</strong> (un simple terminal sans agent associé) et <strong>Lancement manuel…</strong>.",
-            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. Se connecter vérifie l’hôte et ouvre un pane de terminal dont le shell s’exécute là-bas ; si la connexion tombe, le pane se reconnecte tout seul."
+            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. Se connecter vérifie l’hôte et ouvre un pane de terminal dont le shell s’exécute là-bas ; si la connexion tombe, le pane se reconnecte tout seul. Il peut aussi ouvrir Claude, Codex ou une autre CLI dans un dossier distant, avec sa propre connexion sur cet hôte (sans changement de compte ni basculement automatique de quota) ; les volets SSH sont restaurés après un redémarrage."
           },
           "p2": "<em>Lancement manuel…</em> ouvre la boîte de dialogue complète, où vous pouvez choisir l’agent et le rôle, décider de l’ajouter ou non à la scène, d’ouvrir ou non un terminal à côté, et coller un identifiant de session pour reprendre directement une conversation antérieure.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "Le pane actif remplit la scène, les autres se replient en fenêtres flottantes dépliables."
+            },
+            "persona": {
+              "behavior": "Chaque volet est une personne à son bureau : taper = en cours, main levée = attend votre réponse, café ou somnole = inactif, écran qui fume = erreur. Chaque onglet est une salle ; avec beaucoup de volets, ouvrez la vue de l'immeuble. Un clic affiche l'état, un double-clic donne le focus à ce volet."
             }
           },
           "p2": "Il existe aussi un comportement que vous ne sélectionnez pas, le <strong>double focus</strong> : quand exactement deux panes tournent, ils se partagent automatiquement l’écran à gauche et à droite, et le séparateur entre eux peut être déplacé.",
@@ -7200,7 +7207,8 @@
       "settings-management": "Gestion des paramètres",
       "experimental": "Fonctions expérimentales",
       "theme": "Thème",
-      "other": "Autres"
+      "other": "Autres",
+      "scheduler": "Planificateur"
     },
     "p2p": {
       "title": "Connexion",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "Un message attend désormais que le pane destinataire soit inactif, puis y est tapé ; il met donc plus de temps à arriver.",
       "all-off-rewake": "Le réveil (rewake) de Claude Code est le seul moyen de réveiller un agent inactif ; s’il est désactivé, il ne reste qu’à attendre que l’agent redevienne inactif de lui-même.",
       "all-off-restart": "Un pane déjà en cours garde le canal avec lequel il a démarré jusqu’à son redémarrage."
+    },
+    "scheduler": {
+      "hint": "Combien de fois par jour les tâches planifiées s’exécutent. Les valeurs par défaut sont celles que Navide a toujours utilisées.",
+      "per-job": "Exécutions par jour et par tâche",
+      "per-job-hint": "Pour les tâches qui ne fixent pas leur propre nombre quotidien.",
+      "agent-job": "Exécutions par jour par tâche d’agent",
+      "agent-job-hint": "Le nombre maximal d’exécutions par jour d’une tâche créée par un agent.",
+      "agent-total": "Exécutions par jour pour l’ensemble des tâches d’agents",
+      "agent-total-hint": "Toutes les tâches créées par des agents, additionnées. Une exécution dont la CLI cible n’a plus de quota reste ignorée.",
+      "no-cap": "Sans plafond",
+      "save-failed": "Impossible d’enregistrer le réglage du planificateur"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "Filtrer par type",
     "all-stages-finished": "Les {count} étapes se sont terminées avec succès",
     "region-switching": "Passage de {title} à la version {version}…",
-    "region-unavailable": "{title} indisponible"
+    "region-unavailable": "{title} indisponible",
+    "view-mode-persona": "Persona — chaque volet est une personne dans un bureau ; sa posture montre ce qu'il fait"
   },
   "layout": {
     "expand": "Développer le panneau",
@@ -9597,7 +9617,9 @@
       "remove": "Supprimer",
       "remove-confirm": "Supprimer cette tâche planifiée ?",
       "cancel": "Annuler",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "max-runs-follow": "Réglages : {n}",
+      "max-runs-follow-none": "Réglages : sans plafond"
     },
     "owner": {
       "user": "créée par vous",
@@ -11844,6 +11866,29 @@
       "sent": "{count} invitations créées. Remettez chaque code à son testeur ; les codes ne sont affichés que cette fois-ci.",
       "copy": "Copier",
       "done": "Terminé"
+    },
+    "manage": {
+      "plugin": "Plugin Navide (namespace.name)",
+      "load": "Afficher les versions et codes de test",
+      "builds": "Versions de test",
+      "noBuilds": "Ce plugin Navide n’a aucune version de test.",
+      "promote": "Envoyer à l’examen",
+      "promoteVersion": "Envoyer {version} à l’examen",
+      "promoteConfirm": "Envoyer {plugin} {version} à l’examen de la Navide Marketplace ? Le même paquet est examiné ; les testeurs n’ont pas à le réinstaller une fois approuvé.",
+      "promoted": "{plugin} {version} a été envoyé à l’examen de la Navide Marketplace.",
+      "codes": "Codes de test publics",
+      "codesHint": "Un code permet à autant de testeurs que vous le fixez de rejoindre le test. Le premier code de chaque plugin Navide s’ouvre après un examen rapide.",
+      "testers": "{count} testeurs sur {max}",
+      "revoke": "Révoquer",
+      "revokeConfirm": "Révoquer le code de test #{code} ? Plus personne ne pourra l’utiliser ; les testeurs déjà inscrits gardent leur accès.",
+      "maxTesters": "Testeurs pour un nouveau code",
+      "create": "Créer un code",
+      "created": "Code de test, affiché une seule fois :",
+      "state": {
+        "revoked": "Révoqué",
+        "expires": "Expire le {date}",
+        "promotion": "Examen : {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "Reconnexion…",
     "retry-in": "Reconnexion automatique dans {seconds} s",
     "reconnect": "Reconnecter",
-    "close-pane": "Fermer le pane"
+    "close-pane": "Fermer le pane",
+    "dir-label": "Dossier distant",
+    "dir-placeholder": "~ (dossier personnel) ou un chemin sur l'hôte",
+    "run-label": "Ouvrir",
+    "run-terminal": "Terminal (shell de connexion)",
+    "tools-note": "{cli} dispose des outils de Navide sur l'hôte (messages aux autres volets, plans). Pour cela, Navide envoie à ce volet son propre jeton d'outils par la connexion SSH, saisi avec l'écho désactivé et jamais placé sur une ligne de commande. Le jeton est créé pour ce volet seulement et cesse de fonctionner à sa fermeture. Ce n'est pas un identifiant de compte : aucune clé ni connexion ne quitte cet ordinateur.",
+    "no-tools-note": "{cli} tourne sur l'hôte sans les outils de Navide : les messages des autres volets arrivent toujours comme du texte saisi, mais il ne peut pas appeler Navide lui-même.",
+    "accounts-note": "Connectez-vous vous-même à {cli} sur l'hôte distant. Ce volet ne participe ni au changement de compte ni au basculement automatique de quota.",
+    "resume-note": "Après une reconnexion ou un redémarrage de Navide, la conversation propre à ce volet reprend, jamais une autre du même dossier.",
+    "fresh-note": "Après une reconnexion ou un redémarrage de Navide, {cli} commence une nouvelle conversation.",
+    "accounts-chip": "Connexion distante",
+    "accounts-chip-title": "Connecté sur {host}. Ce volet ne participe ni au changement de compte ni au basculement automatique de quota.",
+    "no-tools-chip": "Sans outils Navide",
+    "no-tools-chip-title": "{cli} tourne sur {host} sans les outils de Navide.",
+    "resume-missed": "Impossible de reprendre la conversation précédente : une nouvelle a commencé.",
+    "dismiss": "Fermer"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "Envoi programmé",
     "error-at": "L'heure doit être au format HH:MM",
     "error-tz": "Fuseau horaire inconnu"
+  },
+  "persona": {
+    "people": "{n} personnes",
+    "running": "{n} en cours",
+    "awaiting-count": "{n} attendent votre réponse",
+    "failing-count": "{n} en erreur ou sans quota",
+    "building": "Immeuble",
+    "building-back": "Retour à la salle",
+    "attention": "À traiter",
+    "attention-hint": "{n} · cliquer pour l'état",
+    "canvas-label": "Bureau persona, {n} volets",
+    "empty-room": "Aucun volet dans cette salle",
+    "legend-type": "Taper = en cours",
+    "legend-raise": "Main levée = vous attend",
+    "legend-idle": "Café / somnole = inactif",
+    "legend-error": "Fumée = erreur ou quota épuisé",
+    "close": "Fermer",
+    "waited-under-minute": "moins d'une minute",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Quota épuisé",
+    "quota-low": "Quota sous 40 %",
+    "quota-critical": "Quota sous 15 %",
+    "focus-pane": "Focus sur ce volet",
+    "back-to-grid": "Retour à la grille",
+    "building-label": "Vue de l'immeuble, {rooms} salles, {n} volets",
+    "building-title": "Tout l'immeuble",
+    "failing": "Erreur / quota épuisé",
+    "enter-room": "Entrer dans cette salle",
+    "floor": "{n}e étage"
   }
 }

@@ -781,8 +781,11 @@ class Mirror:
         kids = [p for _, p in self.descendants(pane_id, directory)]
         if cmd == "status":
             root = directory.get(pane_id) or {"name": binding.title or pane_id, "display_status": ""}
-            tree = format_tree(root, self.descendants(pane_id, directory))
-            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id)]),
+            nested = self.descendants(pane_id, directory)
+            tree = format_tree(root, nested)
+            cards = await self.m.status_cards([{"pane_id": pane_id, **root}, *(p for _, p in nested)],
+                                              Location(msg.platform, msg.account, msg.chat_id, msg.thread_id))
+            await self.m._reply(msg, "\n".join([tree, *await self.m.status_details(pane_id), *([cards] if cards else [])]),
                                 buttons=await self.m.model_buttons())
             return True
         if cmd == "stop":

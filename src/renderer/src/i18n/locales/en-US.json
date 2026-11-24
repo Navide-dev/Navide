@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Every button icon in the interface — what it is called, where it lives and what pressing it does."
+        },
+        "general-scheduler-runs": {
+          "title": "Scheduler daily runs",
+          "summary": "How many times scheduled jobs and agent jobs run each day"
         }
       },
       "no-results": "No matching settings"
@@ -4686,7 +4690,7 @@
             "role": "At the top is the <strong>Select role…</strong> dropdown — pick a preset role.",
             "cliList": "Below it the list is split into two headed blocks. <strong>{cli}</strong> holds the coding CLIs, with the ones that are not installed marked as such. <strong>{agents}</strong> lists your standing agents (OpenClaw, Hermes Agent) by name — picking an open one switches to it, picking a closed one resumes it — plus a <em>New …</em> entry that asks for a name first; ACP agents are listed there too. A note under the list points out that cloud agents such as Grok Bot and dots come as Navide plugins.",
             "terminal": "At the bottom are <strong>Terminal</strong> (a plain terminal with no agent attached) and <strong>Manual spawn…</strong>.",
-            "sshRemote": "With <strong>Settings → General → Experimental features → Remote container panes</strong> on, <strong>SSH Remote…</strong> appears below <strong>Terminal</strong>. It takes a host, user, port (22 by default) and a private key path, and keeps recent connections on this computer. Only the key's path is saved; the key is never read or copied, and SSH agent forwarding stays off. Connect checks the host and opens a terminal pane whose shell runs there; if the connection drops, the pane reconnects on its own."
+            "sshRemote": "With <strong>Settings → General → Experimental features → Remote container panes</strong> on, <strong>SSH Remote…</strong> appears below <strong>Terminal</strong>. It takes a host, user, port (22 by default) and a private key path, and keeps recent connections on this computer. Only the key's path is saved; the key is never read or copied, and SSH agent forwarding stays off. Connect checks the host and opens a terminal pane whose shell runs there; if the connection drops, the pane reconnects on its own. It can also open Claude, Codex or another CLI in a remote folder, using its own sign-in on that host (no account switching or quota failover), and SSH panes are restored after a restart."
           },
           "p2": "<em>Manual spawn…</em> opens the full dialog, where you can choose the agent and role, decide whether to add it to the stage, whether to open a terminal alongside it, and paste a session id to resume an earlier conversation directly.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "The focused pane fills the stage, the rest collapse into expandable floating windows."
+            },
+            "persona": {
+              "behavior": "Each pane is a person at a desk: typing = running, hand raised = waiting for your answer, coffee or dozing = idle, smoking monitor = error. Each tab is a room; with many panes, open the building overview. Click a person for their status, double-click to focus that pane."
             }
           },
           "p2": "There is also one behavior you do not select, <strong>dual-focus</strong>: when exactly two panes are running they automatically split left and right, and the divider between them can be dragged.",
@@ -7200,7 +7207,8 @@
       "settings-management": "Settings management",
       "experimental": "Experimental features",
       "theme": "Theme",
-      "other": "Other"
+      "other": "Other",
+      "scheduler": "Scheduler"
     },
     "p2p": {
       "title": "Connection",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "A message now waits for the receiving pane to go idle and is then typed into it, so it takes longer to land.",
       "all-off-rewake": "Claude Code's rewake is the only way to wake an idle agent; with it off, there is nothing to do but wait for the agent to come back to idle on its own.",
       "all-off-restart": "A pane already running keeps the channel it started with until it is restarted."
+    },
+    "scheduler": {
+      "hint": "How many times scheduled jobs run each day. The defaults are what Navide has always used.",
+      "per-job": "Runs a day per job",
+      "per-job-hint": "For jobs that don't set their own daily count.",
+      "agent-job": "Runs a day per agent job",
+      "agent-job-hint": "The most one job created by an agent runs in a day.",
+      "agent-total": "Runs a day across agent jobs",
+      "agent-total-hint": "All jobs created by agents, added together. A run whose target CLI is out of quota is still skipped.",
+      "no-cap": "No cap",
+      "save-failed": "Couldn't save the scheduler setting"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "Filter by type",
     "all-stages-finished": "All {count} stages finished successfully",
     "region-switching": "Switching {title} to {version}…",
-    "region-unavailable": "{title} unavailable"
+    "region-unavailable": "{title} unavailable",
+    "view-mode-persona": "Persona — each pane is a person in an office; their pose shows what it is doing"
   },
   "layout": {
     "expand": "Expand Panel",
@@ -9597,7 +9617,9 @@
       "remove": "Delete",
       "remove-confirm": "Delete this scheduled job?",
       "cancel": "Cancel",
-      "save": "Save"
+      "save": "Save",
+      "max-runs-follow": "Settings: {n}",
+      "max-runs-follow-none": "Settings: no cap"
     },
     "owner": {
       "user": "by you",
@@ -11844,6 +11866,29 @@
       "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
       "copy": "Copy",
       "done": "Done"
+    },
+    "manage": {
+      "plugin": "Navide plugin (namespace.name)",
+      "load": "Show test builds and codes",
+      "builds": "Test builds",
+      "noBuilds": "No test builds for this Navide plugin.",
+      "promote": "Send to review",
+      "promoteVersion": "Send {version} to review",
+      "promoteConfirm": "Send {plugin} {version} to Navide Marketplace review? The same package is reviewed; testers do not reinstall it once it is approved.",
+      "promoted": "Sent {plugin} {version} to Navide Marketplace review.",
+      "codes": "Public test codes",
+      "codesHint": "A code lets up to the number of testers you set join with it. The first code of each Navide plugin opens after a light review.",
+      "testers": "{count} of {max} testers",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke test code #{code}? No one new can join with it; testers who already joined keep their access.",
+      "maxTesters": "Testers for a new code",
+      "create": "Create code",
+      "created": "Test code, shown only now:",
+      "state": {
+        "revoked": "Revoked",
+        "expires": "Expires {date}",
+        "promotion": "Review: {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "Reconnecting…",
     "retry-in": "Reconnecting automatically in {seconds}s",
     "reconnect": "Reconnect",
-    "close-pane": "Close pane"
+    "close-pane": "Close pane",
+    "dir-label": "Remote folder",
+    "dir-placeholder": "~ (home) or a path on the host",
+    "run-label": "Open",
+    "run-terminal": "Terminal (login shell)",
+    "tools-note": "{cli} gets Navide's tools on the host (messages to other panes, plans). For that, Navide sends this pane its own tool token over the SSH connection, typed in with echo off and never put on a command line. The token is made for this pane only and stops working when the pane closes. It is not an account credential: no key or sign-in leaves this computer.",
+    "no-tools-note": "{cli} runs on the host without Navide's tools: messages from other panes still arrive as typed text, but it cannot call Navide itself.",
+    "accounts-note": "Sign in to {cli} on the remote host yourself. This pane does not take part in account switching or automatic quota failover.",
+    "resume-note": "A reconnect or a Navide restart resumes this pane's own conversation, never another one in the same folder.",
+    "fresh-note": "{cli} starts a new conversation after a reconnect or a Navide restart.",
+    "accounts-chip": "Own sign-in",
+    "accounts-chip-title": "Signed in on {host}. This pane does not take part in account switching or automatic quota failover.",
+    "no-tools-chip": "No Navide tools",
+    "no-tools-chip-title": "{cli} runs on {host} without Navide's tools.",
+    "resume-missed": "Couldn't continue the previous conversation, so a new one started.",
+    "dismiss": "Dismiss"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "Push queued",
     "error-at": "Time must be HH:MM",
     "error-tz": "Unknown time zone"
+  },
+  "persona": {
+    "people": "{n} people",
+    "running": "{n} running",
+    "awaiting-count": "{n} waiting for your answer",
+    "failing-count": "{n} with errors or out of quota",
+    "building": "Building",
+    "building-back": "Back to room",
+    "attention": "Needs attention",
+    "attention-hint": "{n} · click for status",
+    "canvas-label": "Persona office, {n} panes",
+    "empty-room": "No panes in this room yet",
+    "legend-type": "Typing = running",
+    "legend-raise": "Hand up = waiting for you",
+    "legend-idle": "Coffee / dozing = idle",
+    "legend-error": "Smoke = error or out of quota",
+    "close": "Close",
+    "waited-under-minute": "under a minute",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Out of quota",
+    "quota-low": "Quota below 40%",
+    "quota-critical": "Quota below 15%",
+    "focus-pane": "Focus this pane",
+    "back-to-grid": "Back to grid",
+    "building-label": "Building overview, {rooms} rooms, {n} panes",
+    "building-title": "Whole building",
+    "failing": "Error / out of quota",
+    "enter-room": "Enter this room",
+    "floor": "{n}F"
   }
 }

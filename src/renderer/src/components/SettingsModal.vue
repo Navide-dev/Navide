@@ -175,6 +175,7 @@ import ToggleSwitch from './settings/ToggleSwitch.vue'
 import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
 import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
 import SessionArchiveSection from './settings/SessionArchiveSection.vue'
+import SchedulerRunsSection from './settings/SchedulerRunsSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
 import { formatBytes } from '../lib/formatBytes'
 import { UI_SCALE_STEPS, formatUiScale, getUiScale, setUiScale } from '../lib/uiScale'
@@ -1284,6 +1285,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.general'),
     summary: t('settings.search.item.general-quota-failover.summary'),
     keywords: 'quota exhausted account switch failover auto notify off hot restart resume 額度 耗盡 切換 帳號 自動 通知 關閉 熱切 重啟 接續',
+  },
+  {
+    id: 'general-scheduler-runs',
+    tab: 'general',
+    section: 'general-scheduler-per-job',
+    title: t('settings.search.item.general-scheduler-runs.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-scheduler-runs.summary'),
+    keywords: 'scheduler schedule job runs per day daily agent cap unlimited 排程 每天 次數 上限 不限制 agent',
   },
   {
     id: 'general-quota-failover-loop',
@@ -4403,6 +4413,8 @@ watch(activeTab, (tab) => {
           <ResourceLimitsSection :backend="backend" />
 
           <SessionArchiveSection :backend="backend" />
+
+          <SchedulerRunsSection :backend="backend" />
 
           <SettingsSection :label="$t('settings.section.settings-management')">
             <SettingsCard data-settings-section="settings-management">

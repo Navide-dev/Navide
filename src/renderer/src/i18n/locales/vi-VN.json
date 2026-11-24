@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Mọi biểu tượng nút trong giao diện — tên gọi, vị trí và tác dụng khi nhấn."
+        },
+        "general-scheduler-runs": {
+          "title": "Số lần chạy mỗi ngày của lịch",
+          "summary": "Số lần mỗi ngày các tác vụ theo lịch và tác vụ agent được chạy"
         }
       },
       "no-results": "Không có cài đặt phù hợp"
@@ -4686,7 +4690,7 @@
             "role": "Trên cùng là danh sách thả xuống <strong>Chọn vai trò…</strong> — chọn một vai trò có sẵn.",
             "cliList": "Bên dưới, danh sách chia thành hai khối có tiêu đề. <strong>{cli}</strong> gồm các CLI lập trình, CLI nào chưa cài sẽ được đánh dấu. <strong>{agents}</strong> liệt kê các agent thường trực của bạn (OpenClaw, Hermes Agent) theo tên: chọn agent đang mở sẽ chuyển sang nó, chọn agent đã đóng sẽ tiếp tục cuộc trò chuyện cũ. Còn có mục <em>Mới …</em> hỏi tên trước, và các agent ACP cũng nằm ở khối này. Một ghi chú dưới danh sách cho biết các agent đám mây như Grok Bot và dots được cung cấp dưới dạng plugin Navide.",
             "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>.",
-            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Kết nối sẽ kiểm tra máy chủ rồi mở một pane terminal chạy shell trên máy đó; nếu mất kết nối, pane sẽ tự kết nối lại."
+            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Kết nối sẽ kiểm tra máy chủ rồi mở một pane terminal chạy shell trên máy đó; nếu mất kết nối, pane sẽ tự kết nối lại. Cũng có thể mở Claude, Codex hoặc CLI khác trong một thư mục từ xa, dùng đăng nhập riêng trên máy chủ đó (không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức); các ô SSH được khôi phục sau khi khởi động lại."
           },
           "p2": "<em>Khởi chạy thủ công…</em> mở hộp thoại đầy đủ, nơi bạn có thể chọn agent và vai trò, quyết định có thêm vào khu vực chính hay không, có mở terminal bên cạnh hay không, và dán id session để tiếp tục ngay một cuộc trò chuyện trước.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "Pane đang chọn lấp đầy khu vực chính, các pane còn lại thu thành cửa sổ nổi có thể mở rộng."
+            },
+            "persona": {
+              "behavior": "Mỗi ô là một người ngồi ở bàn: gõ phím = đang chạy, giơ tay = chờ bạn trả lời, uống cà phê hoặc ngủ gật = rảnh, màn hình bốc khói = lỗi. Mỗi tab là một phòng; khi có nhiều ô, mở chế độ xem toà nhà. Nhấp để xem trạng thái, nhấp đúp để tập trung vào ô đó."
             }
           },
           "p2": "Còn có một cách hoạt động bạn không chọn, <strong>hai tiêu điểm</strong>: khi có đúng hai pane đang chạy, chúng tự chia trái phải, và có thể kéo đường phân cách giữa chúng.",
@@ -7200,7 +7207,8 @@
       "settings-management": "Quản lý cài đặt",
       "experimental": "Tính năng thử nghiệm",
       "theme": "Chủ đề",
-      "other": "Khác"
+      "other": "Khác",
+      "scheduler": "Lịch chạy"
     },
     "p2p": {
       "title": "Kết nối",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "Giờ tin nhắn sẽ chờ pane nhận rảnh rồi mới được gõ vào, nên tới chậm hơn.",
       "all-off-rewake": "Đánh thức lại của Claude Code là cách duy nhất để đánh thức agent đang rảnh; khi tắt, chỉ còn cách chờ agent tự trở về trạng thái rảnh.",
       "all-off-restart": "Pane đang chạy giữ kênh mà nó khởi động cùng cho đến khi được khởi động lại."
+    },
+    "scheduler": {
+      "hint": "Số lần mỗi ngày các tác vụ theo lịch được chạy. Giá trị mặc định là giá trị Navide vẫn luôn dùng.",
+      "per-job": "Số lần chạy mỗi ngày cho mỗi tác vụ",
+      "per-job-hint": "Áp dụng cho tác vụ không tự đặt số lần mỗi ngày.",
+      "agent-job": "Số lần chạy mỗi ngày cho mỗi tác vụ của agent",
+      "agent-job-hint": "Số lần tối đa một tác vụ do agent tạo được chạy trong một ngày.",
+      "agent-total": "Tổng số lần chạy mỗi ngày của các tác vụ agent",
+      "agent-total-hint": "Cộng dồn mọi tác vụ do agent tạo. Lần chạy mà CLI đích đã hết hạn mức vẫn bị bỏ qua.",
+      "no-cap": "Không đặt mức trần",
+      "save-failed": "Không lưu được cài đặt lịch chạy"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "Lọc theo loại",
     "all-stages-finished": "Đã hoàn tất thành công cả {count} giai đoạn",
     "region-switching": "Đang chuyển {title} sang {version}…",
-    "region-unavailable": "{title} không khả dụng"
+    "region-unavailable": "{title} không khả dụng",
+    "view-mode-persona": "Nhân vật — mỗi ô là một người trong văn phòng; tư thế cho biết ô đang làm gì"
   },
   "layout": {
     "expand": "Mở rộng bảng",
@@ -9597,7 +9617,9 @@
       "remove": "Xóa",
       "remove-confirm": "Xóa tác vụ theo lịch này?",
       "cancel": "Hủy",
-      "save": "Lưu"
+      "save": "Lưu",
+      "max-runs-follow": "Cài đặt: {n}",
+      "max-runs-follow-none": "Cài đặt: không đặt mức trần"
     },
     "owner": {
       "user": "do bạn tạo",
@@ -11844,6 +11866,29 @@
       "sent": "Đã tạo {count} lời mời. Hãy đưa mỗi mã cho đúng người thử nghiệm; các mã chỉ hiện duy nhất lần này.",
       "copy": "Sao chép",
       "done": "Xong"
+    },
+    "manage": {
+      "plugin": "Plugin Navide (namespace.name)",
+      "load": "Hiện bản thử nghiệm và mã thử nghiệm",
+      "builds": "Bản thử nghiệm",
+      "noBuilds": "Plugin Navide này chưa có bản thử nghiệm.",
+      "promote": "Gửi xét duyệt",
+      "promoteVersion": "Gửi {version} để xét duyệt",
+      "promoteConfirm": "Gửi {plugin} {version} để Navide Marketplace xét duyệt? Gói được xét duyệt là cùng một gói; người thử nghiệm không cần cài lại sau khi được duyệt.",
+      "promoted": "Đã gửi {plugin} {version} để Navide Marketplace xét duyệt.",
+      "codes": "Mã thử nghiệm công khai",
+      "codesHint": "Một mã cho phép tối đa số người thử nghiệm bạn đặt tham gia. Mã đầu tiên của mỗi plugin Navide mở sau một lần xét duyệt nhẹ.",
+      "testers": "{count} / {max} người thử nghiệm",
+      "revoke": "Thu hồi",
+      "revokeConfirm": "Thu hồi mã thử nghiệm #{code}? Không ai có thể tham gia mới bằng mã này; người đã tham gia vẫn giữ quyền truy cập.",
+      "maxTesters": "Số người thử nghiệm cho mã mới",
+      "create": "Tạo mã",
+      "created": "Mã thử nghiệm, chỉ hiện lần này:",
+      "state": {
+        "revoked": "Đã thu hồi",
+        "expires": "Hết hạn {date}",
+        "promotion": "Xét duyệt: {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "Đang kết nối lại…",
     "retry-in": "Tự động kết nối lại sau {seconds} giây",
     "reconnect": "Kết nối lại",
-    "close-pane": "Đóng pane"
+    "close-pane": "Đóng pane",
+    "dir-label": "Thư mục từ xa",
+    "dir-placeholder": "~ (thư mục nhà) hoặc một đường dẫn trên máy chủ",
+    "run-label": "Mở",
+    "run-terminal": "Terminal (shell đăng nhập)",
+    "tools-note": "{cli} có các công cụ của Navide trên máy chủ (nhắn tin cho các ô khác, kế hoạch). Để làm vậy, Navide gửi cho ô này token công cụ riêng của nó qua kết nối SSH, được nhập khi đã tắt hiển thị và không bao giờ nằm trên dòng lệnh. Token chỉ dành cho ô này và hết hiệu lực khi ô đóng. Đây không phải thông tin đăng nhập tài khoản: không khóa hay thông tin đăng nhập nào rời khỏi máy tính này.",
+    "no-tools-note": "{cli} chạy trên máy chủ mà không có công cụ của Navide: tin nhắn từ các ô khác vẫn đến dưới dạng văn bản nhập vào, nhưng nó không tự gọi Navide được.",
+    "accounts-note": "Hãy tự đăng nhập {cli} trên máy chủ từ xa. Ô này không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức.",
+    "resume-note": "Sau khi kết nối lại hoặc khởi động lại Navide, cuộc trò chuyện của chính ô này được tiếp tục, không bao giờ là một cuộc khác trong cùng thư mục.",
+    "fresh-note": "Sau khi kết nối lại hoặc khởi động lại Navide, {cli} bắt đầu một cuộc trò chuyện mới.",
+    "accounts-chip": "Đăng nhập trên máy chủ",
+    "accounts-chip-title": "Đã đăng nhập trên {host}. Ô này không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức.",
+    "no-tools-chip": "Không có công cụ Navide",
+    "no-tools-chip-title": "{cli} chạy trên {host} mà không có công cụ của Navide.",
+    "resume-missed": "Không thể tiếp tục cuộc trò chuyện trước, nên đã bắt đầu một cuộc mới.",
+    "dismiss": "Đóng"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "Đã lên lịch gửi",
     "error-at": "Giờ phải có dạng HH:MM",
     "error-tz": "Múi giờ không xác định"
+  },
+  "persona": {
+    "people": "{n} người",
+    "running": "{n} đang chạy",
+    "awaiting-count": "{n} người chờ bạn trả lời",
+    "failing-count": "{n} người lỗi hoặc hết hạn mức",
+    "building": "Toà nhà",
+    "building-back": "Về phòng",
+    "attention": "Cần chú ý",
+    "attention-hint": "{n} · nhấp để xem trạng thái",
+    "canvas-label": "Văn phòng nhân vật, {n} ô",
+    "empty-room": "Phòng này chưa có ô nào",
+    "legend-type": "Gõ phím = đang chạy",
+    "legend-raise": "Giơ tay = chờ bạn",
+    "legend-idle": "Cà phê / ngủ gật = rảnh",
+    "legend-error": "Khói = lỗi hoặc hết hạn mức",
+    "close": "Đóng",
+    "waited-under-minute": "chưa đến 1 phút",
+    "waited-minutes": "{n} phút",
+    "quota-empty": "Hết hạn mức",
+    "quota-low": "Hạn mức dưới 40%",
+    "quota-critical": "Hạn mức dưới 15%",
+    "focus-pane": "Tập trung vào ô này",
+    "back-to-grid": "Về dạng lưới",
+    "building-label": "Xem toà nhà, {rooms} phòng, {n} ô",
+    "building-title": "Cả toà nhà",
+    "failing": "Lỗi / hết hạn mức",
+    "enter-room": "Vào phòng này",
+    "floor": "Tầng {n}"
   }
 }

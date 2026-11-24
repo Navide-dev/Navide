@@ -53,7 +53,7 @@ describe('SshRemoteDialog', () => {
     await wrapper.get('[data-testid="ssh-host"]').setValue('build-box')
     await wrapper.get('[data-testid="ssh-connect"]').trigger('click')
     await flushPromises()
-    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '' }])
+    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~', cli: 'terminal' }])
     expect(loadSshRemoteRecent().map((r) => r.host)).toEqual(['build-box'])
   })
 
@@ -115,7 +115,7 @@ describe('useSshRemotePrefs', () => {
     expect(stored).toContain('/k/id')
     expect(stored).not.toContain('pw1')
     expect(JSON.stringify(loadSshRemoteRecent())).not.toContain('ZmFrZQ')
-    expect(loadSshRemoteRecent()[0]).toEqual({ host: 'box', user: '', port: 22, keyPath: '/k/id' })
+    expect(loadSshRemoteRecent()[0]).toEqual({ host: 'box', user: '', port: 22, keyPath: '/k/id', dir: '~', cli: 'terminal' })
   })
 
   it('puts the newest first, de-duplicates and caps the list', () => {
@@ -125,5 +125,45 @@ describe('useSshRemotePrefs', () => {
     expect(hosts[0]).toBe('h3')
     expect(hosts).toHaveLength(8)
     expect(new Set(hosts).size).toBe(8)
+  })
+
+  it('keeps the remote folder and an allowed CLI, never an unknown one', () => {
+    rememberSshRemoteRecent({ host: 'box', user: '', port: 22, keyPath: '', dir: '~/proj', cli: 'codex' })
+    expect(loadSshRemoteRecent()[0]).toMatchObject({ dir: '~/proj', cli: 'codex' })
+    rememberSshRemoteRecent({ host: 'box', user: '', port: 22, keyPath: '', cli: 'rm -rf' })
+    expect(loadSshRemoteRecent()[0]).toMatchObject({ dir: '~', cli: 'terminal' })
+  })
+})
+
+describe('SshRemoteDialog — remote folder and CLI', () => {
+  let wrapper: VueWrapper | undefined
+  beforeEach(() => __resetSettingsForTest())
+  afterEach(() => {
+    wrapper?.unmount()
+    document.body.replaceChildren()
+  })
+
+  it('checks the connection only and emits the folder and CLI with it', async () => {
+    const send = vi.fn(async () => connected)
+    wrapper = mountDialog(send)
+    await wrapper.get('[data-testid="ssh-host"]').setValue('build-box')
+    await wrapper.get('[data-testid="ssh-dir"]').setValue('~/app')
+    await wrapper.get('[data-testid="ssh-cli"]').setValue('claude')
+    await wrapper.get('[data-testid="ssh-connect"]').trigger('click')
+    await flushPromises()
+    expect(send).toHaveBeenCalledWith(
+      'remote_ssh.connect', { target: { host: 'build-box', user: '', port: 22, keyPath: '' } }, expect.any(Number))
+    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~/app', cli: 'claude' }])
+  })
+
+  it('discloses the token for a CLI with tools and the lack of tools otherwise', async () => {
+    wrapper = mountDialog(async () => connected)
+    expect(wrapper.find('[data-testid="ssh-cli-notes"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="ssh-cli"]').setValue('codex')
+    expect(wrapper.get('[data-testid="ssh-cli-notes"]').text()).toContain('sshRemote.accounts-note')
+    expect(wrapper.get('[data-testid="ssh-tools-note"]').text()).toBe('sshRemote.tools-note')
+    await wrapper.get('[data-testid="ssh-cli"]').setValue('opencode')
+    expect(wrapper.get('[data-testid="ssh-tools-note"]').text()).toBe('sshRemote.no-tools-note')
+    expect(wrapper.get('[data-testid="ssh-cli-notes"]').text()).toContain('sshRemote.fresh-note')
   })
 })

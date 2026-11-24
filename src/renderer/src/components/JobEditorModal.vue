@@ -84,7 +84,10 @@ const actionKind = ref<'message' | 'pipeline_start'>('message')
 const pipelineSel = ref('')
 const pipelines = ref<Array<{ id: string; name: string }>>([])
 const catchUp = ref<'once' | 'skip'>('once')
-const maxRuns = ref(24)
+/** '' = no count of its own: the job follows Settings → Scheduler. */
+const maxRuns = ref<number | ''>('')
+/** That setting, for the placeholder; null = no cap. */
+const settingRuns = ref<number | null>(24)
 
 const roster = ref<RosterPane[]>([])
 const saving = ref(false)
@@ -128,7 +131,17 @@ function reset(job: SchedulerJob | null): void {
       : ''
   text.value = (actionKind.value === 'pipeline_start' ? job?.action.task : job?.action.text) ?? ''
   catchUp.value = job?.policy?.catch_up ?? 'once'
-  maxRuns.value = job?.policy?.max_runs_per_day ?? 24
+  maxRuns.value = job?.policy?.max_runs_per_day ?? ''
+}
+
+async function loadSettingRuns(): Promise<void> {
+  if (props.backend.status.value !== 'connected') return
+  try {
+    const resp = await props.backend.send<{ settings?: { max_runs_per_day: number | null } }>('scheduler.settings.get', {})
+    if (resp.ok && resp.payload?.settings) settingRuns.value = resp.payload.settings.max_runs_per_day
+  } catch {
+    // Keep the default.
+  }
 }
 
 async function loadPipelines(): Promise<void> {
@@ -174,6 +187,7 @@ watch(
     reset(props.job)
     void loadRoster()
     void loadPipelines()
+    void loadSettingRuns()
     // Keeps the "next run" preview honest while the modal sits open.
     clock = setInterval(() => (now.value = Date.now()), 30_000)
   },
@@ -286,7 +300,7 @@ const errors = computed<Record<string, string>>(() => {
     if (!text.value.trim()) e.text = t('scheduler.editor.err-text')
   }
   const r = Number(maxRuns.value)
-  if (!Number.isInteger(r) || r < 1 || r > RUNS_MAX)
+  if (maxRuns.value !== '' && (!Number.isInteger(r) || r < 1 || r > RUNS_MAX))
     e.maxRuns = t('scheduler.editor.err-max-runs', { max: RUNS_MAX })
   return e
 })
@@ -330,7 +344,8 @@ function buildDraft(): JobDraft {
     policy: {
       ...(props.job?.policy ?? {}),
       catch_up: catchUp.value,
-      max_runs_per_day: Number(maxRuns.value),
+      // null on an update: drop the job's own count and follow the setting.
+      max_runs_per_day: maxRuns.value === '' ? null : Number(maxRuns.value),
     },
   }
   if (props.job) draft.id = props.job.id
@@ -532,6 +547,9 @@ async function remove(): Promise<void> {
                 type="number"
                 min="1"
                 :max="RUNS_MAX"
+                :placeholder="settingRuns === null
+                  ? t('scheduler.editor.max-runs-follow-none')
+                  : t('scheduler.editor.max-runs-follow', { n: settingRuns })"
               />
             </label>
           </div>

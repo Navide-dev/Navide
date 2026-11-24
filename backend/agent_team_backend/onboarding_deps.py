@@ -323,7 +323,11 @@ def _refresh_path_from_login_shell(
     # its entries take that order even when PATH already had them further
     # down. Otherwise a re-detect after fixing PATH order in ~/.zprofile kept
     # finding /usr/bin/python3 ahead of Homebrew's until the app restarted.
-    login_set = set(shell_paths)
+    # An isolated backend (dev web mode) got its PATH from its launcher on
+    # purpose — <run dir>/bin first, so stand-ins there (a fake `ssh`) win.
+    # The login shell only adds what is missing, after it.
+    isolated = os.environ.get("AGENT_TEAM_ISOLATED_HOME") == "1"
+    login_set = set() if isolated else set(shell_paths)
     shell_paths.extend(d for d in _fallback_path_dirs() if os.path.isdir(d))
     current_paths = [
         p for p in os.environ.get("PATH", "").split(os.pathsep) if p not in login_set
@@ -341,7 +345,8 @@ def _refresh_path_from_login_shell(
             seen.add(p)
             tail_paths.append(p)
     if new_paths or tail_paths:
-        os.environ["PATH"] = os.pathsep.join(new_paths + current_paths + tail_paths)
+        head = current_paths + new_paths if isolated else new_paths + current_paths
+        os.environ["PATH"] = os.pathsep.join(head + tail_paths)
 
 
 def _append_path_dirs(dirs: list[str]) -> None:

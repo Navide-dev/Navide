@@ -28,7 +28,7 @@
 >
 > The SDK CLI (`navide-plugin`) covers the whole publishing workflow —
 > `init`, `validate`, `scan`, `package` (per target), `keygen`, `sign`,
-> `verify`, `login`, `whoami`, `status`, `logout`, `publish`, `testplace` and
+> `verify`, `login`, `whoami`, `status`, `logout`, `publish`, `yank`, `testplace` and
 > `dev-backend` — see [Publishing to the Navide Marketplace](marketplace-publishing.md)
 > for each one. There is no `navide-plugin dev` command: in development a
 > folder loaded with Settings → Navide Plugins → Developer Mode reloads by
@@ -116,10 +116,9 @@ SemVer 2.0.0 versions. The package implementations live under
 renderer sources. Third-party projects must use registry versions in a
 published workflow, never `workspace:` dependencies. The Issue 06 release
 gate packs those public packages and installs the tarballs in a directory
-outside the Navide workspace; publication to npm is a separate release step,
-`scripts/publish-public-packages.sh` (a dry run until `--publish`; see
-[Creating a release](releases.md#creating-a-release)), which the user runs
-with their own npm login.
+outside the Navide workspace. The packages are distributed only as files of a
+`plugin-packages-<version>` GitHub Release, not through npm or PyPI; see
+[Distributing the public packages](#distributing-the-public-packages).
 
 ### Compatibility commitment (1.x)
 
@@ -146,11 +145,23 @@ The static scan, the Registry's manifest validation and the Host's disclosure
 contract are versioned with the packages, so a manifest that `navide-plugin
 validate` accepts at 1.x is accepted by the Registry of the same 1.x line.
 
-### Publishing the public packages to npm
+### Distributing the public packages
 
-The three packages are not on npm until the user publishes them; nothing in
-the repository holds an npm token. Two paths exist, and both start from the
-same checks:
+The three npm packages and the Python SDK wheel are distributed only as files
+of a `plugin-packages-<version>` GitHub Release on this repository, named after
+the packages' shared version. They are not published to npm or PyPI. A third
+party installs the tarballs by URL
+([Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)),
+and `navide-plugin init --template vue` pins the release its own SDK came
+from.
+
+`scripts/stage-plugin-packages-release.sh` stages a release without
+uploading anything: it runs the two dry runs below, copies the three tarballs,
+the wheel and the sdist into `dist/plugin-packages-<version>/`, writes
+`SHA256SUMS` and the release notes, and prints the `gh release create` command
+a maintainer runs once the release is approved. A release whose Python SDK
+version did not change may leave the wheel out; its notes then name the
+release that carries it.
 
 - `scripts/publish-public-packages.sh` (dry run by default) builds the
   packages, packs them into `dist/npm/`, writes each tarball's file list next
@@ -164,53 +175,24 @@ same checks:
   it copies `examples/third-party-files/` to a temporary directory outside the
   repository, installs it with plain npm — the three Navide packages from the
   tarballs in `dist/npm/`, everything else from the registry — and runs
-  `typecheck`, `build`, `check` (`navide-plugin validate`) and `package`. With
-  `--registry` it installs the published versions instead, to confirm a
-  publication.
-
-**Local publication** (the first release, and the fallback): after
-`npm login`, `scripts/publish-public-packages.sh --publish`. The manifests set
-`publishConfig.provenance`, which only a supported CI runner can satisfy, so
-the local path passes `--provenance=false`.
-
-**Provenance publication** (later releases): the inactive draft
-`.github/workflow-drafts/publish-public-packages.yml` publishes through npm
-trusted publishing (OIDC, `id-token: write`) with `--provenance`, triggered by
-a tag `plugin-packages-v<version>` and gated by a `npm-publish` environment
-with required reviewers. It holds no npm token and reads no repository secret.
-To enable it, move it to `.github/workflows/publish-public-packages.yml` and
-register that file name as each package's trusted publisher on npmjs.com.
-
-### Publishing the Python plugin SDK to PyPI
-
-`navide_plugin_sdk`, the Python surface a plugin backend imports (the path
-guard, the staged write path and plan versions; standard library only), is
-published as `navide-plugin-sdk` at its `API_VERSION`, which shares its major
-with the npm packages. It is not on PyPI until the user publishes it. The
-sources stay in `backend/navide_plugin_sdk`; `packages/plugin-sdk-python/`
-holds only the publication metadata (`pyproject.toml`, `README.md`).
-
-- `scripts/publish-python-plugin-sdk.sh` (dry run by default) stages the
-  metadata, the repository `LICENSE` and the SDK's git-tracked sources in a
-  temporary directory, builds the sdist and the wheel into `dist/pypi/`,
-  writes each archive's file list next to it, and refuses a version other
-  than `API_VERSION`, an archive holding anything beyond the SDK sources and
-  their metadata (tests, caches, fixtures or private files), and a wheel that
-  declares a dependency.
-- [navide-plans](https://github.com/Navide-dev/navide-plans) builds its
+  `typecheck`, `build`, `check` (`navide-plugin validate`) and `package`.
+- `scripts/publish-python-plugin-sdk.sh` (dry run by default) stages
+  `packages/plugin-sdk-python/{pyproject.toml,README.md}`, the repository
+  `LICENSE` and the git-tracked sources of `backend/navide_plugin_sdk` (the
+  path guard, the staged write path and plan versions; standard library only)
+  in a temporary directory, builds the sdist and the wheel into `dist/pypi/`
+  at the SDK's `API_VERSION`, which shares its major with the npm packages,
+  and refuses an archive holding anything beyond the SDK sources and their
+  metadata, or a wheel that declares a dependency.
+  [navide-plans](https://github.com/Navide-dev/navide-plans) builds its
   backend in its own uv environment, locked to that wheel as attached to the
   `plugin-packages-1.0.0` GitHub Release.
 
-**Local publication** (the first release): `scripts/publish-python-plugin-sdk.sh
---publish`, which runs `uv publish` with the user's own PyPI credential.
-
-**Trusted publication** (later releases): the inactive draft
-`.github/workflow-drafts/publish-python-plugin-sdk.yml` publishes through PyPI
-trusted publishing (OIDC, `id-token: write`) on a tag
-`python-plugin-sdk-v<version>`, gated by a `pypi-publish` environment with
-required reviewers. It holds no PyPI token and reads no repository secret. To
-enable it, move it to `.github/workflows/publish-python-plugin-sdk.yml` and
-register that file name as the project's trusted publisher on pypi.org.
+The scripts' `--publish` options and the inactive drafts
+`.github/workflow-drafts/publish-public-packages.yml` and
+`.github/workflow-drafts/publish-python-plugin-sdk.yml` (npm and PyPI trusted
+publishing, holding no token) remain only in case that decision changes; no
+release step runs them.
 
 ## Recommended source project
 
@@ -272,6 +254,7 @@ navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
+navide-plugin yank <namespace.name>@<version> --yes [--channel testplace] [--registry <url>]
 navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]
 ```
 
@@ -1014,7 +997,7 @@ the remove dialog then asks "Also delete this plugin's saved secrets?";
 "Keep secrets" (or closing the dialog) keeps it. For `plugins:remove` callers
 the choice is the optional `secrets: 'keep' | 'delete'` argument (omitted keeps
 them); `plugins:secretCount` reports `{ count }` for the dialog, never names or
-values. Removing an Extension Pack member and an agent's approved removal
+values. Removing a Navide Plugin Pack member and an agent's approved removal
 request keep them.
 
 What removal keeps:
@@ -1360,11 +1343,11 @@ matches.
 | `version` | yes | SemVer 2.0.0 | |
 | `publisher` | yes | Lowercase publisher id | Must equal the id's namespace (its first segment): lowercase letters, digits and hyphens, no `.`; a namespace claimed on the Marketplace is 3–32 characters |
 | `engines` | no | Object with a required navide requirement | See `engines.navide` above |
-| `permissions` | yes | Object; may be empty | Must be empty in an Extension Pack |
+| `permissions` | yes | Object; may be empty | Must be empty in a Navide Plugin Pack |
 | `marketplace` | yes | Object with a required description and license | |
 | `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
 | `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
-| `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
+| `extensionPack` | no | 1–20 member plugin ids | See [Navide Plugin Packs](#navide-plugin-packs) |
 | `permissions.system` | no | `fs`, `ui`, `aiCli`, `web`, `agents`, `agentMessages`, `secrets`, `agentNotify` | 1–8 unique entries; `agentMessages` requires `agents` |
 | `permissions.shell` | no | allowlist, full, or an object with mode allowlist and an executables list | Omission denies `shell.run`; the object form declares executables beyond git, gh and glab, see [Declared executables](#declared-executables-permissionsshellexecutables) |
 | `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
@@ -1388,9 +1371,9 @@ matches.
 | `backend.events` | no | Up to 32 unique dotted names | The Host forwards only declared names |
 | `backend.agentTools` | no | 1 or more tool objects | See [Agent tools](#agent-tools-backendagenttools) |
 
-### Extension Packs
+### Navide Plugin Packs
 
-A package whose manifest declares `extensionPack` is an **Extension Pack**: a
+A package whose manifest declares `extensionPack` is a **Navide Plugin Pack**: a
 list of 1–20 other package ids installed together.
 
 ```json
@@ -2609,7 +2592,7 @@ A package may also declare which paths it reads or writes:
   matches zero or more segments. A pattern covers only the paths it matches:
   `docs/*` is the entries directly in `docs`, `docs/**` is everything beneath
   it. A path that appears under `read` but not under `write` is read-only.
-- An Extension Pack may not declare it.
+- A Navide Plugin Pack may not declare it.
 
 The declaration is a disclosure, not a grant and not a sandbox. The Host shows
 it to the user in Settings → Navide Plugins; it does not change any grant, Bridge
@@ -3778,10 +3761,10 @@ internal v1 loader/adapter. It is not the third-party API support policy.
 
 Issue 06 supports the following external frontend workflow:
 
-1. Install the three public packages. They are not on npm yet: install the
-   tarballs of the GitHub Release `plugin-packages-1.0.0` (see
+1. Install the three public packages from the tarballs of the newest
+   `plugin-packages-<version>` GitHub Release (see
    [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin));
-   once they are published to npm, their SemVer ranges work the same way.
+   they are not published to npm.
 2. Declare the smallest permissions and run `navide-plugin validate <directory>`.
 3. Run the plugin project's `typecheck` and `build` scripts to create a
    frontend-only staging directory.

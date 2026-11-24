@@ -45,6 +45,39 @@ require_uv_version() {
   return 0
 }
 
+# macOS only: a stuck fseventsd holds a core near 100% and makes the local
+# gates slow and flaky until the machine restarts (0.2.47: three gate runs
+# lost to it). Sample it a few times before anything runs and stop when it
+# never drops; print mds_stores, Google Drive and the 1-minute load beside it
+# as the reason. NAVIDE_RELEASE_PREFLIGHT_SAMPLES / _INTERVAL tune sampling.
+FSEVENTSD_BUSY_CPU=80
+HIGH_LOAD1=20
+host_preflight() {
+  [[ "$(uname -s)" == "Darwin" ]] || return 0
+  local samples="${NAVIDE_RELEASE_PREFLIGHT_SAMPLES:-5}" interval="${NAVIDE_RELEASE_PREFLIGHT_INTERVAL:-2}"
+  local i table fsevents mds drive load1 busy=0
+  for ((i = 1; i <= samples; i++)); do
+    # Summed per process name: Google Drive runs as several processes.
+    table="$(ps -Ao pcpu=,comm= | awk '
+      { cpu = $1; sub(/^[[:space:]]*[0-9.]+[[:space:]]+/, ""); n = split($0, p, "/"); name = p[n]
+        if (name == "fseventsd") f += cpu; else if (name == "mds_stores") m += cpu
+        else if (name ~ /^Google Drive/) g += cpu }
+      END { printf "%.0f %.0f %.0f\n", f, m, g }')"
+    IFS=' ' read -r fsevents mds drive <<<"$table"
+    ((fsevents >= FSEVENTSD_BUSY_CPU)) && ((busy += 1))
+    ((i < samples)) && sleep "$interval"
+  done
+  load1="$(sysctl -n vm.loadavg | awk '{ print $2 }')"
+  echo "Host check: fseventsd ${fsevents}% (busy in ${busy}/${samples} samples), mds_stores ${mds}%, Google Drive ${drive}%, load1 ${load1}"
+  if ((busy == samples)); then
+    fail "fseventsd stayed at ${fsevents}% CPU or more (>= ${FSEVENTSD_BUSY_CPU}% in all ${samples} samples); the local gates would run slow and flaky. Restart the Mac first, then run release.sh again. (mds_stores ${mds}%, Google Drive ${drive}%, load1 ${load1})"
+  fi
+  if awk -v l="$load1" -v h="$HIGH_LOAD1" 'BEGIN { exit !(l >= h) }'; then
+    echo "WARNING: load1 is ${load1} (>= ${HIGH_LOAD1}); the gates will be slow. Waiting until it drops is cheaper than a failed run."
+  fi
+  return 0
+}
+
 # Runs the command before `--`, then the one after it. By default they run one
 # after the other: measured on a loaded host, overlapping them saved no time
 # and raised the 1-minute load by about 10 while both ran.
@@ -149,6 +182,7 @@ node scripts/stage-official-plugin-artifacts.mjs --check-registry \
   || fail "a pinned Registry plugin version is missing or does not verify (see above)"
 warn_missing_announcement "$VERSION"
 require_uv_version "$MIN_UV_VERSION"
+host_preflight
 
 CURRENT="$(node -p "require('./package.json').version")"
 echo ""

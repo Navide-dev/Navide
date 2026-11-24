@@ -75,7 +75,7 @@ A remote container pane runs Claude Code or Codex inside a Docker container on a
 
 ### SSH Remote panes (experimental)
 
-A terminal pane whose shell runs on another machine over `ssh`. Only terminal panes: Claude Code and Codex are not opened on the remote host.
+A terminal or CLI pane that runs on another machine over `ssh`: a login shell, or Claude Code, Codex or another supported CLI started in a folder you choose there.
 
 With **Settings → General → Experimental features → Remote container panes** on, the **+** menu shows **SSH Remote…** below **Terminal**.
 
@@ -83,9 +83,12 @@ With **Settings → General → Experimental features → Remote container panes
 - **Private key path** is optional. Navide saves only the path and passes it to `ssh -i`; it never reads, copies or uploads the key.
 - **Recent connections** keeps the last eight targets (host, user, port, key path) on this computer only. They are not part of Navide Cloud sync or an exported settings bundle.
 - **SSH agent forwarding stays off** (`ForwardAgent=no`, never `-A`), and environment variables other than what `ssh` itself needs are removed, so no `SendEnv` rule can carry a local API key.
+- **Remote folder** is where the pane starts on the host; `~` (your home there) unless you change it. **Open** chooses a terminal or a CLI.
+- **A CLI on the host uses its own sign-in there.** Sign in on the remote host yourself; Navide sends no local account, key or credential. SSH panes do not take part in account switching or automatic quota failover, and the pane header says so.
+- **Claude Code and Codex get Navide's tools** (messages to other panes, plans). For that, Navide sends the pane its own tool token through the SSH connection, typed in with echo off and never put on a command line; it is made for that pane only and stops working when the pane closes. Other CLIs run without Navide's tools, and the pane header says so.
 - **Connect** checks the host once with a non-interactive `ssh` call. When it answers, Navide opens a terminal pane running your login shell there. When it does not, the dialog says why in plain words: the host can't be reached, the key was refused, or the host can't be verified. After a key or host-key refusal, **Open anyway** opens the pane so `ssh` itself can ask for the key's passphrase or the host's fingerprint.
 - **Dropped connections reconnect on their own.** When `ssh` loses the link, the pane checks the host again after 2, 5, 15, 30 and 60 seconds and shows the reason each try failed; a refused key or host key stops the retries. **Reconnect** tries at once. Typing `exit` ends the pane without reconnecting.
-- An SSH Remote pane is not restored after Navide restarts; open it again from **Recent connections**.
+- **SSH panes are restored after Navide restarts**, connecting again to the same host and folder. A Claude Code or Codex pane resumes its own conversation after a reconnect or restart, never another one in the same folder; when that conversation can't be found, it starts a new one and the pane says so. Other CLIs start a new conversation.
 
 ### CLI risk observations
 
@@ -327,7 +330,7 @@ These credentials **never leave this machine**: account credentials and keys sta
 
 Anyone can make a Navide plugin and list it on the Navide Marketplace. **Settings → Navide Marketplace → Developer** walks you through the steps in the app; [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md) is the guide, with every command.
 
-1. **Create it from the template.** `navide-plugin init acme-hello --id acme.hello` writes a plugin with no build step; `--template vue` writes a Vue view, a small backend and an agent tool. The developer packages are not on npm yet: the guide shows the one-line `npx` command that runs them from the GitHub Release `plugin-packages-1.0.0`.
+1. **Create it from the template.** `navide-plugin init acme-hello --id acme.hello` writes a plugin with no build step; `--template vue` writes a Vue view, a small backend and an agent tool. The developer packages are distributed only as GitHub Release files, not through npm: the guide shows the one-line `npx` command that runs them from the newest `plugin-packages` release.
 2. **Load it without publishing.** Turn on [Developer Mode](#developer-mode) and choose **Load from Folder…**. A loaded folder reloads by itself when you save.
 3. **Validate and package it.** `navide-plugin validate` and `navide-plugin package` run the checks the Navide Marketplace runs before review and write a `.vsix` file. An agent in a pane can run the same checks with `plugins_validate_package` and `plugins_package`; neither installs anything.
 4. **Apply as a developer, once.** Sign in on the Developer page and fill in the real-name application; a person reviews it.

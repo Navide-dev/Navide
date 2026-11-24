@@ -39,6 +39,7 @@ import { BUILD_FOR_NAVIDE_URL, DEVELOPER_DOC_URLS, DEVELOPERS_URL, PLUGIN_CHECK_
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
+import TestplaceManager from './TestplaceManager.vue'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 const { t, locale } = useI18n()
@@ -529,6 +530,7 @@ onMounted(() => {
       <p class="dev-notice" data-testid="developer-testplace-owner">
         {{ members?.your_role === 'publisher' ? $t('marketplace-developer.testplace.owner-only-member') : $t('marketplace-developer.testplace.owner-only') }}
       </p>
+      <TestplaceManager />
       <div class="dev-actions">
         <button class="nv-btn nv-btn--sm" data-testid="developer-testplace-invite" @click="openForm('testplace-invite')">{{ $t('testplace.invite.open') }}</button>
         <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-testplace-joined" @click="setMarketplaceView('testplace')">{{ $t('marketplace-developer.testplace.joined') }}</button>

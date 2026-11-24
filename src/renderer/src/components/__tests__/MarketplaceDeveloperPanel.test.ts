@@ -6,6 +6,7 @@ import MarketplaceDeveloperPanel from '../MarketplaceDeveloperPanel.vue'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { closeMarketplaceForm, showMarketplaceForm } from '../../composables/useMarketplaceForms'
 import type { PluginApprovalRequest } from '../../../../shared/pluginAgentTools'
+import { PLUGIN_PACKAGES_VERSION } from '../../../../shared/marketplaceDeveloper'
 
 const state = {
   registry: 'http://127.0.0.1:8787', signedIn: { account: false, publisher: false }, namespace: null,
@@ -114,7 +115,7 @@ describe('MarketplaceDeveloperPanel', () => {
       expect(card.findAll('.dev-entry-steps li')).toHaveLength(5)
       // The public packages are not on npm: the command runs the CLI from the pinned GitHub Release tarballs.
       const command = card.get('[data-testid="developer-entry-init"]').text()
-      expect(command).toContain('https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0/navide-plugin-sdk-1.0.0.tgz')
+      expect(command).toContain(`https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${PLUGIN_PACKAGES_VERSION}/navide-plugin-sdk-${PLUGIN_PACKAGES_VERSION}.tgz`)
       expect(command).toContain('navide-plugin init acme-hello --id acme.hello')
       expect(card.get('[data-testid="developer-entry-check"]').text()).toBe('navide-plugin validate acme-hello && navide-plugin package acme-hello')
       expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('navide-plugin publish')

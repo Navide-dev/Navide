@@ -131,4 +131,28 @@ describe('TerminalPane – SSH Remote terminal pane', () => {
     await nextTick()
     expect(wrapper.find('[data-testid="ssh-disconnected"]').exists()).toBe(false)
   })
+
+  it('an SSH pane says it takes no part in account switching', () => {
+    wrapper = mountPane({ sshRemote })
+    expect(wrapper.get('[data-testid="ssh-account-chip"]').text()).toBe('sshRemote.accounts-chip')
+    expect(wrapper.find('.usage-badge-stub').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="ssh-no-tools-chip"]').exists()).toBe(false)
+  })
+
+  it('a CLI pane runs the TUI of its CLI and says when it has no Navide tools', () => {
+    wrapper = mountPane({ agentKey: 'remote', sshRemote: { ...sshRemote, cli: 'claude' } })
+    expect(mockTerminal.opts?.agentProfileFor?.('remote')?.agentKey).toBe('claude')
+    expect(wrapper.find('[data-testid="ssh-no-tools-chip"]').exists()).toBe(false)
+    wrapper.unmount()
+    wrapper = mountPane({ agentKey: 'remote', sshRemote: { ...sshRemote, cli: 'opencode' } })
+    expect(wrapper.get('[data-testid="ssh-no-tools-chip"]').text()).toBe('sshRemote.no-tools-chip')
+  })
+
+  it('says when the previous conversation could not be resumed until dismissed', async () => {
+    const dismiss = vi.fn()
+    wrapper = mountPane({ agentKey: 'remote', sshRemote: { ...sshRemote, cli: 'codex' }, sshResumeMissed: true, sshResumeMissedDismiss: dismiss })
+    expect(wrapper.get('[data-testid="ssh-resume-missed"]').text()).toContain('sshRemote.resume-missed')
+    await wrapper.get('[data-testid="ssh-resume-missed-dismiss"]').trigger('click')
+    expect(dismiss).toHaveBeenCalledTimes(1)
+  })
 })

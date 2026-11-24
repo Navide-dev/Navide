@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Jedes Schaltflächensymbol der Oberfläche – wie es heißt, wo es sich befindet und was ein Klick darauf bewirkt."
+        },
+        "general-scheduler-runs": {
+          "title": "Tägliche Ausführungen im Zeitplan",
+          "summary": "Wie oft geplante Aufträge und Agent-Aufträge pro Tag laufen"
         }
       },
       "no-results": "Keine passenden Einstellungen"
@@ -4686,7 +4690,7 @@
             "role": "Oben befindet sich das Dropdown <strong>Rolle auswählen …</strong> – wählen Sie eine vordefinierte Rolle.",
             "cliList": "Darunter ist die Liste in zwei Blöcke mit Überschrift geteilt. <strong>{cli}</strong> enthält die Coding-CLIs; nicht installierte sind entsprechend markiert. <strong>{agents}</strong> listet Ihre dauerhaften Agents (OpenClaw, Hermes Agent) nach Namen auf – ein geöffneter wird angezeigt, ein geschlossener setzt sein Gespräch fort – dazu einen Eintrag <em>Neu …</em>, der zuerst nach einem Namen fragt; ACP-Agents stehen ebenfalls dort. Ein Hinweis unter der Liste erklärt, dass Cloud-Agents wie Grok Bot und dots als Navide-Plug-ins kommen.",
             "terminal": "Unten stehen <strong>Terminal</strong> (ein einfaches Terminal ohne Agent) und <strong>Manuell starten</strong>.",
-            "sshRemote": "Mit <strong>Einstellungen → Allgemein → Experimentelle Funktionen → Remote-Container-Bereiche</strong> erscheint unter <strong>Terminal</strong> der Eintrag <strong>SSH Remote…</strong>. Er fragt Host, Benutzer, Port (standardmäßig 22) und den Pfad zum privaten Schlüssel ab und speichert letzte Verbindungen nur auf diesem Computer. Gespeichert wird nur der Schlüsselpfad; der Schlüssel wird nie gelesen oder kopiert, und die SSH-Agent-Weiterleitung bleibt aus. Verbinden prüft den Host und öffnet einen Terminalbereich, dessen Shell dort läuft; reißt die Verbindung ab, verbindet er sich von selbst neu."
+            "sshRemote": "Mit <strong>Einstellungen → Allgemein → Experimentelle Funktionen → Remote-Container-Bereiche</strong> erscheint unter <strong>Terminal</strong> der Eintrag <strong>SSH Remote…</strong>. Er fragt Host, Benutzer, Port (standardmäßig 22) und den Pfad zum privaten Schlüssel ab und speichert letzte Verbindungen nur auf diesem Computer. Gespeichert wird nur der Schlüsselpfad; der Schlüssel wird nie gelesen oder kopiert, und die SSH-Agent-Weiterleitung bleibt aus. Verbinden prüft den Host und öffnet einen Terminalbereich, dessen Shell dort läuft; reißt die Verbindung ab, verbindet er sich von selbst neu. Es kann auch Claude, Codex oder eine andere CLI in einem entfernten Ordner öffnen, mit deren eigener Anmeldung auf dem Host (ohne Kontowechsel und automatischen Kontingentwechsel); SSH-Bereiche werden nach einem Neustart wiederhergestellt."
           },
           "p2": "<em>Manuell starten</em> öffnet den vollständigen Dialog, in dem Sie Agent und Rolle wählen, festlegen, ob er zur Bühne hinzugefügt und ob daneben ein Terminal geöffnet wird, und eine Session-ID einfügen können, um eine frühere Unterhaltung direkt fortzusetzen.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "Der fokussierte Bereich füllt die Bühne, die übrigen werden zu aufklappbaren schwebenden Fenstern."
+            },
+            "persona": {
+              "behavior": "Jeder Bereich ist eine Person am Schreibtisch: Tippen = läuft, Hand oben = wartet auf deine Antwort, Kaffee oder Dösen = untätig, rauchender Monitor = Fehler. Jeder Tab ist ein Raum; bei vielen Bereichen gibt es die Gebäudeübersicht. Klick zeigt den Status, Doppelklick fokussiert den Bereich."
             }
           },
           "p2": "Es gibt außerdem ein Verhalten, das Sie nicht auswählen, den <strong>Doppelfokus</strong>: Laufen genau zwei Bereiche, teilen sie sich automatisch links und rechts auf, und der Trenner dazwischen lässt sich ziehen.",
@@ -7200,7 +7207,8 @@
       "settings-management": "Einstellungsverwaltung",
       "experimental": "Experimentelle Funktionen",
       "theme": "Design",
-      "other": "Sonstiges"
+      "other": "Sonstiges",
+      "scheduler": "Zeitplan"
     },
     "p2p": {
       "title": "Verbindung",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "Eine Nachricht wartet jetzt, bis der empfangende Bereich im Leerlauf ist, und wird dann eingetippt; sie braucht also länger, bis sie ankommt.",
       "all-off-rewake": "Das Rewake von Claude Code ist die einzige Möglichkeit, einen Agent im Leerlauf zu wecken; ist es aus, bleibt nur zu warten, bis der Agent von selbst wieder in den Leerlauf wechselt.",
       "all-off-restart": "Ein bereits laufender Bereich behält den Kanal, mit dem er gestartet wurde, bis er neu gestartet wird."
+    },
+    "scheduler": {
+      "hint": "Wie oft geplante Aufträge pro Tag laufen. Die Standardwerte sind die, die Navide schon immer verwendet hat.",
+      "per-job": "Ausführungen pro Tag je Auftrag",
+      "per-job-hint": "Für Aufträge ohne eigene Tagesanzahl.",
+      "agent-job": "Ausführungen pro Tag je Agent-Auftrag",
+      "agent-job-hint": "Wie oft ein einzelner von einem Agenten erstellter Auftrag höchstens pro Tag läuft.",
+      "agent-total": "Ausführungen pro Tag über alle Agent-Aufträge",
+      "agent-total-hint": "Alle von Agenten erstellten Aufträge zusammen. Ein Lauf, dessen Ziel-CLI kein Kontingent mehr hat, wird weiterhin übersprungen.",
+      "no-cap": "Ohne Obergrenze",
+      "save-failed": "Die Zeitplan-Einstellung konnte nicht gespeichert werden"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "Nach Typ filtern",
     "all-stages-finished": "Alle {count} Stufen erfolgreich abgeschlossen",
     "region-switching": "{title} wird auf {version} umgestellt …",
-    "region-unavailable": "{title} nicht verfügbar"
+    "region-unavailable": "{title} nicht verfügbar",
+    "view-mode-persona": "Persona — jeder Bereich ist eine Person im Büro; ihre Haltung zeigt, was er tut"
   },
   "layout": {
     "expand": "Panel aufklappen",
@@ -9597,7 +9617,9 @@
       "remove": "Löschen",
       "remove-confirm": "Diesen geplanten Auftrag löschen?",
       "cancel": "Abbrechen",
-      "save": "Speichern"
+      "save": "Speichern",
+      "max-runs-follow": "Einstellung: {n}",
+      "max-runs-follow-none": "Einstellung: ohne Obergrenze"
     },
     "owner": {
       "user": "von dir",
@@ -11844,6 +11866,29 @@
       "sent": "{count} Einladungen erstellt. Geben Sie jeden Code an die jeweilige Testperson weiter; die Codes werden nur dieses eine Mal angezeigt.",
       "copy": "Kopieren",
       "done": "Fertig"
+    },
+    "manage": {
+      "plugin": "Navide-Plug-in (namespace.name)",
+      "load": "Test-Builds und Codes anzeigen",
+      "builds": "Test-Builds",
+      "noBuilds": "Für dieses Navide-Plug-in gibt es keine Test-Builds.",
+      "promote": "Zur Prüfung senden",
+      "promoteVersion": "{version} zur Prüfung senden",
+      "promoteConfirm": "{plugin} {version} zur Prüfung an den Navide Marketplace senden? Geprüft wird dasselbe Paket; Tester müssen es nach der Freigabe nicht neu installieren.",
+      "promoted": "{plugin} {version} wurde zur Prüfung an den Navide Marketplace gesendet.",
+      "codes": "Öffentliche Testcodes",
+      "codesHint": "Mit einem Code können so viele Tester beitreten, wie du festlegst. Der erste Code jedes Navide-Plug-ins wird nach einer kurzen Prüfung freigeschaltet.",
+      "testers": "{count} von {max} Testern",
+      "revoke": "Widerrufen",
+      "revokeConfirm": "Testcode #{code} widerrufen? Niemand kann mehr damit beitreten; bereits beigetretene Tester behalten den Zugang.",
+      "maxTesters": "Tester für einen neuen Code",
+      "create": "Code erstellen",
+      "created": "Testcode, nur jetzt sichtbar:",
+      "state": {
+        "revoked": "Widerrufen",
+        "expires": "Läuft ab am {date}",
+        "promotion": "Prüfung: {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "Verbindung wird wiederhergestellt…",
     "retry-in": "Automatische Wiederverbindung in {seconds} s",
     "reconnect": "Neu verbinden",
-    "close-pane": "Bereich schließen"
+    "close-pane": "Bereich schließen",
+    "dir-label": "Entfernter Ordner",
+    "dir-placeholder": "~ (Home) oder ein Pfad auf dem Host",
+    "run-label": "Öffnen",
+    "run-terminal": "Terminal (Login-Shell)",
+    "tools-note": "{cli} kann auf dem Host die Werkzeuge von Navide nutzen (Nachrichten an andere Bereiche, Pläne). Dafür schickt Navide diesem Bereich über die SSH-Verbindung ein eigenes Werkzeug-Token, eingegeben bei ausgeschaltetem Echo und nie auf einer Befehlszeile. Das Token gilt nur für diesen Bereich und verliert beim Schließen seine Gültigkeit. Es ist kein Konto-Zugang: Kein Schlüssel und keine Anmeldung verlässt diesen Computer.",
+    "no-tools-note": "{cli} läuft auf dem Host ohne die Werkzeuge von Navide: Nachrichten aus anderen Bereichen kommen weiterhin als getippter Text an, aber Navide selbst aufrufen kann es nicht.",
+    "accounts-note": "Melde dich auf dem entfernten Host selbst bei {cli} an. Dieser Bereich nimmt weder am Kontowechsel noch am automatischen Kontingentwechsel teil.",
+    "resume-note": "Nach einer Wiederverbindung oder einem Neustart von Navide wird die eigene Unterhaltung dieses Bereichs fortgesetzt, nie eine andere im selben Ordner.",
+    "fresh-note": "Nach einer Wiederverbindung oder einem Neustart von Navide beginnt {cli} eine neue Unterhaltung.",
+    "accounts-chip": "Eigene Anmeldung",
+    "accounts-chip-title": "Auf {host} angemeldet. Dieser Bereich nimmt weder am Kontowechsel noch am automatischen Kontingentwechsel teil.",
+    "no-tools-chip": "Keine Navide-Werkzeuge",
+    "no-tools-chip-title": "{cli} läuft auf {host} ohne die Werkzeuge von Navide.",
+    "resume-missed": "Die vorherige Unterhaltung ließ sich nicht fortsetzen, daher wurde eine neue begonnen.",
+    "dismiss": "Schließen"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "Senden eingeplant",
     "error-at": "Die Uhrzeit muss HH:MM sein",
     "error-tz": "Unbekannte Zeitzone"
+  },
+  "persona": {
+    "people": "{n} Personen",
+    "running": "{n} laufen",
+    "awaiting-count": "{n} warten auf deine Antwort",
+    "failing-count": "{n} mit Fehler oder ohne Kontingent",
+    "building": "Gebäude",
+    "building-back": "Zurück zum Raum",
+    "attention": "Braucht Aufmerksamkeit",
+    "attention-hint": "{n} · Klick für Status",
+    "canvas-label": "Persona-Büro, {n} Bereiche",
+    "empty-room": "Noch keine Bereiche in diesem Raum",
+    "legend-type": "Tippen = läuft",
+    "legend-raise": "Hand oben = wartet auf dich",
+    "legend-idle": "Kaffee / Dösen = untätig",
+    "legend-error": "Rauch = Fehler oder Kontingent leer",
+    "close": "Schließen",
+    "waited-under-minute": "unter einer Minute",
+    "waited-minutes": "{n} Min.",
+    "quota-empty": "Kontingent aufgebraucht",
+    "quota-low": "Kontingent unter 40 %",
+    "quota-critical": "Kontingent unter 15 %",
+    "focus-pane": "Diesen Bereich fokussieren",
+    "back-to-grid": "Zurück zum Raster",
+    "building-label": "Gebäudeübersicht, {rooms} Räume, {n} Bereiche",
+    "building-title": "Ganzes Gebäude",
+    "failing": "Fehler / Kontingent leer",
+    "enter-room": "Diesen Raum betreten",
+    "floor": "{n}. OG"
   }
 }

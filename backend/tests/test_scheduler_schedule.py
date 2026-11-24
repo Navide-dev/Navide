@@ -178,7 +178,8 @@ def test_changed_schedule_rearms_from_now() -> None:
 def test_new_job_defaults() -> None:
     job = normalize_job(_job(), None, 1_000)
     assert job["enabled"] is True
-    assert job["policy"] == {"catch_up": "once", "max_runs_per_day": 24, "timeout_s": 1800}
+    # No max_runs_per_day: the job follows the user's setting.
+    assert job["policy"] == {"catch_up": "once", "timeout_s": 1800}
     assert job["state"]["consecutive_errors"] == 0 and job["state"]["running_at"] is None
     assert len(job["id"]) == 36
 
@@ -314,3 +315,11 @@ def test_once_passed_moment_survives_a_resave_but_not_a_reenable() -> None:
         {"id": job["id"], "enabled": True, "schedule": {"kind": "once", "in_ms": 60_000}}, ran, later
     )
     assert rearmed["enabled"] is True and rearmed["state"]["next_run_at"] == later + 60_000
+
+
+def test_a_null_daily_count_follows_the_setting_again() -> None:
+    job = normalize_job(_job(policy={"max_runs_per_day": 3}), None, 1_000)
+    merged = normalize_job({"policy": {"max_runs_per_day": None}}, job, 2_000)
+    assert "max_runs_per_day" not in merged["policy"]
+    # Left out, it keeps the stored value.
+    assert normalize_job({"policy": {"catch_up": "skip"}}, job, 2_000)["policy"]["max_runs_per_day"] == 3

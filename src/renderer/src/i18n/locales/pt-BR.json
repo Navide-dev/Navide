@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Todos os ícones de botão da interface: como se chamam, onde ficam e o que fazem ao serem pressionados."
+        },
+        "general-scheduler-runs": {
+          "title": "Execuções diárias do agendador",
+          "summary": "Quantas vezes por dia as tarefas agendadas e as de agents são executadas"
         }
       },
       "no-results": "Nenhuma configuração correspondente"
@@ -4686,7 +4690,7 @@
             "role": "No topo fica o menu suspenso <strong>Selecionar papel…</strong>: escolha um papel predefinido.",
             "cliList": "Abaixo, a lista se divide em dois blocos com título. <strong>{cli}</strong> reúne as CLIs de programação, marcando as que não estão instaladas. <strong>{agents}</strong> mostra seus agentes permanentes (OpenClaw, Hermes Agent) pelo nome: escolher um que está aberto leva até ele, escolher um fechado retoma a conversa dele. Há também uma entrada <em>Novo …</em> que pede um nome primeiro, e os agentes ACP aparecem nesse bloco. Uma nota sob a lista avisa que agentes na nuvem, como Grok Bot e dots, vêm como plug-ins do Navide.",
             "terminal": "Embaixo ficam <strong>Terminal</strong> (um terminal comum sem agent) e <strong>Iniciar manualmente…</strong>.",
-            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Conectar verifica o host e abre um pane de terminal cujo shell roda lá; se a conexão cair, o pane se reconecta sozinho."
+            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Conectar verifica o host e abre um pane de terminal cujo shell roda lá; se a conexão cair, o pane se reconecta sozinho. Também pode abrir o Claude, o Codex ou outra CLI numa pasta remota, com o próprio login nesse host (sem troca de conta nem troca automática por cota); os painéis SSH são restaurados depois de reiniciar."
           },
           "p2": "<em>Iniciar manualmente…</em> abre a caixa de diálogo completa, onde você pode escolher o agent e o papel, decidir se ele entra no palco e se um terminal abre ao lado, e colar um id de session para retomar diretamente uma conversa anterior.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "O pane em foco preenche o palco e o resto vira janelas flutuantes expansíveis."
+            },
+            "persona": {
+              "behavior": "Cada painel é uma pessoa à mesa: digitando = em execução, mão levantada = aguardando sua resposta, café ou cochilando = ocioso, monitor soltando fumaça = erro. Cada aba é uma sala; com muitos painéis, abra a visão do prédio. Clique para ver o status e clique duas vezes para focar o painel."
             }
           },
           "p2": "Há também um comportamento que você não escolhe, o <strong>foco duplo</strong>: quando exatamente dois panes estão em execução, eles se dividem automaticamente em esquerda e direita, e o divisor entre eles pode ser arrastado.",
@@ -7200,7 +7207,8 @@
       "settings-management": "Gerenciamento de configurações",
       "experimental": "Recursos experimentais",
       "theme": "Tema",
-      "other": "Outros"
+      "other": "Outros",
+      "scheduler": "Agendador"
     },
     "p2p": {
       "title": "Conexão",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "Agora uma mensagem espera o pane de destino ficar ocioso e então é digitada nele, então leva mais tempo para chegar.",
       "all-off-rewake": "O despertar do Claude Code é a única forma de despertar um agent ocioso; com ele desativado, só resta esperar o agent voltar a ficar ocioso por conta própria.",
       "all-off-restart": "Um pane já em execução mantém o canal com que iniciou até ser reiniciado."
+    },
+    "scheduler": {
+      "hint": "Quantas vezes por dia as tarefas agendadas são executadas. Os padrões são os que o Navide sempre usou.",
+      "per-job": "Execuções por dia por tarefa",
+      "per-job-hint": "Para tarefas que não definem a própria contagem diária.",
+      "agent-job": "Execuções por dia por tarefa de agent",
+      "agent-job-hint": "O máximo de vezes por dia que uma tarefa criada por um agent é executada.",
+      "agent-total": "Execuções por dia somando as tarefas de agents",
+      "agent-total-hint": "Todas as tarefas criadas por agents, somadas. Uma execução cujo CLI de destino está sem cota continua sendo pulada.",
+      "no-cap": "Sem teto",
+      "save-failed": "Não foi possível salvar a configuração do agendador"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Todas as {count} etapas foram concluídas com sucesso",
     "region-switching": "Mudando {title} para {version}…",
-    "region-unavailable": "{title} indisponível"
+    "region-unavailable": "{title} indisponível",
+    "view-mode-persona": "Persona — cada painel é uma pessoa em um escritório; a postura mostra o que ele está fazendo"
   },
   "layout": {
     "expand": "Expandir painel",
@@ -9597,7 +9617,9 @@
       "remove": "Excluir",
       "remove-confirm": "Excluir esta tarefa agendada?",
       "cancel": "Cancelar",
-      "save": "Salvar"
+      "save": "Salvar",
+      "max-runs-follow": "Configurações: {n}",
+      "max-runs-follow-none": "Configurações: sem teto"
     },
     "owner": {
       "user": "criada por você",
@@ -11844,6 +11866,29 @@
       "sent": "{count} convites criados. Entregue cada código ao respectivo testador; os códigos são mostrados apenas desta vez.",
       "copy": "Copiar",
       "done": "Concluído"
+    },
+    "manage": {
+      "plugin": "Plug-in do Navide (namespace.nome)",
+      "load": "Mostrar builds e códigos de teste",
+      "builds": "Builds de teste",
+      "noBuilds": "Este plug-in do Navide não tem builds de teste.",
+      "promote": "Enviar para revisão",
+      "promoteVersion": "Enviar {version} para revisão",
+      "promoteConfirm": "Enviar {plugin} {version} para a revisão do Navide Marketplace? O mesmo pacote é revisado; os testadores não precisam reinstalar depois da aprovação.",
+      "promoted": "{plugin} {version} foi enviado para a revisão do Navide Marketplace.",
+      "codes": "Códigos de teste públicos",
+      "codesHint": "Um código permite a entrada de até o número de testadores que você definir. O primeiro código de cada plug-in do Navide abre depois de uma revisão rápida.",
+      "testers": "{count} de {max} testadores",
+      "revoke": "Revogar",
+      "revokeConfirm": "Revogar o código de teste #{code}? Ninguém mais poderá entrar com ele; quem já entrou mantém o acesso.",
+      "maxTesters": "Testadores para um novo código",
+      "create": "Criar código",
+      "created": "Código de teste, mostrado só agora:",
+      "state": {
+        "revoked": "Revogado",
+        "expires": "Expira em {date}",
+        "promotion": "Revisão: {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "Reconectando…",
     "retry-in": "Reconectando automaticamente em {seconds} s",
     "reconnect": "Reconectar",
-    "close-pane": "Fechar pane"
+    "close-pane": "Fechar pane",
+    "dir-label": "Pasta remota",
+    "dir-placeholder": "~ (início) ou um caminho no host",
+    "run-label": "Abrir",
+    "run-terminal": "Terminal (shell de login)",
+    "tools-note": "{cli} recebe as ferramentas do Navide no host (mensagens para outros painéis, planos). Para isso, o Navide envia a este painel o próprio token de ferramentas pela conexão SSH, digitado com o eco desligado e nunca numa linha de comando. O token é só deste painel e para de funcionar quando ele fecha. Não é uma credencial de conta: nenhuma chave ou login sai deste computador.",
+    "no-tools-note": "{cli} roda no host sem as ferramentas do Navide: mensagens de outros painéis continuam chegando como texto digitado, mas ele não consegue chamar o Navide sozinho.",
+    "accounts-note": "Entre no {cli} você mesmo no host remoto. Este painel não participa da troca de conta nem da troca automática por cota.",
+    "resume-note": "Ao reconectar ou reiniciar o Navide, a conversa deste painel é retomada, nunca outra da mesma pasta.",
+    "fresh-note": "Ao reconectar ou reiniciar o Navide, o {cli} começa uma conversa nova.",
+    "accounts-chip": "Login remoto próprio",
+    "accounts-chip-title": "Conectado em {host}. Este painel não participa da troca de conta nem da troca automática por cota.",
+    "no-tools-chip": "Sem ferramentas do Navide",
+    "no-tools-chip-title": "{cli} roda em {host} sem as ferramentas do Navide.",
+    "resume-missed": "Não foi possível continuar a conversa anterior, então uma nova começou.",
+    "dismiss": "Fechar"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "Envio agendado",
     "error-at": "O horário deve ser HH:MM",
     "error-tz": "Fuso horário desconhecido"
+  },
+  "persona": {
+    "people": "{n} pessoas",
+    "running": "{n} em execução",
+    "awaiting-count": "{n} aguardando sua resposta",
+    "failing-count": "{n} com erro ou sem cota",
+    "building": "Prédio",
+    "building-back": "Voltar à sala",
+    "attention": "Precisa de atenção",
+    "attention-hint": "{n} · clique para ver o status",
+    "canvas-label": "Escritório persona, {n} painéis",
+    "empty-room": "Ainda não há painéis nesta sala",
+    "legend-type": "Digitando = em execução",
+    "legend-raise": "Mão levantada = aguardando você",
+    "legend-idle": "Café / cochilo = ocioso",
+    "legend-error": "Fumaça = erro ou sem cota",
+    "close": "Fechar",
+    "waited-under-minute": "menos de um minuto",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Cota esgotada",
+    "quota-low": "Cota abaixo de 40%",
+    "quota-critical": "Cota abaixo de 15%",
+    "focus-pane": "Focar este painel",
+    "back-to-grid": "Voltar à grade",
+    "building-label": "Visão do prédio, {rooms} salas, {n} painéis",
+    "building-title": "Prédio inteiro",
+    "failing": "Erro / sem cota",
+    "enter-room": "Entrar nesta sala",
+    "floor": "{n}º andar"
   }
 }

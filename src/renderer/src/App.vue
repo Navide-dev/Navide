@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
+import PersonaOffice from './components/PersonaOffice.vue'
+import { buildPersonaRooms, quotaStage, type StatusClock } from './lib/persona/personaRooms'
+import type { PersonaRoom } from './lib/persona/personaModel'
 import TerminalPane from './components/TerminalPane.vue'
 import AcpPane from './components/AcpPane.vue'
 import { createAcpHost } from './lib/acpHost'
@@ -48,7 +51,7 @@ import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
-import { isAgentVendor } from './lib/agentIdentity'
+import { agentVendorLabel, isAgentVendor } from './lib/agentIdentity'
 import { awaitingPromptText, MODEL_RESULT_SCREEN_LINES, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
@@ -102,7 +105,7 @@ import StageTabBar, { type TabItem } from './components/StageTabBar.vue'
 import RunGroupContextMenu from './components/RunGroupContextMenu.vue'
 import { countLivePanes, rollupTabStatus, sameRenderedTabs } from './lib/tabStatus'
 import { sameRenderedPaneViews } from './lib/paneViews'
-import { paneStatusLabelText } from './lib/paneStatusLabel'
+import { paneStatusLabelText, type PaneStatusValue } from './lib/paneStatusLabel'
 import { statusBadgeStyle } from './composables/useStatusBadgePrefs'
 import { useBackend } from './composables/useBackend'
 import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
@@ -237,7 +240,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
-import { sshFailureReason, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
+import { SSH_TERMINAL, sshFailureReason, sshTargetFields, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -363,7 +366,7 @@ import {
   type WelcomeFacts,
   type WelcomeTourDecision,
 } from './lib/welcomeTour'
-import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
+import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent, remainingTier, usageFor } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
 import { leaveLimitMenuAndResume } from './lib/claudeLimitMenu'
 import {
@@ -1562,9 +1565,11 @@ function paneAgentSpec(agentKey: string | undefined): AgentSpec | undefined {
 }
 
 /** The key whose screen shapes (permission box, update menu) a pane shows: a
- *  remote pane draws the TUI of the CLI it runs in the container. */
-function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget } | undefined): string | undefined {
-  return pane?.remote?.cli ?? pane?.agentKey
+ *  remote pane draws the TUI of the CLI it runs in the container or on the
+ *  SSH host. */
+function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget; sshRemote?: SshRemoteTarget } | undefined): string | undefined {
+  const sshCli = pane?.sshRemote?.cli
+  return pane?.remote?.cli ?? (sshCli && sshCli !== SSH_TERMINAL ? sshCli : undefined) ?? pane?.agentKey
 }
 
 // The subset (+order) the user chose in Settings → CLI Agents, fed to the manual
@@ -2025,11 +2030,18 @@ interface ActivePane {
    *  reconnect, restore) goes back to the same container. Persisted on the
    *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
   remote?: RemoteTarget
-  /** An SSH Remote terminal pane (same experimental switch): its shell runs
-   *  on this host over ssh. Runtime only — such a pane is not restored. */
+  /** An SSH Remote pane (same experimental switch): its login shell, or a CLI
+   *  (agent key 'remote', the CLI in `cli`), runs on this host over ssh. It
+   *  never takes part in account switching or quota failover. Persisted on
+   *  the backend's pane record (manual_pane.spawn `remote` with kind 'ssh'),
+   *  with the CLI's remote session id once known, so a restore reconnects and
+   *  resumes that conversation. */
   sshRemote?: SshRemoteTarget
   /** An SSH pane's last exit code (255: ssh lost or never made the link). */
   sshExitCode?: number | null
+  /** The SSH CLI pane asked to resume its conversation and the host had none
+   *  to resume, so it started fresh: the pane says so until dismissed. */
+  sshResumeMissed?: boolean
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -8618,8 +8630,11 @@ interface SpawnInternal {
   accountDirLogin?: boolean
   /** Remote container target; see ActivePane.remote. */
   remote?: RemoteTarget
-  /** SSH Remote terminal target; see ActivePane.sshRemote. */
+  /** SSH Remote target; see ActivePane.sshRemote. */
   sshRemote?: SshRemoteTarget
+  /** With `sshRemote`: this launch continues an earlier one (rebuild,
+   *  reconnect, restore), so a CLI resumes its own remote session. */
+  sshResume?: boolean
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8846,6 +8861,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     sshRemote: opts.sshRemote,
   }
   acp.claim(id, opts)
+  if (opts.sshRemote?.cli && opts.sshRemote.cli !== SSH_TERMINAL) pane.agentLabel = agentSpecs.find((s) => s.agentKey === opts.sshRemote!.cli)?.label || pane.agentLabel
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
   if (
@@ -9012,7 +9028,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
       ...(opts.remote ? { remote: opts.remote } : {}),
-      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote } } : {}),
+      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote, resume: !!opts.sshResume } } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -10081,8 +10097,9 @@ async function rebuildPaneViaResume(
   // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
   if (acp.owns(paneId)) return 'no-session'
   // A remote container pane has no local transcript to resume: the rebuild is
-  // a fresh CLI in the same container (the reconnect banner's path too).
-  if (pane.remote) {
+  // a fresh CLI in the same container (the reconnect banner's path too). An
+  // SSH pane's rebuild resumes its own remote session (rebuildPaneClean).
+  if (pane.remote || pane.sshRemote) {
     await rebuildPaneClean(paneId)
     return undefined
   }
@@ -10715,8 +10732,10 @@ const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
  *  on, optionally taking the other panes that ran out on the same account. */
 async function onQuotaSwitchAccount(paneId: string): Promise<void> {
   if (!followSwitchFlag.value) return
-  // A remote pane signs in inside its container; no account here is its own.
-  if (panes.value.find((p) => p.id === paneId)?.remote) return
+  // A remote pane signs in inside its container or on its SSH host; no
+  // account here is its own.
+  const quotaPane = panes.value.find((p) => p.id === paneId)
+  if (quotaPane?.remote || quotaPane?.sshRemote) return
   const inputs = panes.value.map(followPaneInput)
   const self = inputs.find((p) => p.id === paneId)
   if (!self) return
@@ -10962,7 +10981,7 @@ async function fixDescendantsToAccount(paneId: string): Promise<void> {
 async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
-  if (pane?.remote) return
+  if (pane?.remote || pane?.sshRemote) return
   if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
   await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
 }
@@ -11122,8 +11141,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     muted: isPaneMuted(paneId),
     // A remote pane reconnects to the same container.
     remote: pane.remote,
-    // An SSH Remote pane reconnects to the same host.
-    sshRemote: pane.sshRemote,
+    // An SSH Remote pane reconnects to the same host, resuming its session.
+    sshRemote: pane.sshRemote ? { ...pane.sshRemote } : undefined,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -11147,6 +11166,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       effort: snap.effort,
       remote: snap.remote,
       sshRemote: snap.sshRemote,
+      sshResume: !!snap.sshRemote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -11154,10 +11174,10 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       rekeyLineage(paneId, newId)
       setPaneMuted(paneId, false)
       if (snap.muted) setPaneMuted(newId, true)
-      // An SSH Remote pane has no record (it is not restored); writing one
-      // here would bring it back after a restart as a LOCAL shell.
       if (snap.sshRemote) {
-        // nothing to record
+        // Carries the SSH target: a record without it would come back after
+        // a restart as a LOCAL pane.
+        await recordSshPane(snap.workspacePath, newId, snap.agentKey, snap.runGroupId || '', snap.sshRemote, paneId)
       } else if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
@@ -13802,7 +13822,8 @@ const channelAccountDeps: ChannelAccountDeps = {
 
 async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
   // The backend refuses these first; this keeps the renderer from moving one.
-  if (panes.value.find((p) => p.id === String(args.paneId ?? ''))?.remote) return { status: 'refused', code: 'REMOTE_PANE' }
+  const switchPane = panes.value.find((p) => p.id === String(args.paneId ?? ''))
+  if (switchPane?.remote || switchPane?.sshRemote) return { status: 'refused', code: 'REMOTE_PANE' }
   const ctx = switchToastContext(args, callerPaneId)
   const outcome = await runAgentPaneAccountSwitch(args, {
     accounts: cliProfilesApi,
@@ -14254,6 +14275,17 @@ interface ProjectPane {
   remote?: Partial<RemoteTarget>
 }
 
+/** A saved SSH Remote pane's target, folder, CLI and remote session id, or
+ *  undefined for any other pane. The backend connects only if the target is
+ *  still in its app-level trusted list. */
+function savedSshTarget(saved: { remote?: Partial<RemoteTarget> }): SshRemoteTarget | undefined {
+  const r = saved.remote as (Partial<SshRemoteTarget> & { kind?: unknown }) | undefined
+  if (!r || r.kind !== 'ssh') return undefined
+  const target = sshTargetFields(r)
+  if (!target) return undefined
+  return { ...target, sessionId: typeof r.sessionId === 'string' ? r.sessionId : '' }
+}
+
 /** A saved pane's remote target, or undefined for a local pane. */
 function savedRemoteTarget(saved: { remote?: Partial<RemoteTarget> }): RemoteTarget | undefined {
   const r = saved.remote
@@ -14453,8 +14485,11 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     formerPaneIds: [saved.pane_id],
     replacePaneId: opts.replacePaneId,
     restoring: opts.restoring,
-    // The backend's record of a remote pane: it goes back to its container.
+    // The backend's record of a remote pane: it goes back to its container,
+    // or to its SSH host, resuming the CLI's own remote session.
     remote: savedRemoteTarget(saved),
+    sshRemote: savedSshTarget(saved),
+    sshResume: !!savedSshTarget(saved),
   })
   if (!paneId) return null
   if (opts.shouldPersist && !opts.shouldPersist(paneId)) {
@@ -14738,7 +14773,7 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
     themeApi.loadTheme({ theme: resp.project.theme, theme_custom: resp.project.theme_custom })
     settingsApi.loadLanguage({ language: (resp.project as { language?: string }).language })
     const savedMode = resp.project.layout_mode
-    if (savedMode === 'auto' || savedMode === 'grid' || savedMode === 'spotlight' || savedMode === 'fullscreen') {
+    if (savedMode === 'auto' || savedMode === 'grid' || savedMode === 'spotlight' || savedMode === 'fullscreen' || savedMode === 'persona') {
       layoutMode.value = savedMode
     } else {
       layoutMode.value = 'grid'
@@ -24685,7 +24720,8 @@ const resourceUsage = useResourceUsage({
 })
 provide(cliRiskKey, resourceUsage)
 provide(channelsKey, useChannels(backend))
-provide(guardKey, useGuard(backend))
+const guardStore = useGuard(backend)
+provide(guardKey, guardStore)
 
 // ── Agent panes (plan agent-0-2-40_78e071) ───────────────────────────────────
 function agentPaneName(p: ActivePane): string {
@@ -24956,13 +24992,18 @@ function openSshRemoteDialog(): void {
 }
 
 /** The dialog connected (the backend checked the host and trusted it): a
- *  terminal pane whose shell runs there. */
+ *  terminal or CLI pane that runs there, recorded so it is restored. Claude
+ *  gets its remote session id now; Codex reports the one it picks
+ *  (remote_ssh.session). */
 async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
   sshRemoteDialogOpen.value = false
   const workspacePath = currentWorkspace.value
   const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
-  await spawnPane({
-    agentKey: 'terminal',
+  const cli = target.cli || SSH_TERMINAL
+  const agentKey = cli === SSH_TERMINAL ? 'terminal' : REMOTE_AGENT_KEY
+  const sshRemote: SshRemoteTarget = { ...target, cli, sessionId: cli === 'claude' ? crypto.randomUUID() : '' }
+  const paneId = await spawnPane({
+    agentKey,
     roleKey: '',
     stageId: '',
     commandOverride: '',
@@ -24970,9 +25011,49 @@ async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
     origin: 'manual',
     runGroupId: spawnGroupId || undefined,
     autoName: sshTargetLabel(target),
-    sshRemote: target,
+    sshRemote,
+  })
+  if (paneId) await recordSshPane(workspacePath, paneId, agentKey, spawnGroupId, sshRemote)
+}
+
+/** The backend's record of an SSH pane: its target, folder, CLI and remote
+ *  session id, which is what a restore reconnects to. */
+async function recordSshPane(
+  workspacePath: string, paneId: string, agentKey: string, runGroupId: string,
+  target: SshRemoteTarget, previousPaneId = '',
+): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  await sendQuiet<ProjectPayload>('manual_pane.spawn', {
+    workspace_path: workspacePath,
+    pane_id: paneId,
+    previous_pane_id: previousPaneId,
+    agent: agentKey,
+    role: '',
+    command: '',
+    session_id: '',
+    run_group_id: runGroupId,
+    output_log_file: pane?.outputLogFile ?? '',
+    remote: { kind: 'ssh', ...target },
   })
 }
+
+// An SSH Codex pane found the id of the session it started: kept on the pane
+// (a reconnect resumes it) and on its record (a restore does).
+backend.on('remote_ssh.session', (raw) => {
+  const ev = raw as { pane_id?: string; session_id?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane?.sshRemote || !ev.session_id) return
+  pane.sshRemote = { ...pane.sshRemote, sessionId: ev.session_id }
+  void sendQuiet('remote_ssh.set_session', {
+    workspace_path: pane.workspacePath, pane_id: pane.id, session_id: ev.session_id,
+  })
+})
+
+// An SSH CLI pane could not resume its conversation and started a new one.
+backend.on('remote_ssh.resume_missed', (raw) => {
+  const pane = panes.value.find((p) => p.id === (raw as { pane_id?: string })?.pane_id)
+  if (pane?.sshRemote) pane.sshResumeMissed = true
+})
 
 /** An SSH pane's banner asks the backend to check the host again (the same
  *  check the dialog runs); only a reachable host gets a new shell. */
@@ -25548,8 +25629,81 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
   if (m === 'spotlight') return 'spotlight'
   // fullscreen → focus pane 100%, others as floating overlays
   if (m === 'fullscreen') return 'fullscreen'
+  // persona → the office drawn over the stage; the terminals stay laid out
+  // as the grid underneath (hidden), so entering and leaving reflows nothing.
   return 'grid'
 })
+
+// ── Persona mode: rooms = stage tabs, people = panes ─────────────────────────
+const personaStatusClock: StatusClock = new Map()
+const personaRooms = computed<PersonaRoom[]>(() => {
+  if (layoutMode.value !== 'persona') return []
+  // Status read exactly as stageTabs reads it (paneViews, disconnected wins).
+  const disconnected = new Set(disconnectedPaneIds.value)
+  const viewById = new Map(paneViews.value.map((v) => [v.id, v]))
+  const paneById = new Map(panes.value.map((p) => [p.id, p]))
+  void usageVersion.value
+  return buildPersonaRooms({
+    tabs: stageTabShapes.value,
+    stagePaneIds: panesOnStage.value.map((p) => p.id),
+    fallbackLabel: i18n.global.t('label.default'),
+    statusOf: (id) => disconnected.has(id)
+      ? 'disconnected'
+      : ((viewById.get(id)?.status as PaneStatusValue | undefined) ?? (paneById.get(id)?.realized ? 'starting' : 'waiting')),
+    factsOf: (id) => {
+      const p = paneById.get(id)
+      if (!p) return null
+      const view = viewById.get(id)
+      const name = agentPaneName(p)
+      const ref = paneRefs[id] as unknown as {
+        awaitingHeld?: () => { since: number }
+        lastActivityAt?: number
+      } | null
+      const status = view?.status
+      const since = status === 'awaiting'
+        ? ref?.awaitingHeld?.().since
+        : status === 'idle' ? ref?.lastActivityAt : undefined
+      // The account the pane runs on, as its usage badge reads it: a pane
+      // pinned to an account signed in inside its own config dir runs on that
+      // account (runs_on "account-dir"); every other pane on the live one.
+      const pin = paneRunPin(p) ?? ''
+      const dirProfileId = cliProfilesApi.accountDirFor(p.agentKey, pin)?.signedIn ? pin : ''
+      const snap = dirProfileId ? accountUsageFor(p.agentKey, dirProfileId) : usageFor(p.agentKey)
+      const remaining = remainingPercent(snap)
+      return {
+        name,
+        vendor: agentVendorLabel(p.agentKey),
+        agentColor: agentConsole.paneInfo(id, p.agentKey, name)?.color ?? null,
+        quota: quotaStage(remaining === null ? null : remainingTier(remaining), p.usageLimitAt != null || isExhausted(snap)),
+        loginExpired: !!p.loginExpired,
+        guarded: guardStore.available.value && !!guardStore.taintFor(id),
+        since,
+      }
+    },
+    clock: personaStatusClock,
+    now: Date.now(),
+  })
+})
+
+/** The question an awaiting pane holds: the pipeline's parsed question when
+ *  it has one, else the last lines on its screen (where a CLI's prompt box is). */
+function personaQuestionFor(id: string): string {
+  const q = activeQuestion.value
+  if (q?.paneId === id && q.questions.length) return q.questions.map((x) => x.prompt).join('\n')
+  const ref = paneRefs[id] as unknown as { readScreenTail?: (n: number) => string } | null
+  const tail = ref?.readScreenTail?.(8) ?? ''
+  return tail.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-4).join('\n')
+}
+
+function onPersonaFocusPane(id: string): void {
+  onUserChangeLayoutMode('spotlight')
+  onFocusPane(id)
+}
+
+function onPersonaBackToGrid(id: string): void {
+  onUserChangeLayoutMode('grid')
+  onFocusPane(id)
+}
 
 // After any layout mode change, refit all terminals once the browser has
 // finished laying out the new grid — ResizeObserver alone is unreliable when
@@ -27160,7 +27314,19 @@ function paneIsCommander(p: ActivePane): boolean {
           </button>
         </div>
       </div>
-      <div v-else class="grid" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
+      <div v-else class="grid" :class="{ 'grid--persona': layoutMode === 'persona' }" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
+        <!-- Persona mode draws the office over the grid; the panes keep their
+             grid layout underneath (hidden), so nothing reflows. -->
+        <PersonaOffice
+          v-if="layoutMode === 'persona'"
+          :rooms="personaRooms"
+          :active-room-key="activeTab"
+          :focus-pane-id="focusPaneId"
+          :question-for="personaQuestionFor"
+          @select-room="(key) => { void onUserSelectTab(key) }"
+          @focus-pane="onPersonaFocusPane"
+          @back-to-grid="onPersonaBackToGrid"
+        />
         <!-- Column splitter handles (grid mode only) -->
         <div
           v-for="(pos, i) in colHandlePositions"
@@ -27309,6 +27475,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :remote-close-pane="() => onKill(p.id)"
           :ssh-remote="p.sshRemote"
           :ssh-exit-code="p.sshExitCode ?? null"
+          :ssh-resume-missed="!!p.sshResumeMissed"
+          :ssh-resume-missed-dismiss="() => { p.sshResumeMissed = false }"
           :ssh-reconnect="() => reconnectSshPane(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"
@@ -29015,6 +29183,10 @@ function paneIsCommander(p: ActivePane): boolean {
   flex: 1;
   min-height: 0;
   position: relative;
+}
+/* Persona mode: the office covers the stage; panes stay laid out, unseen. */
+.grid--persona > :not(.persona) {
+  visibility: hidden;
 }
 /* Grid pane splitter handles */
 .grid-handle {

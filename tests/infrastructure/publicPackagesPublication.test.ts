@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { PLUGIN_INIT_COMMAND, PLUGIN_PACKAGES_VERSION } from '../../src/shared/marketplaceDeveloper'
 
 // The three public npm packages ship together through
 // scripts/publish-public-packages.sh; these are the invariants the script
@@ -23,6 +24,30 @@ describe('public plugin packages', () => {
     for (const name of names) expect(manifests[name].version, name).toBe(version)
     expect(manifests['plugin-sdk'].peerDependencies?.['@navide/plugin-contracts']).toMatch(/^\^1\./)
     expect(manifests['plugin-ui'].peerDependencies?.['@navide/plugin-sdk']).toMatch(/^\^1\./)
+  })
+
+  it('are installed from one GitHub Release that the App, the guides and the skill all name', () => {
+    // The packages are not on npm: the App's entry card, the two guides and the
+    // bundled skill install the tarballs of the same plugin-packages release.
+    expect(PLUGIN_PACKAGES_VERSION).toBe(manifests['plugin-sdk'].version)
+    const release = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${PLUGIN_PACKAGES_VERSION}`
+    expect(PLUGIN_INIT_COMMAND).toBe(
+      `npx --yes --package ${release}/navide-plugin-contracts-${PLUGIN_PACKAGES_VERSION}.tgz ` +
+        `--package ${release}/navide-plugin-sdk-${PLUGIN_PACKAGES_VERSION}.tgz navide-plugin init acme-hello --id acme.hello`,
+    )
+    for (const path of [
+      'docs/en-US/build-for-navide.md',
+      'docs/en-US/marketplace-publishing.md',
+      'backend/agent_team_backend/bundled_skills/plugin-authoring/SKILL.md',
+    ]) {
+      const text = readFileSync(path, 'utf8')
+      expect(text, path).toContain(`R=${release}`)
+      expect(text, path).toContain(`$R/navide-plugin-sdk-${PLUGIN_PACKAGES_VERSION}.tgz`)
+      // Older npm releases are named only for the Python SDK wheel, which stays on its own release.
+      for (const match of text.matchAll(/navide-plugin-(?:contracts|sdk|ui)-(\d+\.\d+\.\d+)\.tgz/g)) {
+        expect(match[1], path).toBe(PLUGIN_PACKAGES_VERSION)
+      }
+    }
   })
 
   it('carry the publication metadata npm shows and ship only dist (and the CLI)', () => {

@@ -73,10 +73,10 @@ function frontendManifest(extra: object = {}) {
 type Route = (url: URL, authorization: string | undefined) => { status: number; body: unknown }
 
 async function fakeRegistry(route: Route) {
-  const requests: Array<{ url: URL; authorization?: string }> = []
+  const requests: Array<{ url: URL; authorization?: string; method?: string }> = []
   const server: Server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-    requests.push({ url, authorization: request.headers.authorization })
+    requests.push({ url, authorization: request.headers.authorization, method: request.method })
     const { status, body } = route(url, request.headers.authorization)
     response.writeHead(status, { 'Content-Type': 'application/json' })
     response.end(JSON.stringify(body))
@@ -200,6 +200,48 @@ describe('navide-plugin status', { timeout: 30_000 }, () => {
     const insecure = run(['status', '--registry', 'http://registry.example.test'], directory, environment(directory, TOKEN))
     expect(insecure.status).not.toBe(0)
     expect(insecure.stderr).toContain('refusing to send a publish token')
+  })
+})
+
+describe('navide-plugin yank', { timeout: 30_000 }, () => {
+  it('asks for --yes before touching the Registry, then yanks the version on every target', async () => {
+    const directory = root()
+    const registry = await fakeRegistry((url, authorization) =>
+      url.pathname === '/api/extensions/acme/todo-scout/1.0.2/yank' && authorization === `Bearer ${TOKEN}`
+        ? { status: 200, body: { namespace: 'acme', name: 'todo-scout', version: '1.0.2', yanked: true, targets: ['darwin-arm64', 'linux-x64'] } }
+        : notFound)
+    try {
+      const unconfirmed = await runAsync(['yank', 'acme.todo-scout@1.0.2', '--registry', registry.url], directory, environment(directory, TOKEN))
+      expect(unconfirmed.status).not.toBe(0)
+      expect(unconfirmed.stderr).toContain('cannot be undone. Run it again with --yes')
+      expect(registry.requests).toHaveLength(0)
+
+      const yanked = await runAsync(['yank', 'acme.todo-scout@1.0.2', '--yes', '--registry', registry.url], directory, environment(directory, TOKEN))
+      expect(yanked.status, yanked.stderr).toBe(0)
+      expect(yanked.stdout).toContain('Yanked acme.todo-scout@1.0.2 (darwin-arm64, linux-x64)')
+      expect(registry.requests.map((r) => [r.method, r.url.pathname + r.url.search])).toEqual([['POST', '/api/extensions/acme/todo-scout/1.0.2/yank']])
+
+      const testBuild = await runAsync(['yank', 'acme.todo-scout@1.0.2', '--yes', '--channel', 'testplace', '--registry', registry.url], directory, environment(directory, TOKEN))
+      expect(testBuild.status, testBuild.stderr).toBe(0)
+      expect(registry.requests[1].url.search).toBe('?channel=testplace')
+    } finally {
+      await registry.close()
+    }
+  })
+
+  it('shows the Registry error code and refuses a malformed target', async () => {
+    const directory = root()
+    const registry = await fakeRegistry(() => ({ status: 403, body: { detail: { code: 'NOT_OWNER', message: "publisher 'other' cannot yank in namespace 'acme'" } } }))
+    try {
+      const refused = await runAsync(['yank', 'acme.todo-scout@1.0.2', '--yes', '--registry', registry.url], directory, environment(directory, TOKEN))
+      expect(refused.status).not.toBe(0)
+      expect(refused.stderr).toContain('refused (403 NOT_OWNER)')
+    } finally {
+      await registry.close()
+    }
+    expect(run(['yank', 'acme.todo-scout', '--yes'], directory, environment(directory, TOKEN)).stderr).toContain('yank needs <namespace.name>@<version>')
+    expect(run(['yank', 'acme.todo-scout@1.0.2', '--yes', '--channel', 'stable'], directory, environment(directory, TOKEN)).stderr).toContain('--channel accepts only testplace')
+    expect(run(['yank', 'acme.todo-scout@1.0.2', '--yes', '--registry', 'http://127.0.0.1:9'], directory, environment(directory, undefined)).stderr).toContain('yank needs NAVIDE_PLUGIN_TOKEN')
   })
 })
 

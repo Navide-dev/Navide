@@ -33,8 +33,8 @@ Root [繁體中文 README](../../README.zh-TW.md) 負責介紹產品與目前發
 | [Build for Navide — English](../en-US/build-for-navide.md) | 外掛作者從這裡開始：一頁講完 `navide-plugin init`、自測、Developer Mode，以及 Marketplace 的申請、Testplace、審核、更新與下架 |
 | [Plugin Ideas — English](../en-US/plugin-ideas.md) | Navide 團隊想要的外掛清單，附每個需要的能力與目前的阻礙 |
 | [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 使用公開 Contracts、SDK、UI Package 與外部 Frontend Package Workflow |
-| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | 用 `navide-plugin` 建立、打包、簽章並發布插件到 Navide Marketplace，通過審核上架 |
-| [Plugin Development (legacy) — English](../en-US/plugin-development.md) | Manifest v1 說明，為既有外掛保留：開發前端 View 插件或後端插件，並打包簽章發布 |
+| [Publishing to the Navide Marketplace — English](../en-US/marketplace-publishing.md) | 用 `navide-plugin` 建立、打包、簽章並發布 Navide 外掛到 Navide 市集，通過審核上架 |
+| [Plugin Development (legacy) — English](../en-US/plugin-development.md) | Manifest v1 說明，為既有外掛保留：開發前端 View 外掛或後端外掛，並打包簽章發布 |
 
 ## 信任與安全
 

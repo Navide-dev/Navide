@@ -576,6 +576,10 @@ declare global {
         testplaceJoin?: (code: string) => Promise<{ id: string }>
         testplaceLeave?: (id: string) => Promise<{ ok: true }>
         testplaceInvite?: (id: string, labels: string[]) => Promise<import('../../shared/marketplaceDeveloper').DeveloperCallResult>
+        testplaceManage?: (
+          id: string,
+          request: import('../../shared/marketplaceDeveloper').TestplaceManageRequest,
+        ) => Promise<import('../../shared/marketplaceDeveloper').DeveloperCallResult>
         expiredTestplace?: () => Promise<ExpiredTestplaceBuild[]>
         clockQuarantine?: () => Promise<Array<{ id: string; version: string | null; clock: 'behind' | 'ahead' }>>
         keepExpiredTestplace?: (id: string) => Promise<{ ok: true }>

@@ -596,11 +596,12 @@ function usage() {
     '  navide-plugin logout [--registry <url>]',
     '  navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]',
     '  navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]',
+    '  navide-plugin yank <namespace.name>@<version> --yes [--channel testplace] [--registry <url>]',
     '  navide-plugin testplace invite|code|versions|revoke|promote ... (run `navide-plugin testplace` for details)',
     '  navide-plugin dev-backend <directory> [--call <method>] [--args <json>] [--subscribe <event,...>] [--data <directory>] [--workspace <directory>] [--allow-writes] [--provider-auth]',
     '',
     `The registry defaults to $NAVIDE_REGISTRY_URL, then https://server.navide.dev/registry (its login page is on https://developers.navide.dev).`,
-    'publish, whoami and status read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
+    'publish, whoami, status and yank read the token from NAVIDE_PLUGIN_TOKEN, then `navide-plugin login`. Registries must use https unless they are on loopback.',
     'publish --via-navide hands the package to the running Navide, where you sign in and submit it; the CLI reads no token.',
     '',
     `New to Navide plugins? The whole flow, from init to a listed extension: ${GUIDE_URL}`,
@@ -620,6 +621,7 @@ const COMMANDS = {
   whoami: [0, ['--registry'], []],
   status: [1, ['--registry'], ['--json'], true],
   logout: [0, ['--registry'], []],
+  yank: [1, ['--registry', '--channel'], ['--yes']],
   publish: [1, ['--registry', '--target', '--signature', '--token', '--channel'], ['--insecure-http', '--via-navide', '--no-browser']],
   'dev-backend': [1, ['--call', '--args', '--subscribe', '--data', '--workspace'], ['--allow-writes', '--provider-auth']],
 }
@@ -785,6 +787,27 @@ async function main(argv) {
     if (status !== 200 || !body || !Array.isArray(body.items)) fail(registryFailure(registry, '/api/publisher/me/versions', status, body))
     if (options.get('--json') === true) console.log(JSON.stringify(body, null, 2))
     else for (const line of statusLines(body)) console.log(line)
+    return
+  }
+  if (command === 'yank') {
+    const match = /^([a-z0-9][a-z0-9-]*)\.([a-z0-9][a-z0-9-]*)@([^@/\s]+)$/.exec(argument)
+    if (!match) fail(`yank needs <namespace.name>@<version>, got '${argument}'\n\n${usage()}`)
+    const [, namespace, name, version] = match
+    const channel = options.get('--channel')
+    if (channel !== undefined && channel !== 'testplace') fail(`--channel accepts only testplace, got '${channel}'`)
+    if (options.get('--yes') !== true) {
+      fail(
+        `Yanking ${namespace}.${name}@${version}${channel ? ' (Testplace build)' : ''} withdraws it on every target: Navide no longer installs it or updates to it. ` +
+          'Copies already installed are not removed, and a yank cannot be undone. Run it again with --yes to yank.',
+      )
+    }
+    const resolved = resolveToken(registry)
+    if (!resolved) fail(`yank needs ${TOKEN_ENV} or \`navide-plugin login --registry ${registry}\``)
+    assertSecureTransport(registry)
+    const path = `/api/extensions/${namespace}/${name}/${encodeURIComponent(version)}/yank${channel ? `?channel=${channel}` : ''}`
+    const { status, body } = await getJson(registry, path, resolved.token, 'POST')
+    if (status !== 200 || !body || body.yanked !== true) fail(registryFailure(registry, path, status, body))
+    console.log(`Yanked ${namespace}.${name}@${body.version} (${(body.targets ?? []).join(', ')}). Publish a new version to replace it.`)
     return
   }
   if (command === 'logout') {

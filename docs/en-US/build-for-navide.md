@@ -36,34 +36,46 @@ press the button or run the command yourself.
 
 ## 1. Five minutes to a running plugin
 
-You need Node.js 20 or later and Navide 0.2.39 or later.
+You need Node.js 20 or later. The plugins the templates write run on Navide
+0.2.39 or later; use the newest Navide for the Developer page and its publish
+form.
 
 The public packages (`@navide/plugin-contracts`, `@navide/plugin-sdk`,
-`@navide/plugin-ui`) are not on npm yet. Install them from the GitHub Release
-[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0),
-the same files Navide's own plugins build against:
+`@navide/plugin-ui`) are distributed only as GitHub Release files, not through
+npm or PyPI. Install them from the newest
+[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
+release, the same files Navide's own plugins build against (every
+`plugin-packages-*` release is listed on the
+[Releases page](https://github.com/Navide-dev/Navide/releases?q=plugin-packages)):
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
-npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz \
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
+npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz \
   navide-plugin init acme-hello --id acme.hello --template vue
 cd acme-hello
-npm install $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz
+npm install $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
 npm install
 npm run build        # writes dist/package, then npm run check validates it
 ```
 
 The first `npm install` writes the two tarball addresses into `package.json`
-(a template from an earlier SDK names `^1.0.0`, which npm cannot find); after
-that `npx navide-plugin` and the `package.json` scripts use the local copy.
-The release's SHA-256 sums, to compare with `shasum -a 256` on a downloaded
-file:
+(a template from SDK 1.0.1 or earlier names the 1.0.0 files; from the next
+release on, the template names the release it came from). After that
+`npx navide-plugin` and the `package.json` scripts use the local copy. The
+release's SHA-256 sums, to compare with `shasum -a 256` on a downloaded file:
 
 ```text
-720e2eb5837a7b91bfbc8502e38b436664a9272b166853d82e7f9c8e2e863ee1  navide-plugin-contracts-1.0.0.tgz
-be8b658fdd42e407c5f0729011e1087d5c4bf79497198d24ae6558dcaeef4b05  navide-plugin-sdk-1.0.0.tgz
-6201328f30c3d008e7c6d2e42d22a5c9d1634399cd8d138aaf654896969058c1  navide-plugin-ui-1.0.0.tgz
+385f8184be75fde978686e0768c1a04a56241551d077276359fd2531f4910147  navide-plugin-contracts-1.0.1.tgz
+81e702467a3d0f3b334c9206c9c2c5c5442f752977edaef3d45de12a99d31dd8  navide-plugin-sdk-1.0.1.tgz
+a6fea9aacec705a089622318898b318f33f58c4ec2c4e41a87121cb36970e861  navide-plugin-ui-1.0.1.tgz
 ```
+
+A Python backend needs no package: the `vue` template's backend uses only the
+standard library. If you want the Python SDK (`navide_plugin_sdk`: the path
+guard, the staged write path, plan versions), install its wheel from
+[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0),
+where it stays until its own version changes:
+`pip install https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0/navide_plugin_sdk-1.0.0-py3-none-any.whl`.
 
 Want the smallest possible start? Leave out `--template vue`: the default
 template is one HTML view and one script with no build step and no
@@ -184,10 +196,10 @@ talk to; it has no pages of its own.
 | Developer application | Sign in with a Navide Cloud account at `developers.navide.dev/developer/apply` (or from Navide's Settings → Developer) and apply once, real-name | A person reviews who is publishing and that you can be reached, never your permissions | A human review, target of 3 business days; the dashboard shows the state | A rejection carries a reason; apply again |
 | Namespace | Claim one at `developers.navide.dev/publisher/claim`; it must equal the first segment of your plugin id | First come, first served; reserved words and look-alikes refused; three per account | Immediate | Pick another name |
 | Signing key | `navide-plugin keygen`, paste the `.pub` on your namespace dashboard (`developers.navide.dev/publisher/<namespace>`); keep the private key out of Git | Verifies every upload against the registered key; Navide's own Settings sign-in never replaces a key you registered without asking | Immediate | `403 invalid package signature`: sign the exact file you upload with the registered key |
-| Test build (optional) | `navide-plugin publish <file> --channel testplace`, then `testplace invite add` or `testplace code create --max-testers <n>` | Automatic scan only; a public test code's first use gets a light human review; builds expire after 90 days | Minutes | A likely credential or a too-similar name refuses the build |
-| Promote or publish | `navide-plugin testplace promote <id> <version>`, or `navide-plugin publish <file>` per target | Human review: signature, name similarity, secret scan, permissions, size | Target of **3 business days**; no automatic approval | `navide-plugin status <id>` shows `pending`, `approved` or `rejected` with the reason; fix and publish a new version (a version number is never reused) |
+| Test build (optional) | `navide-plugin publish <file> --channel testplace`, then `testplace invite add` or `testplace code create --max-testers <n>` (or invite, create codes and send a build to review in Settings → Navide Marketplace → Developer → Testplace) | Automatic scan only; a public test code's first use gets a light human review; builds expire after 90 days | Minutes | A likely credential or a too-similar name refuses the build |
+| Promote or publish | `navide-plugin testplace promote <id> <version>` (or **Send to review** on the Developer page's Testplace section), or `navide-plugin publish <file>` per target | Human review: signature, name similarity, secret scan, permissions, size | Target of **3 business days**; no automatic approval | `navide-plugin status <id>` shows `pending`, `approved` or `rejected` with the reason; fix and publish a new version (a version number is never reused) |
 | Update | Publish the next version the same way | Users are offered the update; a version that adds a permission asks them again, and the card shows exactly what changed | Same review | Same as publish |
-| Withdraw | A [yank](marketplace-publishing.md#8-yank-a-version) (Navide's yank form, or the Registry API) takes a version down everywhere; a Testplace build can also be `revoke`d early | Users keep what they installed; Navide no longer installs it | Immediate; a yank cannot be undone | Publish a new version |
+| Withdraw | A [yank](marketplace-publishing.md#8-yank-a-version) (Navide's yank form, or `navide-plugin yank <id>@<version> --yes`) takes a version down everywhere; a Testplace build can also be `revoke`d early | Users keep what they installed; Navide no longer installs it | Immediate; a yank cannot be undone | Publish a new version |
 
 The MCP tools `marketplace_developer_application_*`, `marketplace_publish_*`,
 `marketplace_testplace_invite_*` and `marketplace_publish_yank_*` let an agent

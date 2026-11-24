@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "인터페이스의 모든 버튼 아이콘 — 이름, 위치, 누르면 하는 일."
+        },
+        "general-scheduler-runs": {
+          "title": "예약 하루 실행 횟수",
+          "summary": "예약 작업과 agent 작업이 하루에 몇 번 실행되는지"
         }
       },
       "no-results": "일치하는 설정이 없어요"
@@ -4686,7 +4690,7 @@
             "role": "맨 위에 <strong>역할 선택…</strong> 드롭다운이 있어 미리 정의된 역할을 골라요.",
             "cliList": "그 아래 목록은 제목이 붙은 두 블록으로 나뉘어요. <strong>{cli}</strong>에는 코딩용 CLI가 있고, 설치되지 않은 것은 따로 표시돼요. <strong>{agents}</strong>에는 상주 에이전트(OpenClaw, Hermes Agent)가 이름으로 나열되는데, 열려 있는 것을 고르면 그쪽으로 전환되고 닫힌 것을 고르면 이전 대화를 이어서 열어요. 이름을 먼저 입력받는 <em>새로 만들기 …</em> 항목도 있고, ACP 에이전트도 여기에 표시돼요. 목록 아래에는 Grok Bot, dots 같은 클라우드 에이전트는 Navide 플러그인으로 제공된다는 안내가 있어요.",
             "terminal": "맨 아래에 <strong>터미널</strong>(agent가 없는 일반 터미널)과 <strong>수동 생성…</strong>이 있어요.",
-            "sshRemote": "<strong>설정 → 일반 → 실험 기능 → 원격 컨테이너 pane</strong>을 켜면 <strong>터미널</strong> 아래에 <strong>SSH Remote…</strong>가 나타나요. 호스트, 사용자, 포트(기본 22), 개인 키 경로를 입력하고, 최근 연결은 이 컴퓨터에만 저장돼요. 키는 경로만 저장하고 읽거나 복사하지 않으며, SSH agent 전달은 꺼진 상태로 유지돼요. 연결을 누르면 호스트를 확인하고 그곳에서 셸이 실행되는 터미널 pane을 열어요. 연결이 끊기면 pane이 알아서 다시 연결해요."
+            "sshRemote": "<strong>설정 → 일반 → 실험 기능 → 원격 컨테이너 pane</strong>을 켜면 <strong>터미널</strong> 아래에 <strong>SSH Remote…</strong>가 나타나요. 호스트, 사용자, 포트(기본 22), 개인 키 경로를 입력하고, 최근 연결은 이 컴퓨터에만 저장돼요. 키는 경로만 저장하고 읽거나 복사하지 않으며, SSH agent 전달은 꺼진 상태로 유지돼요. 연결을 누르면 호스트를 확인하고 그곳에서 셸이 실행되는 터미널 pane을 열어요. 연결이 끊기면 pane이 알아서 다시 연결해요. 원격 폴더에서 Claude, Codex 등 다른 CLI를 열 수도 있으며, 그 호스트에서의 자체 로그인을 사용합니다(계정 전환과 할당량 자동 전환에는 참여하지 않음). SSH 패널은 다시 시작한 뒤 복원됩니다."
           },
           "p2": "<em>수동 생성…</em>은 전체 대화 상자를 열어요. agent와 역할을 고르고, 스테이지에 추가할지, 옆에 터미널을 함께 열지 정하고, session ID를 붙여 넣어 이전 대화를 바로 재개할 수 있어요.",
           "table": {
@@ -4750,6 +4754,9 @@
             },
             "fullscreen": {
               "behavior": "포커스된 pane이 스테이지를 가득 채우고, 나머지는 펼칠 수 있는 플로팅 창으로 접혀요."
+            },
+            "persona": {
+              "behavior": "각 창은 책상에 앉은 사람입니다: 타이핑 = 실행 중, 손 들기 = 답변 대기, 커피나 졸기 = 유휴, 모니터 연기 = 오류. 탭마다 방 하나이며, 창이 많으면 건물 전체 보기를 열 수 있습니다. 클릭하면 상태, 더블클릭하면 그 창에 포커스."
             }
           },
           "p2": "직접 고르지 않는 동작도 하나 있어요. <strong>이중 포커스</strong>: pane이 정확히 두 개 실행 중이면 자동으로 좌우로 나뉘며, 사이의 구분선을 드래그할 수 있어요.",
@@ -7200,7 +7207,8 @@
       "settings-management": "설정 관리",
       "experimental": "실험 기능",
       "theme": "테마",
-      "other": "기타"
+      "other": "기타",
+      "scheduler": "예약"
     },
     "p2p": {
       "title": "연결",
@@ -7943,6 +7951,17 @@
       "all-off-delivery": "이제 메시지는 받는 pane이 유휴 상태가 될 때까지 기다렸다가 입력되므로 도착하는 데 더 오래 걸려요.",
       "all-off-rewake": "유휴 agent를 깨우는 방법은 Claude Code의 rewake뿐이에요. 이를 끄면 agent가 스스로 유휴 상태로 돌아올 때까지 기다릴 수밖에 없어요.",
       "all-off-restart": "이미 실행 중인 pane은 다시 시작할 때까지 처음 시작한 채널을 유지해요."
+    },
+    "scheduler": {
+      "hint": "예약 작업이 하루에 몇 번 실행되는지 정합니다. 기본값은 Navide가 지금까지 사용해 온 값입니다.",
+      "per-job": "작업별 하루 실행 횟수",
+      "per-job-hint": "하루 횟수를 따로 정하지 않은 작업에 적용됩니다.",
+      "agent-job": "agent 작업 하나의 하루 실행 횟수",
+      "agent-job-hint": "agent가 만든 작업 하나가 하루에 실행되는 최대 횟수입니다.",
+      "agent-total": "agent 작업 전체의 하루 실행 횟수",
+      "agent-total-hint": "agent가 만든 모든 작업의 합계입니다. 대상 CLI의 할당량이 소진된 회차는 계속 건너뜁니다.",
+      "no-cap": "제한 없음",
+      "save-failed": "예약 설정을 저장하지 못했습니다"
     }
   },
   "label": {
@@ -8266,7 +8285,8 @@
     "filter-by-type": "유형별 필터",
     "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
     "region-switching": "{title}을(를) {version}(으)로 전환하는 중…",
-    "region-unavailable": "{title}을(를) 사용할 수 없어요"
+    "region-unavailable": "{title}을(를) 사용할 수 없어요",
+    "view-mode-persona": "페르소나 — 각 창이 사무실의 사람이 되어 동작으로 상태를 보여 줍니다"
   },
   "layout": {
     "expand": "패널 펼치기",
@@ -9597,7 +9617,9 @@
       "remove": "삭제",
       "remove-confirm": "이 예약 작업을 삭제할까요?",
       "cancel": "취소",
-      "save": "저장"
+      "save": "저장",
+      "max-runs-follow": "설정: {n}",
+      "max-runs-follow-none": "설정: 제한 없음"
     },
     "owner": {
       "user": "사용자가 만듦",
@@ -11844,6 +11866,29 @@
       "sent": "초대 {count}개를 만들었어요. 각 코드를 해당 테스터에게 전달하세요. 코드는 이번 한 번만 표시돼요.",
       "copy": "복사",
       "done": "완료"
+    },
+    "manage": {
+      "plugin": "Navide 플러그인(namespace.name)",
+      "load": "테스트 빌드와 코드 보기",
+      "builds": "테스트 빌드",
+      "noBuilds": "이 Navide 플러그인에는 테스트 빌드가 없어요.",
+      "promote": "검토 요청",
+      "promoteVersion": "{version} 검토 요청",
+      "promoteConfirm": "{plugin} {version}을(를) Navide 마켓플레이스 검토로 보낼까요? 같은 패키지를 검토하므로 승인 후에도 테스터는 다시 설치하지 않아도 돼요.",
+      "promoted": "{plugin} {version}을(를) Navide 마켓플레이스 검토로 보냈어요.",
+      "codes": "공개 테스트 코드",
+      "codesHint": "코드 하나로 설정한 인원까지 테스터가 참여할 수 있어요. 각 Navide 플러그인의 첫 코드는 간단한 검토 후 열려요.",
+      "testers": "테스터 {count} / {max}명",
+      "revoke": "취소",
+      "revokeConfirm": "테스트 코드 #{code}를 취소할까요? 새로 참여할 수 없지만 이미 참여한 테스터는 계속 이용할 수 있어요.",
+      "maxTesters": "새 코드의 테스터 수",
+      "create": "코드 만들기",
+      "created": "테스트 코드(지금만 표시):",
+      "state": {
+        "revoked": "취소됨",
+        "expires": "{date} 만료",
+        "promotion": "검토: {status}"
+      }
     }
   },
   "marketplace-developer": {
@@ -12666,7 +12711,22 @@
     "reconnecting": "다시 연결하는 중…",
     "retry-in": "{seconds}초 후 자동으로 다시 연결합니다",
     "reconnect": "다시 연결",
-    "close-pane": "pane 닫기"
+    "close-pane": "pane 닫기",
+    "dir-label": "원격 폴더",
+    "dir-placeholder": "~(홈) 또는 호스트의 경로",
+    "run-label": "열기",
+    "run-terminal": "터미널(로그인 셸)",
+    "tools-note": "{cli}은(는) 원격 호스트에서 Navide 도구(다른 패널에 메시지 보내기, 계획)를 사용할 수 있습니다. 이를 위해 Navide는 이 패널 전용 도구 토큰을 SSH 연결로 보냅니다. 에코를 끈 상태로 입력되며 명령줄에는 나타나지 않습니다. 토큰은 이 패널 전용이며 패널을 닫으면 더 이상 작동하지 않습니다. 계정 자격 증명이 아니며, 어떤 키나 로그인 정보도 이 컴퓨터를 떠나지 않습니다.",
+    "no-tools-note": "{cli}은(는) 원격 호스트에서 Navide 도구 없이 실행됩니다. 다른 패널의 메시지는 입력 텍스트로 도착하지만, Navide를 직접 호출할 수는 없습니다.",
+    "accounts-note": "원격 호스트에서 {cli}에 직접 로그인하세요. 이 패널은 계정 전환과 할당량 자동 전환에 참여하지 않습니다.",
+    "resume-note": "다시 연결하거나 Navide를 다시 시작하면 이 패널의 대화를 이어 갑니다. 같은 폴더의 다른 대화를 이어 가지 않습니다.",
+    "fresh-note": "다시 연결하거나 Navide를 다시 시작하면 {cli}은(는) 새 대화를 시작합니다.",
+    "accounts-chip": "원격에서 로그인",
+    "accounts-chip-title": "{host}에서 로그인했습니다. 이 패널은 계정 전환과 할당량 자동 전환에 참여하지 않습니다.",
+    "no-tools-chip": "Navide 도구 없음",
+    "no-tools-chip-title": "{cli}은(는) {host}에서 Navide 도구 없이 실행 중입니다.",
+    "resume-missed": "이전 대화를 이어 갈 수 없어 새 대화를 시작했습니다.",
+    "dismiss": "닫기"
   },
   "shippedLog": {
     "menu": {
@@ -12736,5 +12796,34 @@
     "digest-sent": "전송을 예약했습니다",
     "error-at": "시간은 HH:MM 형식이어야 합니다",
     "error-tz": "알 수 없는 시간대"
+  },
+  "persona": {
+    "people": "{n}명",
+    "running": "{n} 실행 중",
+    "awaiting-count": "{n}명 답변 대기",
+    "failing-count": "{n}명 오류 또는 할당량 소진",
+    "building": "건물 보기",
+    "building-back": "방으로 돌아가기",
+    "attention": "확인 필요",
+    "attention-hint": "{n}명 · 클릭하여 상태 보기",
+    "canvas-label": "페르소나 사무실, 창 {n}개",
+    "empty-room": "이 방에는 아직 창이 없습니다",
+    "legend-type": "타이핑 = 실행 중",
+    "legend-raise": "손 들기 = 답변 대기",
+    "legend-idle": "커피 / 졸기 = 유휴",
+    "legend-error": "연기 = 오류 또는 할당량 소진",
+    "close": "닫기",
+    "waited-under-minute": "1분 미만",
+    "waited-minutes": "{n}분",
+    "quota-empty": "할당량 소진",
+    "quota-low": "할당량 40% 이하",
+    "quota-critical": "할당량 15% 이하",
+    "focus-pane": "이 창에 포커스",
+    "back-to-grid": "그리드로 돌아가기",
+    "building-label": "건물 보기, 방 {rooms}개, 창 {n}개",
+    "building-title": "건물 전체",
+    "failing": "오류 / 할당량 소진",
+    "enter-room": "이 방으로 들어가기",
+    "floor": "{n}층"
   }
 }

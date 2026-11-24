@@ -1,4 +1,4 @@
-"""SSH Remote panes (experimental): a terminal pane whose shell runs on
+"""SSH Remote panes (experimental): a terminal or CLI pane that runs on
 another machine over ssh.
 
 ``remote_ssh.connect`` checks the target with one BatchMode ssh call
@@ -16,12 +16,27 @@ panes use, so no SendEnv line can carry a local credential.
 The target uses the same host and option rules as remote_devcontainer, so a
 later remote container pane can reuse :func:`ssh_options` and
 :func:`destination` to reach its host.
+
+A CLI pane (``spec["cli"]`` other than ``"terminal"``) starts that CLI in the
+spec's remote folder, signed in however the user signed in on the host —
+nothing about local accounts goes there. Claude and Codex also get Navide's
+tools the way remote container panes do (:func:`cli_pane_argv`): an ``ssh -R``
+tunnel and the pane's own MCP token, written to the PTY once echo is off and
+never put on a command line. The token is minted for that pane and stops
+working when it closes; it is no account credential.
+
+Each CLI pane remembers its remote session id so a reconnect or a restore
+resumes exactly that conversation, never "the latest one in this folder",
+which could belong to someone else. Claude is launched with an id chosen
+here; Codex's id is read on the host from the session file its own process
+holds open and reported back through :data:`SESSION_REPORT`.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+import shlex
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +55,54 @@ METADATA_KEY = "ssh_remote"
 
 # Plain-language failure reasons the dialog and the pane banner explain.
 REASONS = ("unreachable", "auth", "host-key", "other")
+
+# The folder a pane starts in on the host: the remote user's home by default.
+DEFAULT_DIR = "~"
+
+# What an SSH pane runs on the host: a login shell, or one of these CLIs as its
+# default command (kept in step with the agent specs' defaultCommand by
+# test_remote_ssh). The two in MCP_CLIS also get Navide's tools.
+TERMINAL = "terminal"
+CLI_COMMANDS: dict[str, tuple[str, ...]] = {
+    "claude": ("claude",),
+    "codex": ("codex",),
+    "aider": ("aider",),
+    "antigravity": ("agy",),
+    "copilot": ("copilot",),
+    "cursor": ("agent",),
+    "devin": ("devin",),
+    "droid": ("droid",),
+    "goose": ("goose",),
+    "grok": ("grok",),
+    "hermes": ("hermes", "chat"),
+    "kilo": ("kilo",),
+    "kimi": ("kimi",),
+    "kiro": ("kiro-cli", "chat", "--v3"),
+    "mcode": ("mcode",),
+    "muse": ("muse",),
+    "openclaw": ("openclaw", "tui", "--local"),
+    "opencode": ("opencode",),
+    "pi": ("pi",),
+    "qwen": ("qwen",),
+}
+MCP_CLIS = ("claude", "codex")
+
+# OSC sequences the remote side prints for the pane's output tap: the session
+# id it found (``<prefix><nonce>;<id>BEL``), and that a requested resume found
+# nothing to resume (``<prefix><nonce>BEL``). Unknown to a terminal, so nothing
+# is drawn. The nonce is new for every launch, so text the CLI prints (a file
+# it shows, a page it fetched) cannot pass for either.
+SESSION_REPORT = b"\x1b]7737;navide-session;"
+RESUME_MISSED = b"\x1b]7737;navide-resume-miss;"
+_NONCE_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def new_nonce() -> str:
+    import secrets
+
+    return secrets.token_hex(16)
+
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,63}$")
 
 # A user name ssh accepts without quoting; a leading "-" would be an option.
 _USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
@@ -101,20 +164,216 @@ def ssh_options(target: Mapping[str, Any]) -> list[str]:
 
 
 def shell_argv(target: Mapping[str, Any], control_path_dir: Path | None = None) -> list[str]:
-    """The argv an SSH Remote pane would run: a login shell on the host."""
-    return [
+    """The argv an SSH Remote terminal pane runs: a login shell on the host,
+    in the spec's remote folder when it names one other than home."""
+    argv = [
         "ssh", "-tt",
         *rd.ssh_base_options(control_path_dir),
         *ssh_options(target),
         "--", destination(target),
     ]
+    remote_dir = str(target.get("dir") or DEFAULT_DIR)
+    if remote_dir != DEFAULT_DIR:
+        argv.append(f"cd {_cd_target(remote_dir)} && exec $SHELL -l")
+    return argv
 
 
 def parse_spec(payload: Any) -> dict[str, Any]:
-    """The validated ``remote`` spec of an SSH pane: ``kind`` plus the target."""
+    """The validated ``remote`` spec of an SSH pane: ``kind``, the target, the
+    remote folder, what runs there, the CLI's session id ("" while unknown)
+    and ``resume`` — whether this launch continues an earlier one (a
+    reconnect, rebuild or restore). ``resume`` is never persisted."""
     if not isinstance(payload, Mapping) or payload.get("kind") != "ssh":
         raise SshTargetError("not an ssh remote spec")
-    return {"kind": "ssh", **parse_target(payload)}
+    remote_dir = str(payload.get("dir") or DEFAULT_DIR).strip()
+    if remote_dir.startswith("-") or len(remote_dir) > 1024 or any(ch in remote_dir for ch in "\0\r\n"):
+        raise SshTargetError("invalid remote folder")
+    cli = str(payload.get("cli") or TERMINAL)
+    if cli != TERMINAL and cli not in CLI_COMMANDS:
+        raise SshTargetError(f"invalid cli: {cli!r}")
+    session_id = str(payload.get("sessionId") or "")
+    if session_id and not _SESSION_ID_RE.match(session_id):
+        raise SshTargetError("invalid session id")
+    return {
+        "kind": "ssh", **parse_target(payload),
+        "dir": remote_dir, "cli": cli, "sessionId": session_id,
+        "resume": payload.get("resume") is True,
+    }
+
+
+def record_spec(spec: Mapping[str, Any]) -> dict[str, Any]:
+    """What a pane record keeps of a spec: everything but ``resume``."""
+    return {key: value for key, value in spec.items() if key != "resume"}
+
+
+def _cd_target(remote_dir: str) -> str:
+    """``remote_dir`` as a cd argument: quoted, with a leading ``~`` left for
+    the remote shell to expand."""
+    if remote_dir == "~":
+        return "~"
+    if remote_dir.startswith("~/"):
+        return "~/" + shlex.quote(remote_dir[2:])
+    return shlex.quote(remote_dir)
+
+
+def _osc(text: str) -> str:
+    """An OSC sequence spelled for printf."""
+    return f"\\033]7737;{text}\\007"
+
+
+def _session_script(cli: str, argv: list[str], session_id: str, resume: bool, nonce: str) -> str:
+    """The lines that start ``argv`` resuming ``session_id`` when asked to and
+    the CLI still has it, else fresh; a resume that cannot happen prints
+    :data:`RESUME_MISSED`."""
+    if not _NONCE_RE.match(nonce):
+        raise SshTargetError("invalid nonce")
+    missed = f"printf '{_osc('navide-resume-miss;' + nonce)}'; " if resume else ""
+    cmd = shlex.join(argv)
+    if cli == "claude":
+        sid = shlex.quote(session_id)
+        # The transcript exists only once a turn was taken; without it there
+        # is nothing to resume, and the fresh launch keeps the same id.
+        return (
+            'd="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; '
+            f'if [ -n "$(find "$d/projects" -maxdepth 2 -name {sid}.jsonl 2>/dev/null | head -n 1)" ]; '
+            f"then exec {cmd} --resume {sid}; fi; "
+            f"{missed}exec {cmd} --session-id {sid}"
+        )
+    if cli == "codex":
+        lines = []
+        if resume and session_id:
+            sid = shlex.quote(session_id)
+            lines.append(
+                'd="${CODEX_HOME:-$HOME/.codex}"; '
+                f'if [ -n "$(find "$d/sessions" -name "*"{sid}.jsonl 2>/dev/null | head -n 1)" ]; '
+                f"then exec {cmd} resume {sid}; fi; "
+            )
+        # Codex cannot be handed an id, so a watcher reads the one it chose
+        # from the rollout file its own process (or the native binary the npm
+        # launcher starts) holds open — that pane's, and no other's. It ends
+        # with the CLI; a host with neither /proc nor lsof reports nothing.
+        report = _osc(f"navide-session;{nonce};%s")
+        watcher = (
+            "p=$$; ( while kill -0 $p 2>/dev/null; do "
+            "f=$( { for q in $p $(pgrep -P $p 2>/dev/null); do "
+            "ls -l /proc/$q/fd 2>/dev/null; lsof -p $q -Fn 2>/dev/null; done; } "
+            "| grep -o 'rollout-[^/ ]*[.]jsonl' | head -n 1); "
+            'if [ -n "$f" ]; then '
+            "id=$(printf %s \"$f\" | sed -E 's/.*([0-9A-Fa-f-]{36})[.]jsonl$/\\1/'); "
+            f"printf '{report}' \"$id\" > /dev/tty; exit 0; fi; "
+            "sleep 2; done ) </dev/null >/dev/null 2>&1 & "
+        )
+        lines.append(f"{missed}{watcher}exec {cmd}")
+        return "".join(lines)
+    return f"{missed}exec {cmd}"
+
+
+def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None, nonce: str) -> str:
+    """The /bin/sh script an SSH CLI pane runs on the host."""
+    from . import remote_devcontainer as rd_mod
+    from .mcp_server import wiring
+
+    cli = spec["cli"]
+    parts: list[str] = []
+    if cli in MCP_CLIS:
+        if remote_port is None:
+            raise SshTargetError("a CLI with Navide tools needs a tunnel port")
+        env = wiring.TOKEN_ENV
+        request = rd_mod.TOKEN_REQUEST.decode("ascii").replace("\x1b", "\\033").replace("\x07", "\\007")
+        parts.append(f"stty -echo; printf '{request}'; IFS= read -r {env}; stty echo; export {env}; ")
+        argv = rd_mod.cli_argv(cli, rd_mod.mcp_url({"mode": "host"}, remote_port, pane_id))
+    else:
+        argv = list(CLI_COMMANDS[cli])
+    folder = shlex.quote(spec["dir"])
+    parts.append(
+        f"cd {_cd_target(spec['dir'])} || "
+        f"{{ printf 'Navide: cannot open the remote folder %s\\r\\n' {folder}; exit 1; }}; "
+    )
+    parts.append(_session_script(cli, argv, str(spec.get("sessionId") or ""), bool(spec.get("resume")), nonce))
+    return "".join(parts)
+
+
+def cli_pane_argv(
+    spec: Mapping[str, Any],
+    *,
+    pane_id: str,
+    local_port: int | None,
+    remote_port: int,
+    nonce: str,
+) -> list[str]:
+    """The argv of an SSH CLI pane. The script runs under the user's own
+    login shell (interactive, as a local pane's command does) so the CLI is
+    found on the PATH the user set up there, then in /bin/sh, whose syntax the
+    script is written in whatever that shell is."""
+    tunnel: list[str] = []
+    port: int | None = None
+    if spec["cli"] in MCP_CLIS:
+        if local_port is None:
+            raise SshTargetError("backend port unknown")
+        port = remote_port
+        tunnel = [
+            # A taken remote port fails the connection rather than leaving
+            # the pane without its tools.
+            "-o", "ExitOnForwardFailure=yes",
+            "-R", f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",
+        ]
+    script = cli_script(spec, pane_id=pane_id, remote_port=port, nonce=nonce)
+    inner = "exec /bin/sh -c " + shlex.quote(script)
+    return [
+        "ssh", "-tt",
+        # Its own connection, never a shared master: a master keeps the -R
+        # forward bound for ControlPersist seconds after the pane closes.
+        *rd.ssh_base_options(None),
+        "-o", "ControlPath=none",
+        *tunnel,
+        *ssh_options(spec),
+        "--", destination(spec),
+        f"exec $SHELL -ilc {shlex.quote(inner)}",
+    ]
+
+
+class SessionWatcher:
+    """Reads this launch's :data:`SESSION_REPORT` and :data:`RESUME_MISSED`
+    out of an SSH CLI pane's output, each at most once and only with the
+    launch's nonce. ``on_session`` is None for a CLI whose id was chosen
+    here (claude): nothing on the host may replace it. Fed every chunk; holds
+    a short tail so a sequence split across two reads is still seen."""
+
+    def __init__(
+        self,
+        nonce: str,
+        on_session: Callable[[str], Any] | None,
+        on_missed: Callable[[], Any],
+    ) -> None:
+        self._session_prefix = SESSION_REPORT + nonce.encode("ascii") + b";"
+        self._missed_seq = RESUME_MISSED + nonce.encode("ascii") + b"\x07"
+        self._tail_len = len(self._session_prefix) + 80
+        self._on_session = on_session
+        self._on_missed = on_missed
+        self._tail = b""
+        self.session_id = ""
+        self.missed = False
+
+    def _done(self) -> bool:
+        return self.missed and (self._on_session is None or bool(self.session_id))
+
+    def feed(self, chunk: bytes) -> None:
+        if self._done():
+            return
+        data = self._tail + chunk
+        if not self.missed and self._missed_seq in data:
+            self.missed = True
+            self._on_missed()
+        start = data.find(self._session_prefix) if self._on_session is not None and not self.session_id else -1
+        if start >= 0:
+            end = data.find(b"\x07", start)
+            if end >= 0:
+                value = data[start + len(self._session_prefix):end].decode("ascii", "replace")
+                if _SESSION_ID_RE.match(value):
+                    self.session_id = value
+                    self._on_session(value)
+                data = data[end + 1:]
+        self._tail = data[-self._tail_len:]
 
 
 def _trust_row(target: Mapping[str, Any]) -> dict[str, Any]:
