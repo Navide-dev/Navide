@@ -11844,6 +11844,29 @@
       "sent": "{count} invitations créées. Remettez chaque code à son testeur ; les codes ne sont affichés que cette fois-ci.",
       "copy": "Copier",
       "done": "Terminé"
+    },
+    "manage": {
+      "plugin": "Plugin Navide (namespace.name)",
+      "load": "Afficher les versions et codes de test",
+      "builds": "Versions de test",
+      "noBuilds": "Ce plugin Navide n’a aucune version de test.",
+      "promote": "Envoyer à l’examen",
+      "promoteVersion": "Envoyer {version} à l’examen",
+      "promoteConfirm": "Envoyer {plugin} {version} à l’examen de la Navide Marketplace ? Le même paquet est examiné ; les testeurs n’ont pas à le réinstaller une fois approuvé.",
+      "promoted": "{plugin} {version} a été envoyé à l’examen de la Navide Marketplace.",
+      "codes": "Codes de test publics",
+      "codesHint": "Un code permet à autant de testeurs que vous le fixez de rejoindre le test. Le premier code de chaque plugin Navide s’ouvre après un examen rapide.",
+      "testers": "{count} testeurs sur {max}",
+      "revoke": "Révoquer",
+      "revokeConfirm": "Révoquer le code de test #{code} ? Plus personne ne pourra l’utiliser ; les testeurs déjà inscrits gardent leur accès.",
+      "maxTesters": "Testeurs pour un nouveau code",
+      "create": "Créer un code",
+      "created": "Code de test, affiché une seule fois :",
+      "state": {
+        "revoked": "Révoqué",
+        "expires": "Expire le {date}",
+        "promotion": "Examen : {status}"
+      }
     }
   },
   "marketplace-developer": {

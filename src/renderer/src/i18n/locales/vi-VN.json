@@ -11844,6 +11844,29 @@
       "sent": "Đã tạo {count} lời mời. Hãy đưa mỗi mã cho đúng người thử nghiệm; các mã chỉ hiện duy nhất lần này.",
       "copy": "Sao chép",
       "done": "Xong"
+    },
+    "manage": {
+      "plugin": "Plugin Navide (namespace.name)",
+      "load": "Hiện bản thử nghiệm và mã thử nghiệm",
+      "builds": "Bản thử nghiệm",
+      "noBuilds": "Plugin Navide này chưa có bản thử nghiệm.",
+      "promote": "Gửi xét duyệt",
+      "promoteVersion": "Gửi {version} để xét duyệt",
+      "promoteConfirm": "Gửi {plugin} {version} để Navide Marketplace xét duyệt? Gói được xét duyệt là cùng một gói; người thử nghiệm không cần cài lại sau khi được duyệt.",
+      "promoted": "Đã gửi {plugin} {version} để Navide Marketplace xét duyệt.",
+      "codes": "Mã thử nghiệm công khai",
+      "codesHint": "Một mã cho phép tối đa số người thử nghiệm bạn đặt tham gia. Mã đầu tiên của mỗi plugin Navide mở sau một lần xét duyệt nhẹ.",
+      "testers": "{count} / {max} người thử nghiệm",
+      "revoke": "Thu hồi",
+      "revokeConfirm": "Thu hồi mã thử nghiệm #{code}? Không ai có thể tham gia mới bằng mã này; người đã tham gia vẫn giữ quyền truy cập.",
+      "maxTesters": "Số người thử nghiệm cho mã mới",
+      "create": "Tạo mã",
+      "created": "Mã thử nghiệm, chỉ hiện lần này:",
+      "state": {
+        "revoked": "Đã thu hồi",
+        "expires": "Hết hạn {date}",
+        "promotion": "Xét duyệt: {status}"
+      }
     }
   },
   "marketplace-developer": {

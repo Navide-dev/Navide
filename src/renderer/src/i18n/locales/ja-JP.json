@@ -11844,6 +11844,29 @@
       "sent": "{count} 件の招待を作成しました。各コードを該当するテスターに渡してください。コードは今回だけ表示されます。",
       "copy": "コピー",
       "done": "完了"
+    },
+    "manage": {
+      "plugin": "Navide プラグイン（namespace.name）",
+      "load": "テスト版とテストコードを表示",
+      "builds": "テスト版",
+      "noBuilds": "この Navide プラグインにはテスト版がありません。",
+      "promote": "審査に送る",
+      "promoteVersion": "{version} を審査に送る",
+      "promoteConfirm": "{plugin} {version} を Navide マーケットプレイスの審査に送りますか？同じパッケージが審査され、承認後もテスターは再インストール不要です。",
+      "promoted": "{plugin} {version} を Navide マーケットプレイスの審査に送りました。",
+      "codes": "公開テストコード",
+      "codesHint": "コードでは、設定した人数までのテスターが参加できます。各 Navide プラグインの最初のコードは簡単な審査の後に有効になります。",
+      "testers": "テスター {count} / {max} 人",
+      "revoke": "取り消す",
+      "revokeConfirm": "テストコード #{code} を取り消しますか？新しく参加できなくなりますが、参加済みのテスターはアクセスを保ちます。",
+      "maxTesters": "新しいコードのテスター数",
+      "create": "コードを作成",
+      "created": "テストコード（今回だけ表示）：",
+      "state": {
+        "revoked": "取り消し済み",
+        "expires": "{date} に期限切れ",
+        "promotion": "審査：{status}"
+      }
     }
   },
   "marketplace-developer": {

@@ -11844,6 +11844,29 @@
       "sent": "已创建 {count} 个邀请。把每个邀请码交给对应的测试者；邀请码只会显示这一次。",
       "copy": "复制",
       "done": "完成"
+    },
+    "manage": {
+      "plugin": "Navide 插件（namespace.name）",
+      "load": "显示测试版与测试代码",
+      "builds": "测试版",
+      "noBuilds": "这个 Navide 插件没有测试版。",
+      "promote": "送审",
+      "promoteVersion": "把 {version} 送审",
+      "promoteConfirm": "要把 {plugin} {version} 送进 Navide 市场审核吗？审核的是同一个包，通过后测试者无需重新安装。",
+      "promoted": "已把 {plugin} {version} 送进 Navide 市场审核。",
+      "codes": "公开测试代码",
+      "codesHint": "一组代码可让你设定人数内的测试者加入。每个 Navide 插件的第一组代码要先经过简单审核才会开放。",
+      "testers": "{count} / {max} 位测试者",
+      "revoke": "撤销",
+      "revokeConfirm": "要撤销测试代码 #{code} 吗？之后没有人能再用它加入；已加入的测试者保留访问权限。",
+      "maxTesters": "新代码的测试者人数",
+      "create": "创建代码",
+      "created": "测试代码（只显示这一次）：",
+      "state": {
+        "revoked": "已撤销",
+        "expires": "{date} 到期",
+        "promotion": "审核：{status}"
+      }
     }
   },
   "marketplace-developer": {

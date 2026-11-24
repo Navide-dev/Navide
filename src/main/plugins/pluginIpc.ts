@@ -2523,6 +2523,60 @@ export function registerPluginIpc(
     }
   )
 
+  /** The developer page's Testplace manager (the user's own presses, never an
+   *  agent's): list a package's test builds and public test codes, send a
+   *  build to Marketplace review, create or revoke a code. A created code is
+   *  returned to that page only; nothing here logs it. */
+  ipcMain.handle(
+    'plugins:testplaceManage',
+    async (
+      event,
+      args: { id?: unknown; action?: unknown; version?: unknown; codeId?: unknown; maxTesters?: unknown } | null,
+    ): Promise<DeveloperCallResult> => {
+      assertAuthorized(event)
+      if (!isValidManifestV2PluginId(args?.id)) throw new Error('invalid plugin id')
+      const dot = args.id.indexOf('.')
+      const base = `/api/testplace/${encodeURIComponent(args.id.slice(0, dot))}/${encodeURIComponent(args.id.slice(dot + 1))}`
+      const text = (value: unknown, what: string): string => {
+        if (typeof value !== 'string' || !value.trim() || value.length > 128) throw new Error(`invalid ${what}`)
+        return encodeURIComponent(value.trim())
+      }
+      let path: string
+      let init: { method?: string; json?: unknown } = {}
+      switch (args.action) {
+        case 'versions':
+          path = `${base}/versions`
+          break
+        case 'codes':
+          path = `${base}/codes`
+          break
+        case 'promote':
+          path = `${base}/versions/${text(args.version, 'version')}/promote`
+          init = { method: 'POST' }
+          break
+        case 'code-create': {
+          const maxTesters = args.maxTesters
+          if (typeof maxTesters !== 'number' || !Number.isInteger(maxTesters) || maxTesters < 1) {
+            throw new Error('maxTesters must be a positive whole number')
+          }
+          path = `${base}/codes`
+          init = { method: 'POST', json: { max_testers: maxTesters } }
+          break
+        }
+        case 'code-revoke':
+          path = `${base}/codes/${text(typeof args.codeId === 'number' ? String(args.codeId) : args.codeId, 'code id')}/revoke`
+          init = { method: 'POST' }
+          break
+        default:
+          throw new Error('invalid testplace action')
+      }
+      const res = await developerRegistryFetch(path, init, 'account')
+      if (res.status === 201 || res.status === 200) return { ok: true, status: res.status, body: res.body }
+      const { code, message, doc } = registryError(res.body)
+      return { ok: false, status: res.status, code, message, doc }
+    }
+  )
+
   const verifyRegistryPackage = async (args: {
     namespace: string
     name: string

@@ -11844,6 +11844,29 @@
       "sent": "已建立 {count} 個邀請。把每個邀請碼交給對應的測試者；邀請碼只會顯示這一次。",
       "copy": "複製",
       "done": "完成"
+    },
+    "manage": {
+      "plugin": "Navide 外掛（namespace.name）",
+      "load": "顯示測試版與測試代碼",
+      "builds": "測試版",
+      "noBuilds": "這個 Navide 外掛沒有測試版。",
+      "promote": "送審",
+      "promoteVersion": "把 {version} 送審",
+      "promoteConfirm": "要把 {plugin} {version} 送進 Navide 市集審核嗎？審核的是同一個套件，通過後測試者不必重新安裝。",
+      "promoted": "已把 {plugin} {version} 送進 Navide 市集審核。",
+      "codes": "公開測試代碼",
+      "codesHint": "一組代碼可讓你設定人數內的測試者加入。每個 Navide 外掛的第一組代碼要先經過簡易審核才會開放。",
+      "testers": "{count} / {max} 位測試者",
+      "revoke": "撤銷",
+      "revokeConfirm": "要撤銷測試代碼 #{code} 嗎？之後沒有人能再用它加入；已加入的測試者保有存取權。",
+      "maxTesters": "新代碼的測試者人數",
+      "create": "建立代碼",
+      "created": "測試代碼（只會顯示這一次）：",
+      "state": {
+        "revoked": "已撤銷",
+        "expires": "{date} 到期",
+        "promotion": "審核：{status}"
+      }
     }
   },
   "marketplace-developer": {

@@ -11844,6 +11844,29 @@
       "sent": "{count} invitations created. Give each code to its tester; the codes are shown only this once.",
       "copy": "Copy",
       "done": "Done"
+    },
+    "manage": {
+      "plugin": "Navide plugin (namespace.name)",
+      "load": "Show test builds and codes",
+      "builds": "Test builds",
+      "noBuilds": "No test builds for this Navide plugin.",
+      "promote": "Send to review",
+      "promoteVersion": "Send {version} to review",
+      "promoteConfirm": "Send {plugin} {version} to Navide Marketplace review? The same package is reviewed; testers do not reinstall it once it is approved.",
+      "promoted": "Sent {plugin} {version} to Navide Marketplace review.",
+      "codes": "Public test codes",
+      "codesHint": "A code lets up to the number of testers you set join with it. The first code of each Navide plugin opens after a light review.",
+      "testers": "{count} of {max} testers",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke test code #{code}? No one new can join with it; testers who already joined keep their access.",
+      "maxTesters": "Testers for a new code",
+      "create": "Create code",
+      "created": "Test code, shown only now:",
+      "state": {
+        "revoked": "Revoked",
+        "expires": "Expires {date}",
+        "promotion": "Review: {status}"
+      }
     }
   },
   "marketplace-developer": {

@@ -11844,6 +11844,29 @@
       "sent": "초대 {count}개를 만들었어요. 각 코드를 해당 테스터에게 전달하세요. 코드는 이번 한 번만 표시돼요.",
       "copy": "복사",
       "done": "완료"
+    },
+    "manage": {
+      "plugin": "Navide 플러그인(namespace.name)",
+      "load": "테스트 빌드와 코드 보기",
+      "builds": "테스트 빌드",
+      "noBuilds": "이 Navide 플러그인에는 테스트 빌드가 없어요.",
+      "promote": "검토 요청",
+      "promoteVersion": "{version} 검토 요청",
+      "promoteConfirm": "{plugin} {version}을(를) Navide 마켓플레이스 검토로 보낼까요? 같은 패키지를 검토하므로 승인 후에도 테스터는 다시 설치하지 않아도 돼요.",
+      "promoted": "{plugin} {version}을(를) Navide 마켓플레이스 검토로 보냈어요.",
+      "codes": "공개 테스트 코드",
+      "codesHint": "코드 하나로 설정한 인원까지 테스터가 참여할 수 있어요. 각 Navide 플러그인의 첫 코드는 간단한 검토 후 열려요.",
+      "testers": "테스터 {count} / {max}명",
+      "revoke": "취소",
+      "revokeConfirm": "테스트 코드 #{code}를 취소할까요? 새로 참여할 수 없지만 이미 참여한 테스터는 계속 이용할 수 있어요.",
+      "maxTesters": "새 코드의 테스터 수",
+      "create": "코드 만들기",
+      "created": "테스트 코드(지금만 표시):",
+      "state": {
+        "revoked": "취소됨",
+        "expires": "{date} 만료",
+        "promotion": "검토: {status}"
+      }
     }
   },
   "marketplace-developer": {

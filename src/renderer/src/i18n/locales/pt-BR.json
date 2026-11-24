@@ -11844,6 +11844,29 @@
       "sent": "{count} convites criados. Entregue cada código ao respectivo testador; os códigos são mostrados apenas desta vez.",
       "copy": "Copiar",
       "done": "Concluído"
+    },
+    "manage": {
+      "plugin": "Plug-in do Navide (namespace.nome)",
+      "load": "Mostrar builds e códigos de teste",
+      "builds": "Builds de teste",
+      "noBuilds": "Este plug-in do Navide não tem builds de teste.",
+      "promote": "Enviar para revisão",
+      "promoteVersion": "Enviar {version} para revisão",
+      "promoteConfirm": "Enviar {plugin} {version} para a revisão do Navide Marketplace? O mesmo pacote é revisado; os testadores não precisam reinstalar depois da aprovação.",
+      "promoted": "{plugin} {version} foi enviado para a revisão do Navide Marketplace.",
+      "codes": "Códigos de teste públicos",
+      "codesHint": "Um código permite a entrada de até o número de testadores que você definir. O primeiro código de cada plug-in do Navide abre depois de uma revisão rápida.",
+      "testers": "{count} de {max} testadores",
+      "revoke": "Revogar",
+      "revokeConfirm": "Revogar o código de teste #{code}? Ninguém mais poderá entrar com ele; quem já entrou mantém o acesso.",
+      "maxTesters": "Testadores para um novo código",
+      "create": "Criar código",
+      "created": "Código de teste, mostrado só agora:",
+      "state": {
+        "revoked": "Revogado",
+        "expires": "Expira em {date}",
+        "promotion": "Revisão: {status}"
+      }
     }
   },
   "marketplace-developer": {

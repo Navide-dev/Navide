@@ -11844,6 +11844,29 @@
       "sent": "{count} Einladungen erstellt. Geben Sie jeden Code an die jeweilige Testperson weiter; die Codes werden nur dieses eine Mal angezeigt.",
       "copy": "Kopieren",
       "done": "Fertig"
+    },
+    "manage": {
+      "plugin": "Navide-Plug-in (namespace.name)",
+      "load": "Test-Builds und Codes anzeigen",
+      "builds": "Test-Builds",
+      "noBuilds": "Für dieses Navide-Plug-in gibt es keine Test-Builds.",
+      "promote": "Zur Prüfung senden",
+      "promoteVersion": "{version} zur Prüfung senden",
+      "promoteConfirm": "{plugin} {version} zur Prüfung an den Navide Marketplace senden? Geprüft wird dasselbe Paket; Tester müssen es nach der Freigabe nicht neu installieren.",
+      "promoted": "{plugin} {version} wurde zur Prüfung an den Navide Marketplace gesendet.",
+      "codes": "Öffentliche Testcodes",
+      "codesHint": "Mit einem Code können so viele Tester beitreten, wie du festlegst. Der erste Code jedes Navide-Plug-ins wird nach einer kurzen Prüfung freigeschaltet.",
+      "testers": "{count} von {max} Testern",
+      "revoke": "Widerrufen",
+      "revokeConfirm": "Testcode #{code} widerrufen? Niemand kann mehr damit beitreten; bereits beigetretene Tester behalten den Zugang.",
+      "maxTesters": "Tester für einen neuen Code",
+      "create": "Code erstellen",
+      "created": "Testcode, nur jetzt sichtbar:",
+      "state": {
+        "revoked": "Widerrufen",
+        "expires": "Läuft ab am {date}",
+        "promotion": "Prüfung: {status}"
+      }
     }
   },
   "marketplace-developer": {
