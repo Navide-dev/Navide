@@ -140,7 +140,7 @@ class PaneRecord:
     report_to: str = ""             # messaging handle of the parent this spawned pane owes a report to
     report_pending: bool = False    # that report is still outstanding — persisted so a pane resumed after a restart still reports when its turn ends
     report_cross: bool = False      # report_to is a parent in ANOTHER project (cli_open_agent with workspace_path); set only by that spawn, never inferred from the name
-    remote: dict[str, Any] = field(default_factory=dict)  # remote container target {host, container, network} (remote_devcontainer.parse_remote); {} = a local pane, which is every record written before this field existed
+    remote: dict[str, Any] = field(default_factory=dict)  # remote container target {host, container, network} (remote_devcontainer.parse_remote), or an SSH Remote spec {kind: "ssh", ...} (remote_ssh.record_spec); {} = a local pane, which is every record written before this field existed
     last_live_launch: str = ""      # launch id (launch_id.py) the pane's CLI last spawned in; cleared by an idle reclaim. "" = no live CLI known, which is every record written before this field existed. Read by the 'auto' resume scope.
 
 
@@ -1070,8 +1070,9 @@ class ProjectStore:
             # empty and the record exactly as before.
             if surface: pane.surface = surface
             if window_kind: pane.window_kind = window_kind
-            # Only a remote container pane's spawn passes this (validated by the
-            # caller); a local spawn leaves the record exactly as before.
+            # Only a remote container or SSH Remote pane's spawn passes this
+            # (validated by the caller); a local spawn leaves the record exactly
+            # as before.
             if remote: pane.remote = dict(remote)
             # A rebuild hop owns its session: retire any OTHER spawned manual
             # record sharing it (legacy duplicate accumulation) so restore cannot
@@ -1563,6 +1564,18 @@ class ProjectStore:
                 pane.effort = effort
             self.save(project)
         return project
+
+    def set_pane_remote_session(self, workspace_path: str, *, pane_id: str, session_id: str) -> bool:
+        """Persist the remote session id of an SSH Remote CLI pane. False when
+        the pane has no SSH record."""
+        with self._save_lock:
+            project = self.load_or_create(workspace_path)
+            pane = next((p for p in project.panes if p.pane_id == pane_id), None)
+            if pane is None or pane.remote.get("kind") != "ssh":
+                return False
+            pane.remote = {**pane.remote, "sessionId": session_id}
+            self.save(project)
+        return True
 
     PANE_TURN_STATES = ("working", "idle")
 

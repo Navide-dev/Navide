@@ -12660,11 +12660,16 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
 
     remote_target: dict[str, Any] | None = None
     if payload.get("remote") is not None:
-        from . import remote_devcontainer
+        from . import remote_devcontainer, remote_ssh
 
         try:
-            remote_target = remote_devcontainer.parse_remote(payload.get("remote"))
-        except remote_devcontainer.RemoteSpecError as err:
+            raw_remote = payload.get("remote")
+            remote_target = (
+                remote_ssh.record_spec(remote_ssh.parse_spec(raw_remote))
+                if isinstance(raw_remote, dict) and raw_remote.get("kind") == "ssh"
+                else remote_devcontainer.parse_remote(raw_remote)
+            )
+        except (remote_devcontainer.RemoteSpecError, remote_ssh.SshTargetError) as err:
             await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
             return
     manual_pin = _profile_pin_for_bookkeeping(

@@ -237,8 +237,16 @@ class _Terms:
             id = "t1"
             pane_id = kwargs["pane_id"]
             proc = _Proc()
+            metadata = kwargs["metadata"]
+            output_taps: list[Any] = []
 
-        return _Term()
+        self.term = _Term()
+        return self.term
+
+    def write(self, _tid: str, text: str) -> None:
+        self.written.append(text)
+
+    written: list[str] = []
 
 
 class _PaneSession(_Sock):
@@ -279,7 +287,7 @@ def test_a_trusted_target_opens_a_login_shell_pane(monkeypatch):
     assert created["command"][:2] == ["ssh", "-tt"]
     # Server-only keys never come from the client; the spec marks the pane.
     assert "credential_env" not in created["metadata"]
-    assert created["metadata"][remote_ssh.METADATA_KEY] == _SPEC
+    assert created["metadata"][remote_ssh.METADATA_KEY] == {**_SPEC, "dir": "~", "cli": "terminal", "sessionId": ""}
     assert rd.METADATA_KEY not in created["metadata"]
     assert "ANTHROPIC_API_KEY" in rd.spawn_env_remove({"ANTHROPIC_API_KEY": "x"})
 
@@ -313,3 +321,175 @@ def test_the_default_port_leaves_an_ssh_config_alias_its_own_port():
     assert "-p" not in remote_ssh.preflight_argv(remote_ssh.parse_target({"host": "my-alias", "port": 22}))
     argv = remote_ssh.shell_argv(remote_ssh.parse_target({"host": "my-alias", "port": 2200}))
     assert argv[argv.index("-p") + 1] == "2200"
+
+
+# ── CLI panes, remote folder, session resume (0.2.48) ──────────────────────
+
+_TRUSTED = {rd.SETTING_KEY: True, remote_ssh.TRUSTED_KEY: [{k: v for k, v in _SPEC.items() if k != "kind"}]}
+
+
+def test_a_spec_carries_folder_cli_and_session_and_resume_is_never_recorded():
+    spec = remote_ssh.parse_spec({**_SPEC, "dir": "~/proj", "cli": "codex", "sessionId": "abc-1", "resume": True})
+    assert spec["dir"] == "~/proj" and spec["cli"] == "codex" and spec["resume"] is True
+    assert "resume" not in remote_ssh.record_spec(spec)
+    assert remote_ssh.parse_spec(dict(_SPEC))["dir"] == "~"
+
+
+@pytest.mark.parametrize("extra", [
+    {"dir": "-oProxyCommand=x"},
+    {"dir": "/a\nb"},
+    {"cli": "rm"},
+    {"sessionId": "../x"},
+    {"sessionId": "a b"},
+])
+def test_unusable_folder_cli_or_session_is_refused(extra):
+    with pytest.raises(remote_ssh.SshTargetError):
+        remote_ssh.parse_spec({**_SPEC, **extra})
+
+
+def test_a_terminal_pane_starts_in_the_remote_folder():
+    assert remote_ssh.shell_argv(remote_ssh.parse_spec(dict(_SPEC)))[-1] == "dev@build-box"
+    argv = remote_ssh.shell_argv(remote_ssh.parse_spec({**_SPEC, "dir": "~/my proj"}))
+    assert argv[-1] == "cd ~/'my proj' && exec $SHELL -l"
+
+
+def _cli_spec(**extra: Any) -> dict[str, Any]:
+    return remote_ssh.parse_spec({**_SPEC, "dir": "/srv/app", "cli": "claude", **extra})
+
+
+def test_a_claude_pane_gets_the_tunnel_and_never_the_token_on_the_command_line():
+    token = "tok" + "-" + "secret"
+    argv = remote_ssh.cli_pane_argv(_cli_spec(sessionId="0f0e"), pane_id="p1", local_port=1234, remote_port=45000)
+    assert argv[argv.index("-R") + 1] == "127.0.0.1:45000:127.0.0.1:1234"
+    assert "ExitOnForwardFailure=yes" in argv and "ControlPath=none" in argv and "ForwardAgent=no" in argv
+    assert argv[argv.index("--") + 1] == "dev@build-box"
+    assert token not in " ".join(argv)
+    script = remote_ssh.cli_script(_cli_spec(sessionId="0f0e"), pane_id="p1", remote_port=45000)
+    assert "read -r NAVIDE_MCP_TOKEN" in script and "stty -echo" in script
+    assert "cd /srv/app ||" in script
+    assert "--resume 0f0e" in script and "--session-id 0f0e" in script
+    assert "--continue" not in script and "resume --last" not in script
+
+
+def test_a_cli_without_navide_tools_gets_no_tunnel_and_no_token():
+    spec = _cli_spec(cli="opencode")
+    argv = remote_ssh.cli_pane_argv(spec, pane_id="p1", local_port=1234, remote_port=45000)
+    assert "-R" not in argv
+    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=None)
+    assert "NAVIDE_MCP_TOKEN" not in script and script.endswith("exec opencode")
+
+
+def test_codex_resumes_its_own_id_and_otherwise_reports_the_one_it_chose():
+    resumed = remote_ssh.cli_script(_cli_spec(cli="codex", sessionId="abc-1", resume=True), pane_id="p1", remote_port=45000)
+    assert "resume abc-1" in resumed and "navide-resume-miss" in resumed
+    fresh = remote_ssh.cli_script(_cli_spec(cli="codex"), pane_id="p1", remote_port=45000)
+    assert " resume " not in fresh and "navide-resume-miss" not in fresh
+    assert "navide-session;" in fresh and "rollout-" in fresh
+
+
+@pytest.mark.parametrize("cli", ["claude", "codex", "opencode"])
+@pytest.mark.parametrize("resume", [True, False])
+def test_every_script_is_valid_sh(cli, resume):
+    import shutil
+    import subprocess
+
+    if not shutil.which("sh"):
+        pytest.skip("no sh")
+    spec = _cli_spec(cli=cli, sessionId="abc-1", resume=resume, dir="~/a b")
+    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=45000 if cli != "opencode" else None)
+    # On stdin: `sh -n` only parses, but the guard against starting a real
+    # CLI reads the argv and would see a CLI name in it.
+    assert subprocess.run(["sh", "-n"], input=script.encode()).returncode == 0
+
+
+def test_the_watcher_reads_a_split_session_report_and_a_resume_miss():
+    found: list[str] = []
+    missed: list[bool] = []
+    watcher = remote_ssh.SessionWatcher(found.append, lambda: missed.append(True))
+    watcher.feed(b"hello " + remote_ssh.RESUME_MISSED[:6])
+    watcher.feed(remote_ssh.RESUME_MISSED[6:] + b" more " + remote_ssh.SESSION_REPORT[:5])
+    watcher.feed(remote_ssh.SESSION_REPORT[5:] + b"5973b6c0-94b8-487b-a530-2aeb6098ae0e")
+    watcher.feed(b"\x07 tail")
+    assert missed == [True]
+    assert found == ["5973b6c0-94b8-487b-a530-2aeb6098ae0e"]
+    watcher.feed(remote_ssh.SESSION_REPORT + b"other\x07")
+    assert found == ["5973b6c0-94b8-487b-a530-2aeb6098ae0e"]
+
+
+def test_a_cli_pane_is_a_remote_agent_pane_with_the_token_feeder(monkeypatch):
+    from agent_team_backend.mcp_server import wiring
+
+    monkeypatch.setattr(wiring, "backend_port", lambda: 1234)
+    sess = _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": {**_SPEC, "cli": "claude", "sessionId": "0f0e"}})
+    assert sess.sent[-1]["ok"] is True
+    created = sess.terminals.created[0]
+    assert created["agent_key"] == "remote"
+    assert created["command"][-1].startswith("exec $SHELL -ilc ")
+    assert len(sess.terminals.term.output_taps) == 2
+    assert remote_devcontainer_ws.is_remote_term(sess.terminals.term)
+    assert sess.sent[-1]["payload"]["remote"]["sessionId"] == "0f0e"
+
+
+@pytest.mark.parametrize("payload", [
+    {"agent_key": "terminal", "remote": {**_SPEC, "cli": "claude"}},
+    {"agent_key": "remote", "remote": dict(_SPEC)},
+])
+def test_the_agent_key_must_match_what_the_pane_runs(monkeypatch, payload):
+    sess = _create(monkeypatch, _TRUSTED, payload)
+    assert sess.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+def test_the_cli_commands_match_the_agent_specs():
+    import re
+
+    agents = Path(__file__).resolve().parents[2] / "src/renderer/src/platform/plugin-shell/agents"
+    for key, argv in remote_ssh.CLI_COMMANDS.items():
+        text = (agents / f"{key}.ts").read_text(encoding="utf-8")
+        match = re.search(r"defaultCommand:\s*'([^']*)'", text)
+        assert match and match.group(1) == " ".join(argv), key
+
+
+def test_an_ssh_pane_record_keeps_its_spec_and_session_across_restore(tmp_path):
+    from agent_team_backend.projects import ProjectStore
+
+    ws = str(tmp_path)
+    store = ProjectStore()
+    spec = remote_ssh.record_spec(_cli_spec(cli="codex"))
+    store.record_manual_pane_spawn(ws, pane_id="p1", agent="remote", remote=spec)
+    store.record_manual_pane_spawn(ws, pane_id="local", agent="claude")
+    assert store.set_pane_remote_session(ws, pane_id="p1", session_id="abc-1") is True
+    assert store.set_pane_remote_session(ws, pane_id="local", session_id="abc-1") is False
+    store.record_manual_pane_spawn(ws, pane_id="p2", previous_pane_id="p1", agent="remote")
+    reloaded = {p.pane_id: p for p in ProjectStore().load_or_create(ws).panes}
+    assert reloaded["p2"].remote == {**spec, "sessionId": "abc-1"}
+    assert reloaded["local"].remote == {}
+
+
+def test_manual_pane_spawn_records_an_ssh_spec_without_resume(monkeypatch):
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, ws_handlers
+
+    recorded: list[Any] = []
+
+    def record(*_a: Any, **kw: Any) -> Any:
+        recorded.append(kw)
+        return SimpleNamespace(panes=[], to_dict=lambda: {})
+
+    monkeypatch.setattr(app, "project_store", SimpleNamespace(
+        record_manual_pane_spawn=record, load_or_create=lambda _w: SimpleNamespace(panes=[])), raising=False)
+
+    async def run(remote: dict[str, Any]) -> list[dict[str, Any]]:
+        sess = _Sock()
+        try:
+            await ws_handlers.manual_pane_spawn(sess, "m1", "manual_pane.spawn", {
+                "workspace_path": "/w", "pane_id": "p", "agent": "remote", "remote": remote})
+        except Exception:  # noqa: BLE001 — only what reached the store matters here
+            pass
+        return sess.sent
+
+    asyncio.run(run({**_SPEC, "cli": "claude", "sessionId": "0f0e", "resume": True}))
+    assert recorded and recorded[0]["remote"] == {**_SPEC, "dir": "~", "cli": "claude", "sessionId": "0f0e"}
+    recorded.clear()
+    sent = asyncio.run(run({**_SPEC, "dir": "-x"}))
+    assert sent[-1]["error"]["code"] == "BAD_REQUEST" and recorded == []

@@ -53,8 +53,14 @@ async def _enabled() -> bool:
 
 
 def is_remote_term(term: Any) -> bool:
+    """A remote container pane or an SSH Remote pane: either one signs in on
+    the other machine, so neither takes part in account switching or quota
+    failover."""
+    from . import remote_ssh
+
     metadata = getattr(term, "metadata", None)
-    return isinstance(metadata, dict) and bool(metadata.get(rd.METADATA_KEY))
+    return isinstance(metadata, dict) and bool(
+        metadata.get(rd.METADATA_KEY) or metadata.get(remote_ssh.METADATA_KEY))
 
 
 def is_remote_pane(pane_id: str) -> bool:
@@ -300,6 +306,25 @@ async def remote_ssh_connect(session: "Session", msg_id: str, msg_type: str, pay
     await session.send_json(make_response(msg_id, msg_type, {"spec": {"kind": "ssh", **target}}))
 
 
+@handler("remote_ssh.set_session")
+async def remote_ssh_set_session(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Records the remote session id an SSH CLI pane reported (its
+    ``remote_ssh.session`` event) on the pane's record, so a restore resumes
+    that conversation."""
+    from . import app, remote_ssh
+    from .db_executor import run_in_db_thread
+
+    session_id = str(payload.get("session_id") or "")
+    workspace_path = str(payload.get("workspace_path") or "")
+    pane_id = str(payload.get("pane_id") or "")
+    if not workspace_path or not pane_id or not remote_ssh._SESSION_ID_RE.match(session_id):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "workspace_path, pane_id and session_id"))
+        return
+    recorded = await run_in_db_thread(
+        app.project_store.set_pane_remote_session, workspace_path, pane_id=pane_id, session_id=session_id)
+    await session.send_json(make_response(msg_id, msg_type, {"recorded": recorded}))
+
+
 async def create_ssh_pane(
     session: "Session",
     msg_id: str,
@@ -308,10 +333,12 @@ async def create_ssh_pane(
     transaction: dict[str, Any],
     generation: str,
 ) -> None:
-    """``terminal.create`` for an SSH Remote terminal pane: the login shell on
-    a target the user connected to from the dialog, never one a pane record
-    alone names."""
+    """``terminal.create`` for an SSH Remote pane: the login shell, or a CLI
+    (agent_key ``remote``, the CLI in ``spec["cli"]``), on a target the user
+    connected to from the dialog, never one a pane record alone names."""
     from . import app, remote_ssh
+    from .ipc import make_event
+    from .mcp_server import wiring
 
     settings = await _settings()
     if not rd.enabled(settings):
@@ -320,9 +347,16 @@ async def create_ssh_pane(
     pane_id = str(payload["pane_id"])
     try:
         spec = remote_ssh.parse_spec(payload.get("remote"))
-        if str(payload.get("agent_key") or "") != "terminal":
-            raise remote_ssh.SshTargetError("an SSH Remote pane is a terminal pane")
-        argv = remote_ssh.shell_argv(spec)
+        agent_key = "terminal" if spec["cli"] == remote_ssh.TERMINAL else rd.AGENT_KEY
+        if str(payload.get("agent_key") or "") != agent_key:
+            raise remote_ssh.SshTargetError(f"an SSH Remote pane running {spec['cli']} has agent_key {agent_key!r}")
+        if agent_key == "terminal":
+            argv = remote_ssh.shell_argv(spec)
+        else:
+            argv = remote_ssh.cli_pane_argv(
+                spec, pane_id=pane_id, local_port=wiring.backend_port(),
+                remote_port=rd.pick_remote_port(),
+            )
     except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
@@ -336,7 +370,7 @@ async def create_ssh_pane(
     metadata = dict(payload.get("metadata") or {})
     for key in _SERVER_KEYS:
         metadata.pop(key, None)
-    metadata[remote_ssh.METADATA_KEY] = spec
+    metadata[remote_ssh.METADATA_KEY] = remote_ssh.record_spec(spec)
 
     replaces_tid = str(payload.get("replaces_terminal_id") or "")
     if replaces_tid:
@@ -354,7 +388,7 @@ async def create_ssh_pane(
         cwd = rd.default_cwd()
     term = session.terminals.create(
         pane_id=pane_id,
-        agent_key="terminal",
+        agent_key=agent_key,
         command=argv,
         cwd=cwd,
         cols=int(payload.get("cols", 100)),
@@ -364,14 +398,31 @@ async def create_ssh_pane(
     )
     transaction["term_id"] = term.id
     app._PTY_OWNERS[term.id] = session
+    if spec["cli"] in remote_ssh.MCP_CLIS:
+        feeder = rd.TokenFeeder(
+            wiring.spawn_token(pane_id),
+            lambda text: session.terminals.write(term.id, text),
+        )
+        term.output_taps.append(feeder.feed)
+    if spec["cli"] != remote_ssh.TERMINAL:
+        def _tell(event: str, extra: dict[str, Any]) -> None:
+            owner = app._PTY_OWNERS.get(term.id, session)
+            asyncio.ensure_future(owner.send_json(make_event(event, {"pane_id": pane_id, **extra})))
+
+        def _found(session_id: str) -> None:
+            term.metadata[remote_ssh.METADATA_KEY]["sessionId"] = session_id
+            _tell("remote_ssh.session", {"session_id": session_id})
+
+        watcher = remote_ssh.SessionWatcher(_found, lambda: _tell("remote_ssh.resume_missed", {}))
+        term.output_taps.append(watcher.feed)
     response_payload = {
         "terminal_session_id": term.id,
         "pane_id": term.pane_id,
         "pid": term.proc.pid,
-        "command": [argv[0], remote_ssh.destination(spec)],
+        "command": [argv[0], remote_ssh.destination(spec), spec["cli"]],
         "startup_probe": None,
         "create_generation": generation,
-        "remote": spec,
+        "remote": remote_ssh.record_spec(spec),
     }
     await session.send_json(make_response(msg_id, msg_type, response_payload))
     if session.dead or transaction["cancelled"]:
