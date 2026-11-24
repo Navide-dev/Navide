@@ -12742,7 +12742,6 @@
     "error-tz": "Fuseau horaire inconnu"
   },
   "persona": {
-    "rooms-label": "Salles",
     "people": "{n} personnes",
     "running": "{n} en cours",
     "awaiting-count": "{n} attendent votre réponse",

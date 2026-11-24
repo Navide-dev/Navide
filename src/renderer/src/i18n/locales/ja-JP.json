@@ -12742,7 +12742,6 @@
     "error-tz": "不明なタイムゾーン"
   },
   "persona": {
-    "rooms-label": "部屋",
     "people": "{n} 人",
     "running": "{n} 実行中",
     "awaiting-count": "{n} 人が回答待ち",

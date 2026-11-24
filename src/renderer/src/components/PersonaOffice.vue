@@ -89,6 +89,7 @@ const heightPx = ref(600)
 const layout = computed(() => deskLayout(people.value.length, widthPx.value, heightPx.value))
 const attention = computed(() => (people.value.length > 8 ? attentionList(people.value) : []))
 const canShowBuilding = computed(() => buildingAvailable(props.rooms))
+const activeCounts = computed(() => roomCounts(people.value))
 const cardPerson = computed(() => people.value.find((p) => p.id === cardId.value) ?? null)
 const cardQuestion = computed(() => {
   const p = cardPerson.value
@@ -483,7 +484,7 @@ onMounted(() => {
       widthPx.value = Math.max(320, el.clientWidth)
       heightPx.value = Math.max(200, el.clientHeight)
     }
-    if (rootRef.value) buildingHeightPx.value = rootRef.value.clientHeight - 50
+    if (rootRef.value) buildingHeightPx.value = rootRef.value.clientHeight - 20
     requestDraw()
   })
   if (rootRef.value) resizeObserver.observe(rootRef.value)
@@ -522,42 +523,22 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
 <template>
   <div ref="rootRef" class="persona" tabindex="-1" @keydown="onKeydown">
     <span ref="probeRef" class="persona-probe" aria-hidden="true" />
-    <div class="persona-rooms">
-      <div class="persona-room-list" role="tablist" :aria-label="$t('persona.rooms-label')">
-        <button
-          v-for="room in rooms"
-          :key="room.key"
-          type="button"
-          role="tab"
-          :class="['persona-room', { on: !showBuilding && room.key === activeRoom?.key }]"
-          :aria-selected="!showBuilding && room.key === activeRoom?.key"
-          @click="enterRoom(room.key)"
-        >
-          <span class="sw" :style="{ background: room.color }" />
-          <span class="name">{{ room.label }}</span>
-          <span class="n">
-            {{ $t('persona.people', { n: roomCounts(room.people).total }) }} ·
-            <b>{{ $t('persona.running', { n: roomCounts(room.people).running }) }}</b>
-          </span>
-          <span
-            v-if="roomCounts(room.people).awaiting"
-            class="bang"
-            :title="$t('persona.awaiting-count', { n: roomCounts(room.people).awaiting })"
-          >!{{ roomCounts(room.people).awaiting }}</span>
-          <span
-            v-if="roomCounts(room.people).failing"
-            class="bang err"
-            :title="$t('persona.failing-count', { n: roomCounts(room.people).failing })"
-          >{{ roomCounts(room.people).failing }}</span>
-        </button>
-      </div>
+    <!-- No tab strip of its own: the rooms ARE the stage tabs, switched from the
+         existing tab bar. The plate and the building button sit in the scene. -->
+    <div class="persona-tools">
       <button
         v-if="canShowBuilding"
         type="button"
-        :class="['persona-building-btn', { on: showBuilding }]"
+        :class="['persona-tool', { on: showBuilding }]"
         :aria-pressed="showBuilding"
+        :title="showBuilding ? $t('persona.building-back') : $t('persona.building')"
+        :aria-label="showBuilding ? $t('persona.building-back') : $t('persona.building')"
         @click="showBuilding = !showBuilding; cardId = null"
-      >{{ showBuilding ? $t('persona.building-back') : $t('persona.building') }}</button>
+      >
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M3 1h10v14h-4v-3H7v3H3zM5 3v2h2V3zm4 0v2h2V3zM5 7v2h2V7zm4 0v2h2V7z" />
+        </svg>
+      </button>
     </div>
 
     <template v-if="!showBuilding">
@@ -577,23 +558,44 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
           </button>
         </div>
       </div>
-      <div ref="scrollRef" class="persona-scroll">
-        <canvas
-          ref="canvasRef"
-          class="persona-canvas"
-          role="img"
-          :aria-label="$t('persona.canvas-label', { n: people.length })"
-          @click="onCanvasClick"
-          @dblclick="onCanvasDblClick"
-          @mousemove="onCanvasMove"
-        />
-        <!-- The same people as buttons, for keyboard and screen readers. -->
-        <ul class="persona-sr">
-          <li v-for="person in people" :key="person.id">
-            <button type="button" @click="openCard(person.id)">{{ person.name }} — {{ personStatusText(person) }}</button>
-          </li>
-        </ul>
-        <div v-if="!people.length" class="persona-empty">{{ $t('persona.empty-room') }}</div>
+      <div class="persona-office">
+        <!-- Door plate: the room (stage tab) and its head count, on the wall. -->
+        <div v-if="activeRoom" class="persona-plate">
+          <span class="sw" :style="{ background: activeRoom.color }" />
+          <b class="name">{{ activeRoom.label }}</b>
+          <span class="n">
+            {{ $t('persona.people', { n: activeCounts.total }) }} ·
+            <em>{{ $t('persona.running', { n: activeCounts.running }) }}</em>
+          </span>
+          <span
+            v-if="activeCounts.awaiting"
+            class="bang"
+            :title="$t('persona.awaiting-count', { n: activeCounts.awaiting })"
+          >!{{ activeCounts.awaiting }}</span>
+          <span
+            v-if="activeCounts.failing"
+            class="bang err"
+            :title="$t('persona.failing-count', { n: activeCounts.failing })"
+          >{{ activeCounts.failing }}</span>
+        </div>
+        <div ref="scrollRef" class="persona-scroll">
+          <canvas
+            ref="canvasRef"
+            class="persona-canvas"
+            role="img"
+            :aria-label="$t('persona.canvas-label', { n: people.length })"
+            @click="onCanvasClick"
+            @dblclick="onCanvasDblClick"
+            @mousemove="onCanvasMove"
+          />
+          <!-- The same people as buttons, for keyboard and screen readers. -->
+          <ul class="persona-sr">
+            <li v-for="person in people" :key="person.id">
+              <button type="button" @click="openCard(person.id)">{{ person.name }} — {{ personStatusText(person) }}</button>
+            </li>
+          </ul>
+          <div v-if="!people.length" class="persona-empty">{{ $t('persona.empty-room') }}</div>
+        </div>
       </div>
       <div class="persona-legend" aria-hidden="true">
         <span><b>⌨</b>{{ $t('persona.legend-type') }}</span>
@@ -679,72 +681,57 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
   overflow: hidden;
 }
 .persona-probe { position: absolute; width: 0; height: 0; overflow: hidden; }
-.persona-rooms {
-  flex: none;
+.persona-tools {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 3;
   display: flex;
-  align-items: flex-end;
   gap: 4px;
-  padding: 6px 10px 0;
-  background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-default);
 }
-.persona-room-list {
-  flex: 1;
-  min-width: 0;
+.persona-tool {
+  width: 30px;
+  height: 28px;
   display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-overlay);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
-.persona-room {
-  flex: none;
-  height: 32px;
+.persona-tool:hover { color: var(--text-primary); }
+.persona-tool.on { border-color: var(--accent-focus); color: var(--accent-bright); }
+.persona-office { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.persona-plate {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 8px 8px 0 0;
-  background: var(--bg-muted);
-  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 2px solid #6c5a44;
+  background: rgba(20, 22, 34, 0.88);
+  color: #e6e8ef;
   font-size: var(--font-sm);
-  cursor: pointer;
   white-space: nowrap;
 }
-.persona-room:hover { color: var(--text-primary); }
-.persona-room.on {
-  background: var(--bg-overlay);
-  color: var(--text-bright);
-  box-shadow: inset 0 -2px 0 var(--accent-focus);
-}
-.persona-room .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
-.persona-room .n { font-size: var(--font-xs); color: var(--text-muted); }
-.persona-room .n b { color: var(--success-fg); font-weight: 600; }
-.persona-room .bang {
+.persona-plate .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.persona-plate .n { font-size: var(--font-xs); color: #aab0c3; }
+.persona-plate .n em { font-style: normal; color: var(--success-fg); font-weight: 600; }
+.persona-plate .bang {
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--warning-fg); color: #fff; font-weight: 800; font-size: var(--font-xs);
 }
-.persona-room .bang.err { background: var(--danger-fg); }
-.persona-building-btn {
-  flex: none;
-  margin-left: 8px;
-  align-self: center;
-  margin-bottom: 4px;
-  height: 26px;
-  padding: 0 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-muted);
-  color: var(--text-primary);
-  font-size: var(--font-sm);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.persona-building-btn.on { border-color: var(--accent-focus); color: var(--accent-bright); }
+.persona-plate .bang.err { background: var(--danger-fg); }
 .persona-attn {
   flex: none;
+  padding-right: 56px !important;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -804,7 +791,7 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
 .persona-card .btns button.p { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: #fff; font-weight: 700; }
 .persona-building { position: relative; flex: 1; min-height: 0; display: flex; background: linear-gradient(#9fd4f2, #d8eef8 70%, #b9d9a8 70%); }
 .persona-building-scroll { flex: 1; min-width: 0; overflow: auto; padding-top: 12px; }
-.persona-building .side { flex: none; width: 300px; padding: 16px 16px 16px 0; display: flex; flex-direction: column; gap: 10px; }
+.persona-building .side { flex: none; width: 300px; padding: 48px 16px 16px 0; display: flex; flex-direction: column; gap: 10px; }
 .persona-building .box { background: rgba(20, 22, 34, 0.9); color: #e6e8ef; border-radius: 12px; padding: 12px 14px; font-size: var(--font-sm); }
 .persona-building .box h5 { margin: 0 0 6px; font-size: var(--font-md); display: flex; align-items: center; }
 .persona-building .row { display: flex; justify-content: space-between; padding: 3px 0; }

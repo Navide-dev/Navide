@@ -12742,7 +12742,6 @@
     "error-tz": "Zona horaria desconocida"
   },
   "persona": {
-    "rooms-label": "Salas",
     "people": "{n} personas",
     "running": "{n} en ejecución",
     "awaiting-count": "{n} esperan tu respuesta",
