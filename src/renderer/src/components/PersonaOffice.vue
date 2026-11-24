@@ -266,6 +266,8 @@ function drawOffice(): void {
       walk,
       lamp: lampOpacity(person.status, t, !animating()),
       quota: person.quota ?? null,
+      loginExpired: person.loginExpired,
+      guarded: person.guarded,
     })
   })
   const tagSize = S >= 4 ? 14 : S === 3 ? 12 : 11
@@ -617,6 +619,10 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
           {{ personStatusText(cardPerson) }}<template v-if="waitedText(cardPerson)"> · {{ waitedText(cardPerson) }}</template>
         </div>
         <div v-if="cardPerson.quota && cardPerson.quota !== 'empty'" class="quota">{{ $t(`persona.quota-${cardPerson.quota}`) }}</div>
+        <div v-if="cardPerson.loginExpired || cardPerson.guarded" class="flags">
+          <span v-if="cardPerson.loginExpired" class="flag">{{ $t('pane.terminal.login-expired-badge') }}</span>
+          <span v-if="cardPerson.guarded" class="flag">🛡 {{ $t('guard.pane.badge') }}</span>
+        </div>
         <div v-if="cardQuestion" class="q" :style="{ color: tokens.awaiting }">{{ cardQuestion }}</div>
         <div class="btns">
           <button type="button" class="p" @click="emit('focus-pane', cardPerson.id)">{{ $t('persona.focus-pane') }}</button>
@@ -786,6 +792,12 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
 .persona-card .vendor { font-size: var(--font-xs); color: var(--text-muted); font-weight: 400; }
 .persona-card .st { display: flex; align-items: center; gap: 6px; }
 .persona-card .quota { margin-top: 4px; color: var(--attention-fg); }
+.persona-card .flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.persona-card .flag {
+  font-size: var(--font-3xs); font-weight: 600; color: var(--attention-fg);
+  background: var(--attention-subtle); border: 1px solid var(--attention-muted);
+  border-radius: var(--radius-xs); padding: 1px 6px;
+}
 .persona-card .q { background: var(--bg-muted); border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; white-space: pre-wrap; max-height: 120px; overflow: auto; }
 .persona-card .btns { display: flex; gap: 8px; margin-top: 10px; }
 .persona-card .btns button { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-primary); cursor: pointer; }

@@ -24688,7 +24688,8 @@ const resourceUsage = useResourceUsage({
 })
 provide(cliRiskKey, resourceUsage)
 provide(channelsKey, useChannels(backend))
-provide(guardKey, useGuard(backend))
+const guardStore = useGuard(backend)
+provide(guardKey, guardStore)
 
 // ── Agent panes (plan agent-0-2-40_78e071) ───────────────────────────────────
 function agentPaneName(p: ActivePane): string {
@@ -25585,13 +25586,20 @@ const personaRooms = computed<PersonaRoom[]>(() => {
       const since = status === 'awaiting'
         ? ref?.awaitingHeld?.().since
         : status === 'idle' ? ref?.lastActivityAt : undefined
-      const snap = usageFor(p.agentKey)
+      // The account the pane runs on, as its usage badge reads it: a pane
+      // pinned to an account signed in inside its own config dir runs on that
+      // account (runs_on "account-dir"); every other pane on the live one.
+      const pin = paneRunPin(p) ?? ''
+      const dirProfileId = cliProfilesApi.accountDirFor(p.agentKey, pin)?.signedIn ? pin : ''
+      const snap = dirProfileId ? accountUsageFor(p.agentKey, dirProfileId) : usageFor(p.agentKey)
       const remaining = remainingPercent(snap)
       return {
         name,
         vendor: agentVendorLabel(p.agentKey),
         agentColor: agentConsole.paneInfo(id, p.agentKey, name)?.color ?? null,
         quota: quotaStage(remaining === null ? null : remainingTier(remaining), p.usageLimitAt != null || isExhausted(snap)),
+        loginExpired: !!p.loginExpired,
+        guarded: guardStore.available.value && !!guardStore.taintFor(id),
         since,
       }
     },

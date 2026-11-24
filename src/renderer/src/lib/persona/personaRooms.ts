@@ -17,6 +17,8 @@ export interface PersonaPaneFacts {
   vendor: string
   agentColor?: string | null
   quota?: QuotaStage
+  loginExpired?: boolean
+  guarded?: boolean
   /** A start time the pane itself knows for its current status, if any. */
   since?: number
 }
@@ -56,6 +58,8 @@ export function buildPersonaRooms(input: {
         vendor: facts.vendor,
         agentColor: facts.agentColor ?? null,
         quota: facts.quota ?? null,
+        loginExpired: !!facts.loginExpired,
+        guarded: !!facts.guarded,
         since: facts.since && facts.since > 0 ? facts.since : input.clock.get(id)!.since,
       })
     }

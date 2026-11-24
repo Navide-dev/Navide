@@ -13,6 +13,10 @@ export interface PersonaPerson {
   /** Agent identity colour (AGENT_COLOR_HEX) — the shirt and the name-tag stripe. */
   agentColor?: string | null
   quota?: QuotaStage
+  /** The pane's login expired (header badge "login expired"). */
+  loginExpired?: boolean
+  /** Guard marks the pane as influenced by external content (header shield badge). */
+  guarded?: boolean
   /** Epoch ms the current status began, when known. */
   since?: number
 }
