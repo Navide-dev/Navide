@@ -1157,17 +1157,17 @@ onMounted(() => {
         >{{ $t('remoteDevcontainer.account-disabled') }}</span>
         <template v-else-if="sshRemote">
         <span
-          class="remote-account-chip"
+          class="remote-account-chip ssh-chip"
           aria-disabled="true"
           data-testid="ssh-account-chip"
-          :title="$t('sshRemote.accounts-chip-title', { host: sshRemote.host })"
-        >{{ $t('sshRemote.accounts-chip') }}</span>
+          :title="`${$t('sshRemote.accounts-chip')}\n${$t('sshRemote.accounts-chip-title', { host: sshRemote.host })}`"
+        ><svg class="ssh-chip-icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" /><path d="M3.5 13.5c.6-2.6 2.4-4 4.5-4s3.9 1.4 4.5 4" /></svg><span class="ssh-chip-label">{{ $t('sshRemote.accounts-chip') }}</span></span>
         <span
           v-if="sshCli && !SSH_MCP_CLIS.includes(sshCli)"
-          class="remote-account-chip"
+          class="remote-account-chip ssh-chip"
           data-testid="ssh-no-tools-chip"
-          :title="$t('sshRemote.no-tools-chip-title', { cli: sshCliLabel, host: sshRemote.host })"
-        >{{ $t('sshRemote.no-tools-chip') }}</span>
+          :title="`${$t('sshRemote.no-tools-chip')}\n${$t('sshRemote.no-tools-chip-title', { cli: sshCliLabel, host: sshRemote.host })}`"
+        ><svg class="ssh-chip-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5a3 3 0 0 0-3.2 4L2.8 11a1.2 1.2 0 0 0 1.7 1.7L9 8.2a3 3 0 0 0 4-3.2l-1.8 1.8-1.7-.4-.4-1.7Z" /><path d="M2.5 2.5l11 11" /></svg><span class="ssh-chip-label">{{ $t('sshRemote.no-tools-chip') }}</span></span>
         </template>
         <template v-else>
         <UsageBadge
@@ -1684,6 +1684,15 @@ onMounted(() => {
   white-space: nowrap;
   opacity: 0.7;
   cursor: help;
+}
+/* SSH chips sit beside the status badge in a header that a three-column grid
+   leaves narrow; below the width CliRiskPill collapses at they keep only their
+   icon and the title still carries the full text. */
+.ssh-chip { display: inline-flex; align-items: center; gap: 3px; }
+.ssh-chip-icon { width: 11px; height: 11px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+@container cli-pane-header (max-width: 620px) {
+  .ssh-chip { padding: 0 3px; }
+  .ssh-chip-label { display: none; }
 }
 .remote-disconnected,
 .remote-login {

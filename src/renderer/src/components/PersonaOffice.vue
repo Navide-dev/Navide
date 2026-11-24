@@ -79,6 +79,9 @@ const cardId = ref<string | null>(null)
 const hoverFloor = ref<number | null>(null)
 const widthPx = ref(800)
 const buildingHeightPx = ref(600)
+// Space above the building, so it stands on the ground line instead of
+// hanging under the sky with the lawn left empty below it.
+const buildingTopPx = ref(12)
 const now = ref(Date.now())
 
 const activeRoom = computed<PersonaRoom | null>(() =>
@@ -284,6 +287,7 @@ function drawOffice(): void {
 }
 
 const FLOOR_H = 44
+const GROUND_AT = 0.7
 const BX = 20
 
 /** Units-to-pixels for the building: the largest that fits both ways (the
@@ -309,6 +313,10 @@ function drawBuilding(): void {
   const pxH = (TOP + props.rooms.length * FLOOR_H + 20) * S
   if (canvas.width !== pxW) canvas.width = pxW
   if (canvas.height !== pxH) canvas.height = pxH
+  // GROUND_AT is where .persona-building's gradient turns to grass. A building
+  // too tall to stand there keeps the old 12px top and scrolls.
+  const viewH = canvas.parentElement?.clientHeight ?? 0
+  buildingTopPx.value = Math.max(12, Math.round(viewH * GROUND_AT - (TOP + props.rooms.length * FLOOR_H + 3) * S))
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.imageSmoothingEnabled = false
@@ -634,7 +642,7 @@ watch(cardPerson, (p) => { if (!p) cardId.value = null })
     </template>
 
     <div v-else class="persona-building">
-      <div class="persona-building-scroll">
+      <div class="persona-building-scroll" :style="{ paddingTop: `${buildingTopPx}px` }">
         <canvas
           ref="buildingRef"
           class="persona-canvas"
