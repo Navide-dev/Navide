@@ -2844,9 +2844,10 @@ class ChannelManager:
             lines.append(held.text(lang, "status_last", text=last))
         return lines
 
-    async def status_cards(self, rows: list[dict[str, Any]]) -> str:
+    async def status_cards(self, rows: list[dict[str, Any]], loc: Location) -> str:
         """What /status adds after its details: one card per pane of the tree (bound pane
-        first), the idle ones folded when there are many (channels.status_card)."""
+        first), the idle ones folded when there are many (channels.status_card). Account
+        emails are whole only in a chat known to be direct."""
         lang = prompt_skills.language(await self._ui_settings())
 
         async def one(pid: str) -> dict[str, Any]:
@@ -2857,7 +2858,7 @@ class ChannelManager:
                 return {}
 
         infos = await asyncio.gather(*(one(str(r["pane_id"])) for r in rows))
-        return status_card.render(lang, list(zip(rows, infos)), status_word)
+        return status_card.render(lang, list(zip(rows, infos)), status_word, group=self._kind_at(loc) != "direct")
 
     async def _list_pending(self, msg: InboundMessage) -> None:
         """/pending: send this chat's waiting prompts again, each with its buttons. The new

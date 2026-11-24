@@ -56,6 +56,141 @@ STRINGS: dict[str, dict[str, str]] = {
         "default_account": "Default account",
         "age_s": "{n}s", "age_m": "{n} min", "age_h": "{n} h",
     },
+    "ja-JP": {
+        "heading": "— pane の詳細 —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct}% 使用（{window}）",
+        "quota_reset": " · {when} にリセット",
+        "quota_stale": "（古いデータ）",
+        "last_done": "📝 最後の動作：完了 · {text}",
+        "last_active": "📝 最後の動作：実行中（{age}前に開始）",
+        "last_done_bare": "📝 最後の動作：完了（{age}前）",
+        "prompt": "❓ プロンプトで停止中：{text}",
+        "folded": "💤 ほかに待機中の pane {count} 個：{names}",
+        "cut": "…ほかに {count} 個の pane は省略しました。各チャットで /status を送ってください",
+        "default_account": "既定のアカウント",
+        "age_s": "{n} 秒", "age_m": "{n} 分", "age_h": "{n} 時間",
+    },
+    "zh-CN": {
+        "heading": "— pane 明细 —",
+        "account": "👤 {account}",
+        "quota_used": "📊 已用 {pct}%（{window}）",
+        "quota_reset": " · {when} 重置",
+        "quota_stale": "（旧数据）",
+        "last_done": "📝 最后动作：完成 · {text}",
+        "last_active": "📝 最后动作：运行中（{age}前开始）",
+        "last_done_bare": "📝 最后动作：完成（{age}前）",
+        "prompt": "❓ 卡在提示：{text}",
+        "folded": "💤 其余 {count} 个空闲 pane：{names}",
+        "cut": "…还有 {count} 个 pane 没列出，请在各自的聊天室发送 /status 查看",
+        "default_account": "默认账号",
+        "age_s": "{n} 秒", "age_m": "{n} 分钟", "age_h": "{n} 小时",
+    },
+    "ko-KR": {
+        "heading": "— pane 상세 —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct}% 사용（{window}）",
+        "quota_reset": " · {when} 초기화",
+        "quota_stale": " (오래된 데이터)",
+        "last_done": "📝 마지막 동작: 완료 · {text}",
+        "last_active": "📝 마지막 동작: 실행 중 ({age} 전 시작)",
+        "last_done_bare": "📝 마지막 동작: 완료 ({age} 전)",
+        "prompt": "❓ 프롬프트에서 멈춤: {text}",
+        "folded": "💤 그 밖의 유휴 pane {count}개: {names}",
+        "cut": "…pane {count}개는 표시하지 않았습니다. 각 채팅에서 /status를 보내세요",
+        "default_account": "기본 계정",
+        "age_s": "{n}초", "age_m": "{n}분", "age_h": "{n}시간",
+    },
+    "es-ES": {
+        "heading": "— Panes —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct}% usado ({window})",
+        "quota_reset": " · se restablece {when}",
+        "quota_stale": " (datos antiguos)",
+        "last_done": "📝 Última acción: terminado · {text}",
+        "last_active": "📝 Última acción: en ejecución (empezó hace {age})",
+        "last_done_bare": "📝 Última acción: terminado (hace {age})",
+        "prompt": "❓ Detenido en un aviso: {text}",
+        "folded": "💤 {count} pane(s) inactivos más: {names}",
+        "cut": "…{count} pane(s) más sin mostrar; envía /status en sus propios chats",
+        "default_account": "Cuenta predeterminada",
+        "age_s": "{n} s", "age_m": "{n} min", "age_h": "{n} h",
+    },
+    "fr-FR": {
+        "heading": "— Panes —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct} % utilisé ({window})",
+        "quota_reset": " · réinitialisé à {when}",
+        "quota_stale": " (données anciennes)",
+        "last_done": "📝 Dernière action : terminé · {text}",
+        "last_active": "📝 Dernière action : en cours (commencé il y a {age})",
+        "last_done_bare": "📝 Dernière action : terminé (il y a {age})",
+        "prompt": "❓ Bloqué sur une invite : {text}",
+        "folded": "💤 {count} autre(s) pane(s) inactif(s) : {names}",
+        "cut": "…{count} pane(s) non listé(s) ; envoyez /status dans leurs propres discussions",
+        "default_account": "Compte par défaut",
+        "age_s": "{n} s", "age_m": "{n} min", "age_h": "{n} h",
+    },
+    "de-DE": {
+        "heading": "— Panes —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct} % verbraucht ({window})",
+        "quota_reset": " · Zurücksetzung {when}",
+        "quota_stale": " (veraltete Daten)",
+        "last_done": "📝 Letzte Aktion: fertig · {text}",
+        "last_active": "📝 Letzte Aktion: läuft (seit {age})",
+        "last_done_bare": "📝 Letzte Aktion: fertig (vor {age})",
+        "prompt": "❓ Wartet auf eine Abfrage: {text}",
+        "folded": "💤 {count} weitere(r) inaktive(r) Pane(s): {names}",
+        "cut": "…{count} weitere(r) Pane(s) nicht aufgeführt; sende /status in deren eigenen Chats",
+        "default_account": "Standardkonto",
+        "age_s": "{n} s", "age_m": "{n} Min.", "age_h": "{n} Std.",
+    },
+    "pt-BR": {
+        "heading": "— Panes —",
+        "account": "👤 {account}",
+        "quota_used": "📊 {pct}% usado ({window})",
+        "quota_reset": " · reinicia {when}",
+        "quota_stale": " (dados antigos)",
+        "last_done": "📝 Última ação: concluído · {text}",
+        "last_active": "📝 Última ação: em execução (começou há {age})",
+        "last_done_bare": "📝 Última ação: concluído (há {age})",
+        "prompt": "❓ Parado em um prompt: {text}",
+        "folded": "💤 Mais {count} pane(s) ocioso(s): {names}",
+        "cut": "…mais {count} pane(s) não listado(s); envie /status nos próprios chats deles",
+        "default_account": "Conta padrão",
+        "age_s": "{n} s", "age_m": "{n} min", "age_h": "{n} h",
+    },
+    "ru-RU": {
+        "heading": "— Панели —",
+        "account": "👤 {account}",
+        "quota_used": "📊 Использовано {pct}% ({window})",
+        "quota_reset": " · сброс {when}",
+        "quota_stale": " (устаревшие данные)",
+        "last_done": "📝 Последнее действие: готово · {text}",
+        "last_active": "📝 Последнее действие: выполняется (начато {age} назад)",
+        "last_done_bare": "📝 Последнее действие: готово ({age} назад)",
+        "prompt": "❓ Ждёт ответа на запрос: {text}",
+        "folded": "💤 Ещё простаивающих pane: {count}: {names}",
+        "cut": "…ещё {count} pane не показано; отправьте /status в их собственных чатах",
+        "default_account": "Аккаунт по умолчанию",
+        "age_s": "{n} с", "age_m": "{n} мин", "age_h": "{n} ч",
+    },
+    "vi-VN": {
+        "heading": "— Chi tiết pane —",
+        "account": "👤 {account}",
+        "quota_used": "📊 Đã dùng {pct}% ({window})",
+        "quota_reset": " · đặt lại lúc {when}",
+        "quota_stale": " (dữ liệu cũ)",
+        "last_done": "📝 Hành động cuối: xong · {text}",
+        "last_active": "📝 Hành động cuối: đang chạy (bắt đầu {age} trước)",
+        "last_done_bare": "📝 Hành động cuối: xong ({age} trước)",
+        "prompt": "❓ Đang dừng ở lời nhắc: {text}",
+        "folded": "💤 Còn {count} pane đang rảnh: {names}",
+        "cut": "…còn {count} pane chưa liệt kê; gửi /status trong cuộc trò chuyện của chúng",
+        "default_account": "Tài khoản mặc định",
+        "age_s": "{n} giây", "age_m": "{n} phút", "age_h": "{n} giờ",
+    },
 }
 
 
@@ -109,14 +244,17 @@ def _quota_line(lang: str, quota: dict[str, Any], now: datetime) -> str:
     return line
 
 
-def _account_line(lang: str, account: dict[str, Any]) -> str:
+def _account_line(lang: str, account: dict[str, Any], group: bool) -> str:
+    """The whole email in a direct chat (the user's own); masked anywhere others may read."""
     name = str(account.get("name") or "") or text(lang, "default_account")
-    email = redact.mask_emails(str(account.get("email") or ""))
+    email = str(account.get("email") or "")
+    if group:
+        email = redact.mask_emails(email)
     return text(lang, "account", account=f"{name} · {email}" if email else name)
 
 
 def card(lang: str, row: dict[str, Any], info: dict[str, Any], status_word: Callable[[str], str],
-         now: datetime) -> str:
+         now: datetime, *, group: bool = True) -> str:
     """One pane: ``<status> <name> · <vendor> · <model>`` and its indented facts."""
     head = [str(row["name"])]
     vendor = str(info.get("agent_label") or info.get("agent") or "")
@@ -128,7 +266,7 @@ def card(lang: str, row: dict[str, Any], info: dict[str, Any], status_word: Call
         head.append(f"{model} ({effort})" if effort else model)
     lines = [f"{status_word(row_status(row, info))} {' · '.join(head)}"]
     if info.get("account"):
-        lines.append(_account_line(lang, info["account"]))
+        lines.append(_account_line(lang, info["account"], group))
     if info.get("quota"):
         quota = _quota_line(lang, info["quota"], now)
         if quota:
@@ -151,11 +289,12 @@ def row_status(row: dict[str, Any], info: dict[str, Any]) -> str:
 
 
 def render(lang: str, rows: list[tuple[dict[str, Any], dict[str, Any]]], status_word: Callable[[str], str],
-           *, now: datetime | None = None, budget: int = CARDS_MAX_CHARS) -> str:
+           *, group: bool = True, now: datetime | None = None, budget: int = CARDS_MAX_CHARS) -> str:
     """The card section for ``rows`` (bound pane first), or "" when no pane has facts.
 
     Up to FULL_CARDS_MAX panes each get a card. Beyond that only the first (the bound
     pane) and the active ones do, and the idle rest are folded into one line of names.
+    ``group`` (any chat not known to be direct) masks account emails.
     Cards past ``budget`` characters are dropped whole and counted instead."""
     rows = [r for r in rows if r[1]]  # a pane with no facts adds nothing to its tree line
     if not rows:
@@ -170,7 +309,7 @@ def render(lang: str, rows: list[tuple[dict[str, Any], dict[str, Any]]], status_
     used = len(out[0])
     dropped = 0
     for row, info in full:
-        block = card(lang, row, info, status_word, now)
+        block = card(lang, row, info, status_word, now, group=group)
         if used + len(block) + 1 > budget:
             dropped += 1
             continue

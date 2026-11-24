@@ -96,17 +96,46 @@ def test_headline_window_is_the_one_closest_to_its_limit() -> None:
     assert status_card.headline_window(None) is None
 
 
-async def test_status_reply_carries_the_cards(env: Env) -> None:  # noqa: F811
+def test_a_direct_chat_shows_the_whole_email() -> None:
+    email = "worker" + "@example.com"
+    info = {"agent": "claude", "account": {"name": "工作帳號", "email": email}}
+    assert f"👤 工作帳號 · {email}" in _render([(_row("p1", "main"), info)], group=False)
+    assert email not in _render([(_row("p1", "main"), info)])  # a group (the default) masks it
+
+
+def _email_card(env: Env) -> str:
+    email = "worker" + "@example.com"
+
     async def card(pane_id: str) -> dict[str, Any]:
         return {"agent": "claude", "agent_label": "Claude Code", "model": "claude-opus-5-5",
-                "account": {"name": "工作帳號", "email": "worker" + "@example.com"}}
+                "account": {"name": "工作帳號", "email": email}}
 
     env.m._seams.pane_card = card
+    return email
+
+
+async def test_status_reply_in_a_group_masks_the_email(env: Env) -> None:  # noqa: F811
+    email = _email_card(env)
     await env.inbound("/status")
     status = next(t for t in reversed(env.tg.texts()) if t.startswith("📋"))
     assert "— 分格明細 —" in status
     assert "Claude Code · claude-opus-5-5" in status
-    assert "w***@example.com" in status
+    assert "w***@example.com" in status and email not in status
+
+
+async def test_status_reply_in_a_direct_chat_shows_the_email(env: Env) -> None:  # noqa: F811
+    email = _email_card(env)
+    await env.inbound("/status", direct=True)
+    status = next(t for t in reversed(env.tg.texts()) if t.startswith("📋"))
+    assert f"👤 工作帳號 · {email}" in status
+
+
+async def test_status_cards_follow_the_navide_language(env: Env) -> None:  # noqa: F811
+    env.fake.settings = {"agent-team:language": "ja-JP"}
+    _email_card(env)
+    await env.inbound("/status")
+    status = next(t for t in reversed(env.tg.texts()) if t.startswith("📋"))
+    assert "— pane の詳細 —" in status
 
 
 async def test_a_failing_card_still_answers_status(env: Env) -> None:  # noqa: F811
