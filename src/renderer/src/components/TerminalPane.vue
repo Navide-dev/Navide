@@ -525,7 +525,7 @@ const ssh = useSshReconnect({
   reconnect: () => props.sshReconnect?.() ?? Promise.resolve('other'),
 })
 const sshRetryInSeconds = computed<number | null>(() =>
-  ssh.nextAt.value == null ? null : Math.max(0, Math.ceil((ssh.nextAt.value - sshNow.value) / 1000))
+  ssh.nextAt.value == null ? null : Math.max(0, Math.round((ssh.nextAt.value - sshNow.value) / 1000))
 )
 const sshLabel = computed(() => (props.sshRemote ? sshTargetLabel(props.sshRemote) : ''))
 
