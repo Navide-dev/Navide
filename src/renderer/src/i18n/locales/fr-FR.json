@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "Le pane actif remplit la scène, les autres se replient en fenêtres flottantes dépliables."
+            },
+            "persona": {
+              "behavior": "Chaque volet est une personne à son bureau : taper = en cours, main levée = attend votre réponse, café ou somnole = inactif, écran qui fume = erreur. Chaque onglet est une salle ; avec beaucoup de volets, ouvrez la vue de l'immeuble. Un clic affiche l'état, un double-clic donne le focus à ce volet."
             }
           },
           "p2": "Il existe aussi un comportement que vous ne sélectionnez pas, le <strong>double focus</strong> : quand exactement deux panes tournent, ils se partagent automatiquement l’écran à gauche et à droite, et le séparateur entre eux peut être déplacé.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Filtrer par type",
     "all-stages-finished": "Les {count} étapes se sont terminées avec succès",
     "region-switching": "Passage de {title} à la version {version}…",
-    "region-unavailable": "{title} indisponible"
+    "region-unavailable": "{title} indisponible",
+    "view-mode-persona": "Persona — chaque volet est une personne dans un bureau ; sa posture montre ce qu'il fait"
   },
   "layout": {
     "expand": "Développer le panneau",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Envoi programmé",
     "error-at": "L'heure doit être au format HH:MM",
     "error-tz": "Fuseau horaire inconnu"
+  },
+  "persona": {
+    "rooms-label": "Salles",
+    "people": "{n} personnes",
+    "running": "{n} en cours",
+    "awaiting-count": "{n} attendent votre réponse",
+    "failing-count": "{n} en erreur ou sans quota",
+    "building": "Immeuble",
+    "building-back": "Retour à la salle",
+    "attention": "À traiter",
+    "attention-hint": "{n} · cliquer pour l'état",
+    "canvas-label": "Bureau persona, {n} volets",
+    "empty-room": "Aucun volet dans cette salle",
+    "legend-type": "Taper = en cours",
+    "legend-raise": "Main levée = vous attend",
+    "legend-idle": "Café / somnole = inactif",
+    "legend-error": "Fumée = erreur ou quota épuisé",
+    "close": "Fermer",
+    "waited-under-minute": "moins d'une minute",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Quota épuisé",
+    "quota-low": "Quota sous 40 %",
+    "quota-critical": "Quota sous 15 %",
+    "focus-pane": "Focus sur ce volet",
+    "back-to-grid": "Retour à la grille",
+    "building-label": "Vue de l'immeuble, {rooms} salles, {n} volets",
+    "building-title": "Tout l'immeuble",
+    "failing": "Erreur / quota épuisé",
+    "enter-room": "Entrer dans cette salle",
+    "floor": "{n}e étage"
   }
 }

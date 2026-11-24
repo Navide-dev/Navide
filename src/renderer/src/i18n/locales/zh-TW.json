@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "焦點分格佔滿，其餘收成可展開的浮動小窗。"
+            },
+            "persona": {
+              "behavior": "每個分格是一個坐在辦公桌前的小人：打字＝執行中、舉手＝等你回答、喝咖啡或趴睡＝閒置、螢幕冒煙＝出錯。每個分頁是一間房；分格很多時可開大樓總覽。點一下看狀態，點兩下聚焦那一格。"
             }
           },
           "p2": "另外有一個不用選的行為叫 <strong>dual-focus</strong>：當剛好有兩個分格在跑，它們會自動左右對開，中間那條分隔線可以拖。",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "依類型篩選",
     "all-stages-finished": "{count} 個階段全部順利完成",
     "region-switching": "正在把 {title} 切換到 {version}…",
-    "region-unavailable": "{title} 無法使用"
+    "region-unavailable": "{title} 無法使用",
+    "view-mode-persona": "擬人 — 每個分格是辦公室裡的一個小人，看動作就知道它在做什麼"
   },
   "layout": {
     "expand": "展開面板",
@@ -12736,5 +12740,35 @@
     "digest-sent": "已排入推送",
     "error-at": "時間格式要是 HH:MM",
     "error-tz": "不認得的時區"
+  },
+  "persona": {
+    "rooms-label": "房間",
+    "people": "{n} 人",
+    "running": "{n} 執行中",
+    "awaiting-count": "{n} 人等你回答",
+    "failing-count": "{n} 人出錯或額度用完",
+    "building": "大樓總覽",
+    "building-back": "回到房間",
+    "attention": "需要注意",
+    "attention-hint": "{n} 人 · 點一下看狀態",
+    "canvas-label": "擬人模式辦公室，{n} 個分格",
+    "empty-room": "這間房還沒有分格",
+    "legend-type": "打字＝執行中",
+    "legend-raise": "舉手＝等你回答",
+    "legend-idle": "喝咖啡／趴睡＝閒置",
+    "legend-error": "冒煙＝錯誤或額度用完",
+    "close": "關閉",
+    "waited-under-minute": "不到 1 分鐘",
+    "waited-minutes": "已 {n} 分鐘",
+    "quota-empty": "額度用完",
+    "quota-low": "額度剩 40% 以下",
+    "quota-critical": "額度剩 15% 以下",
+    "focus-pane": "聚焦這格",
+    "back-to-grid": "回到格狀",
+    "building-label": "大樓總覽，{rooms} 間房、{n} 個分格",
+    "building-title": "全大樓",
+    "failing": "錯誤／額度用完",
+    "enter-room": "進入這間房",
+    "floor": "{n}F"
   }
 }

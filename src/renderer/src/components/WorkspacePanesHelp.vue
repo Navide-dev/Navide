@@ -46,6 +46,7 @@ const stageModes: { key: string; glyph: string }[] = [
   { key: 'sidebar', glyph: '◧' },
   { key: 'spotlight', glyph: '◎' },
   { key: 'fullscreen', glyph: '⧉' },
+  { key: 'persona', glyph: '' },
 ]
 
 const layoutPresets: { key: string; labelKey: string }[] = [

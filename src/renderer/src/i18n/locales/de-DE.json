@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "Der fokussierte Bereich füllt die Bühne, die übrigen werden zu aufklappbaren schwebenden Fenstern."
+            },
+            "persona": {
+              "behavior": "Jeder Bereich ist eine Person am Schreibtisch: Tippen = läuft, Hand oben = wartet auf deine Antwort, Kaffee oder Dösen = untätig, rauchender Monitor = Fehler. Jeder Tab ist ein Raum; bei vielen Bereichen gibt es die Gebäudeübersicht. Klick zeigt den Status, Doppelklick fokussiert den Bereich."
             }
           },
           "p2": "Es gibt außerdem ein Verhalten, das Sie nicht auswählen, den <strong>Doppelfokus</strong>: Laufen genau zwei Bereiche, teilen sie sich automatisch links und rechts auf, und der Trenner dazwischen lässt sich ziehen.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Nach Typ filtern",
     "all-stages-finished": "Alle {count} Stufen erfolgreich abgeschlossen",
     "region-switching": "{title} wird auf {version} umgestellt …",
-    "region-unavailable": "{title} nicht verfügbar"
+    "region-unavailable": "{title} nicht verfügbar",
+    "view-mode-persona": "Persona — jeder Bereich ist eine Person im Büro; ihre Haltung zeigt, was er tut"
   },
   "layout": {
     "expand": "Panel aufklappen",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Senden eingeplant",
     "error-at": "Die Uhrzeit muss HH:MM sein",
     "error-tz": "Unbekannte Zeitzone"
+  },
+  "persona": {
+    "rooms-label": "Räume",
+    "people": "{n} Personen",
+    "running": "{n} laufen",
+    "awaiting-count": "{n} warten auf deine Antwort",
+    "failing-count": "{n} mit Fehler oder ohne Kontingent",
+    "building": "Gebäude",
+    "building-back": "Zurück zum Raum",
+    "attention": "Braucht Aufmerksamkeit",
+    "attention-hint": "{n} · Klick für Status",
+    "canvas-label": "Persona-Büro, {n} Bereiche",
+    "empty-room": "Noch keine Bereiche in diesem Raum",
+    "legend-type": "Tippen = läuft",
+    "legend-raise": "Hand oben = wartet auf dich",
+    "legend-idle": "Kaffee / Dösen = untätig",
+    "legend-error": "Rauch = Fehler oder Kontingent leer",
+    "close": "Schließen",
+    "waited-under-minute": "unter einer Minute",
+    "waited-minutes": "{n} Min.",
+    "quota-empty": "Kontingent aufgebraucht",
+    "quota-low": "Kontingent unter 40 %",
+    "quota-critical": "Kontingent unter 15 %",
+    "focus-pane": "Diesen Bereich fokussieren",
+    "back-to-grid": "Zurück zum Raster",
+    "building-label": "Gebäudeübersicht, {rooms} Räume, {n} Bereiche",
+    "building-title": "Ganzes Gebäude",
+    "failing": "Fehler / Kontingent leer",
+    "enter-room": "Diesen Raum betreten",
+    "floor": "{n}. OG"
   }
 }

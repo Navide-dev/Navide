@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "The focused pane fills the stage, the rest collapse into expandable floating windows."
+            },
+            "persona": {
+              "behavior": "Each pane is a person at a desk: typing = running, hand raised = waiting for your answer, coffee or dozing = idle, smoking monitor = error. Each tab is a room; with many panes, open the building overview. Click a person for their status, double-click to focus that pane."
             }
           },
           "p2": "There is also one behavior you do not select, <strong>dual-focus</strong>: when exactly two panes are running they automatically split left and right, and the divider between them can be dragged.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Filter by type",
     "all-stages-finished": "All {count} stages finished successfully",
     "region-switching": "Switching {title} to {version}…",
-    "region-unavailable": "{title} unavailable"
+    "region-unavailable": "{title} unavailable",
+    "view-mode-persona": "Persona — each pane is a person in an office; their pose shows what it is doing"
   },
   "layout": {
     "expand": "Expand Panel",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Push queued",
     "error-at": "Time must be HH:MM",
     "error-tz": "Unknown time zone"
+  },
+  "persona": {
+    "rooms-label": "Rooms",
+    "people": "{n} people",
+    "running": "{n} running",
+    "awaiting-count": "{n} waiting for your answer",
+    "failing-count": "{n} with errors or out of quota",
+    "building": "Building",
+    "building-back": "Back to room",
+    "attention": "Needs attention",
+    "attention-hint": "{n} · click for status",
+    "canvas-label": "Persona office, {n} panes",
+    "empty-room": "No panes in this room yet",
+    "legend-type": "Typing = running",
+    "legend-raise": "Hand up = waiting for you",
+    "legend-idle": "Coffee / dozing = idle",
+    "legend-error": "Smoke = error or out of quota",
+    "close": "Close",
+    "waited-under-minute": "under a minute",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Out of quota",
+    "quota-low": "Quota below 40%",
+    "quota-critical": "Quota below 15%",
+    "focus-pane": "Focus this pane",
+    "back-to-grid": "Back to grid",
+    "building-label": "Building overview, {rooms} rooms, {n} panes",
+    "building-title": "Whole building",
+    "failing": "Error / out of quota",
+    "enter-room": "Enter this room",
+    "floor": "{n}F"
   }
 }

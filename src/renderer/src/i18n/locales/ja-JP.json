@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "フォーカス中のペインがステージ全体に広がり、残りは展開可能なフローティングウィンドウに折りたたまれます。"
+            },
+            "persona": {
+              "behavior": "各ペインは机に向かう人物です：タイピング＝実行中、挙手＝回答待ち、コーヒーや居眠り＝アイドル、モニターから煙＝エラー。タブごとに一部屋。ペインが多いときはビル全景を開けます。クリックで状態、ダブルクリックでそのペインにフォーカス。"
             }
           },
           "p2": "手動で選択しない<strong>デュアルフォーカス</strong>という動作もあります。実行中のペインがちょうど 2 つの場合、自動で左右に分割され、境界をドラッグできます。",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "種類で絞り込み",
     "all-stages-finished": "全 {count} ステージが正常に完了しました",
     "region-switching": "{title} を {version} に切り替えています…",
-    "region-unavailable": "{title} は利用できません"
+    "region-unavailable": "{title} は利用できません",
+    "view-mode-persona": "ペルソナ — 各ペインがオフィスの人物になり、動作で状態がわかります"
   },
   "layout": {
     "expand": "パネルを展開",
@@ -12736,5 +12740,35 @@
     "digest-sent": "送信を予約しました",
     "error-at": "時刻は HH:MM 形式で入力してください",
     "error-tz": "不明なタイムゾーン"
+  },
+  "persona": {
+    "rooms-label": "部屋",
+    "people": "{n} 人",
+    "running": "{n} 実行中",
+    "awaiting-count": "{n} 人が回答待ち",
+    "failing-count": "{n} 人がエラーまたはクォータ切れ",
+    "building": "ビル全景",
+    "building-back": "部屋に戻る",
+    "attention": "要対応",
+    "attention-hint": "{n} 人 · クリックで状態",
+    "canvas-label": "ペルソナオフィス、{n} ペイン",
+    "empty-room": "この部屋にはまだペインがありません",
+    "legend-type": "タイピング＝実行中",
+    "legend-raise": "挙手＝回答待ち",
+    "legend-idle": "コーヒー／居眠り＝アイドル",
+    "legend-error": "煙＝エラーまたはクォータ切れ",
+    "close": "閉じる",
+    "waited-under-minute": "1 分未満",
+    "waited-minutes": "{n} 分",
+    "quota-empty": "クォータ切れ",
+    "quota-low": "クォータ残り 40% 以下",
+    "quota-critical": "クォータ残り 15% 以下",
+    "focus-pane": "このペインにフォーカス",
+    "back-to-grid": "グリッドに戻る",
+    "building-label": "ビル全景、{rooms} 部屋、{n} ペイン",
+    "building-title": "ビル全体",
+    "failing": "エラー／クォータ切れ",
+    "enter-room": "この部屋に入る",
+    "floor": "{n}F"
   }
 }
