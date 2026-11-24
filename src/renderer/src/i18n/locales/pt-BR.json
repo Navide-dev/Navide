@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "O pane em foco preenche o palco e o resto vira janelas flutuantes expansíveis."
+            },
+            "persona": {
+              "behavior": "Cada painel é uma pessoa à mesa: digitando = em execução, mão levantada = aguardando sua resposta, café ou cochilando = ocioso, monitor soltando fumaça = erro. Cada aba é uma sala; com muitos painéis, abra a visão do prédio. Clique para ver o status e clique duas vezes para focar o painel."
             }
           },
           "p2": "Há também um comportamento que você não escolhe, o <strong>foco duplo</strong>: quando exatamente dois panes estão em execução, eles se dividem automaticamente em esquerda e direita, e o divisor entre eles pode ser arrastado.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Todas as {count} etapas foram concluídas com sucesso",
     "region-switching": "Mudando {title} para {version}…",
-    "region-unavailable": "{title} indisponível"
+    "region-unavailable": "{title} indisponível",
+    "view-mode-persona": "Persona — cada painel é uma pessoa em um escritório; a postura mostra o que ele está fazendo"
   },
   "layout": {
     "expand": "Expandir painel",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Envio agendado",
     "error-at": "O horário deve ser HH:MM",
     "error-tz": "Fuso horário desconhecido"
+  },
+  "persona": {
+    "rooms-label": "Salas",
+    "people": "{n} pessoas",
+    "running": "{n} em execução",
+    "awaiting-count": "{n} aguardando sua resposta",
+    "failing-count": "{n} com erro ou sem cota",
+    "building": "Prédio",
+    "building-back": "Voltar à sala",
+    "attention": "Precisa de atenção",
+    "attention-hint": "{n} · clique para ver o status",
+    "canvas-label": "Escritório persona, {n} painéis",
+    "empty-room": "Ainda não há painéis nesta sala",
+    "legend-type": "Digitando = em execução",
+    "legend-raise": "Mão levantada = aguardando você",
+    "legend-idle": "Café / cochilo = ocioso",
+    "legend-error": "Fumaça = erro ou sem cota",
+    "close": "Fechar",
+    "waited-under-minute": "menos de um minuto",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Cota esgotada",
+    "quota-low": "Cota abaixo de 40%",
+    "quota-critical": "Cota abaixo de 15%",
+    "focus-pane": "Focar este painel",
+    "back-to-grid": "Voltar à grade",
+    "building-label": "Visão do prédio, {rooms} salas, {n} painéis",
+    "building-title": "Prédio inteiro",
+    "failing": "Erro / sem cota",
+    "enter-room": "Entrar nesta sala",
+    "floor": "{n}º andar"
   }
 }

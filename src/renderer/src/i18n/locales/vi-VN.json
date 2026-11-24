@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "Pane đang chọn lấp đầy khu vực chính, các pane còn lại thu thành cửa sổ nổi có thể mở rộng."
+            },
+            "persona": {
+              "behavior": "Mỗi ô là một người ngồi ở bàn: gõ phím = đang chạy, giơ tay = chờ bạn trả lời, uống cà phê hoặc ngủ gật = rảnh, màn hình bốc khói = lỗi. Mỗi tab là một phòng; khi có nhiều ô, mở chế độ xem toà nhà. Nhấp để xem trạng thái, nhấp đúp để tập trung vào ô đó."
             }
           },
           "p2": "Còn có một cách hoạt động bạn không chọn, <strong>hai tiêu điểm</strong>: khi có đúng hai pane đang chạy, chúng tự chia trái phải, và có thể kéo đường phân cách giữa chúng.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Lọc theo loại",
     "all-stages-finished": "Đã hoàn tất thành công cả {count} giai đoạn",
     "region-switching": "Đang chuyển {title} sang {version}…",
-    "region-unavailable": "{title} không khả dụng"
+    "region-unavailable": "{title} không khả dụng",
+    "view-mode-persona": "Nhân vật — mỗi ô là một người trong văn phòng; tư thế cho biết ô đang làm gì"
   },
   "layout": {
     "expand": "Mở rộng bảng",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Đã lên lịch gửi",
     "error-at": "Giờ phải có dạng HH:MM",
     "error-tz": "Múi giờ không xác định"
+  },
+  "persona": {
+    "rooms-label": "Phòng",
+    "people": "{n} người",
+    "running": "{n} đang chạy",
+    "awaiting-count": "{n} người chờ bạn trả lời",
+    "failing-count": "{n} người lỗi hoặc hết hạn mức",
+    "building": "Toà nhà",
+    "building-back": "Về phòng",
+    "attention": "Cần chú ý",
+    "attention-hint": "{n} · nhấp để xem trạng thái",
+    "canvas-label": "Văn phòng nhân vật, {n} ô",
+    "empty-room": "Phòng này chưa có ô nào",
+    "legend-type": "Gõ phím = đang chạy",
+    "legend-raise": "Giơ tay = chờ bạn",
+    "legend-idle": "Cà phê / ngủ gật = rảnh",
+    "legend-error": "Khói = lỗi hoặc hết hạn mức",
+    "close": "Đóng",
+    "waited-under-minute": "chưa đến 1 phút",
+    "waited-minutes": "{n} phút",
+    "quota-empty": "Hết hạn mức",
+    "quota-low": "Hạn mức dưới 40%",
+    "quota-critical": "Hạn mức dưới 15%",
+    "focus-pane": "Tập trung vào ô này",
+    "back-to-grid": "Về dạng lưới",
+    "building-label": "Xem toà nhà, {rooms} phòng, {n} ô",
+    "building-title": "Cả toà nhà",
+    "failing": "Lỗi / hết hạn mức",
+    "enter-room": "Vào phòng này",
+    "floor": "Tầng {n}"
   }
 }

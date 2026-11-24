@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
+import PersonaOffice from './components/PersonaOffice.vue'
+import { buildPersonaRooms, quotaStage, type StatusClock } from './lib/persona/personaRooms'
+import type { PersonaRoom } from './lib/persona/personaModel'
 import TerminalPane from './components/TerminalPane.vue'
 import AcpPane from './components/AcpPane.vue'
 import { createAcpHost } from './lib/acpHost'
@@ -48,7 +51,7 @@ import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
-import { isAgentVendor } from './lib/agentIdentity'
+import { agentVendorLabel, isAgentVendor } from './lib/agentIdentity'
 import { awaitingPromptText, MODEL_RESULT_SCREEN_LINES, modelConfirmKeys, modelPickerKeys, modelSwitchDiagnostic, modelSwitchResult, onModelPicker, onModelSwitchConfirm, parseMenuOptions, resolveAnswerKeys, stillOnModelPicker, stillOnModelSwitchConfirm, writeAnswerSteps, type PaneAnswer } from './lib/paneAnswerKeys'
 import { claudePickerLabel, liveModelCommand } from './lib/liveModelSwitch'
 import ResourceSummaryPanel, { type ResourceSummaryRow } from './components/ResourceSummaryPanel.vue'
@@ -102,7 +105,7 @@ import StageTabBar, { type TabItem } from './components/StageTabBar.vue'
 import RunGroupContextMenu from './components/RunGroupContextMenu.vue'
 import { countLivePanes, rollupTabStatus, sameRenderedTabs } from './lib/tabStatus'
 import { sameRenderedPaneViews } from './lib/paneViews'
-import { paneStatusLabelText } from './lib/paneStatusLabel'
+import { paneStatusLabelText, type PaneStatusValue } from './lib/paneStatusLabel'
 import { statusBadgeStyle } from './composables/useStatusBadgePrefs'
 import { useBackend } from './composables/useBackend'
 import { createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
@@ -363,7 +366,7 @@ import {
   type WelcomeFacts,
   type WelcomeTourDecision,
 } from './lib/welcomeTour'
-import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
+import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent, remainingTier, usageFor } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
 import { leaveLimitMenuAndResume } from './lib/claudeLimitMenu'
 import {
@@ -14738,7 +14741,7 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
     themeApi.loadTheme({ theme: resp.project.theme, theme_custom: resp.project.theme_custom })
     settingsApi.loadLanguage({ language: (resp.project as { language?: string }).language })
     const savedMode = resp.project.layout_mode
-    if (savedMode === 'auto' || savedMode === 'grid' || savedMode === 'spotlight' || savedMode === 'fullscreen') {
+    if (savedMode === 'auto' || savedMode === 'grid' || savedMode === 'spotlight' || savedMode === 'fullscreen' || savedMode === 'persona') {
       layoutMode.value = savedMode
     } else {
       layoutMode.value = 'grid'
@@ -25548,8 +25551,74 @@ const effectiveLayoutMode = computed<'grid' | 'spotlight' | 'sidebar' | 'fullscr
   if (m === 'spotlight') return 'spotlight'
   // fullscreen → focus pane 100%, others as floating overlays
   if (m === 'fullscreen') return 'fullscreen'
+  // persona → the office drawn over the stage; the terminals stay laid out
+  // as the grid underneath (hidden), so entering and leaving reflows nothing.
   return 'grid'
 })
+
+// ── Persona mode: rooms = stage tabs, people = panes ─────────────────────────
+const personaStatusClock: StatusClock = new Map()
+const personaRooms = computed<PersonaRoom[]>(() => {
+  if (layoutMode.value !== 'persona') return []
+  // Status read exactly as stageTabs reads it (paneViews, disconnected wins).
+  const disconnected = new Set(disconnectedPaneIds.value)
+  const viewById = new Map(paneViews.value.map((v) => [v.id, v]))
+  const paneById = new Map(panes.value.map((p) => [p.id, p]))
+  void usageVersion.value
+  return buildPersonaRooms({
+    tabs: stageTabShapes.value,
+    stagePaneIds: panesOnStage.value.map((p) => p.id),
+    fallbackLabel: i18n.global.t('label.default'),
+    statusOf: (id) => disconnected.has(id)
+      ? 'disconnected'
+      : ((viewById.get(id)?.status as PaneStatusValue | undefined) ?? (paneById.get(id)?.realized ? 'starting' : 'waiting')),
+    factsOf: (id) => {
+      const p = paneById.get(id)
+      if (!p) return null
+      const view = viewById.get(id)
+      const name = agentPaneName(p)
+      const ref = paneRefs[id] as unknown as {
+        awaitingHeld?: () => { since: number }
+        lastActivityAt?: number
+      } | null
+      const status = view?.status
+      const since = status === 'awaiting'
+        ? ref?.awaitingHeld?.().since
+        : status === 'idle' ? ref?.lastActivityAt : undefined
+      const snap = usageFor(p.agentKey)
+      const remaining = remainingPercent(snap)
+      return {
+        name,
+        vendor: agentVendorLabel(p.agentKey),
+        agentColor: agentConsole.paneInfo(id, p.agentKey, name)?.color ?? null,
+        quota: quotaStage(remaining === null ? null : remainingTier(remaining), p.usageLimitAt != null || isExhausted(snap)),
+        since,
+      }
+    },
+    clock: personaStatusClock,
+    now: Date.now(),
+  })
+})
+
+/** The question an awaiting pane holds: the pipeline's parsed question when
+ *  it has one, else the last lines on its screen (where a CLI's prompt box is). */
+function personaQuestionFor(id: string): string {
+  const q = activeQuestion.value
+  if (q?.paneId === id && q.questions.length) return q.questions.map((x) => x.prompt).join('\n')
+  const ref = paneRefs[id] as unknown as { readScreenTail?: (n: number) => string } | null
+  const tail = ref?.readScreenTail?.(8) ?? ''
+  return tail.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim()).slice(-4).join('\n')
+}
+
+function onPersonaFocusPane(id: string): void {
+  onUserChangeLayoutMode('spotlight')
+  onFocusPane(id)
+}
+
+function onPersonaBackToGrid(id: string): void {
+  onUserChangeLayoutMode('grid')
+  onFocusPane(id)
+}
 
 // After any layout mode change, refit all terminals once the browser has
 // finished laying out the new grid — ResizeObserver alone is unreliable when
@@ -27160,7 +27229,19 @@ function paneIsCommander(p: ActivePane): boolean {
           </button>
         </div>
       </div>
-      <div v-else class="grid" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
+      <div v-else class="grid" :class="{ 'grid--persona': layoutMode === 'persona' }" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
+        <!-- Persona mode draws the office over the grid; the panes keep their
+             grid layout underneath (hidden), so nothing reflows. -->
+        <PersonaOffice
+          v-if="layoutMode === 'persona'"
+          :rooms="personaRooms"
+          :active-room-key="activeTab"
+          :focus-pane-id="focusPaneId"
+          :question-for="personaQuestionFor"
+          @select-room="(key) => { void onUserSelectTab(key) }"
+          @focus-pane="onPersonaFocusPane"
+          @back-to-grid="onPersonaBackToGrid"
+        />
         <!-- Column splitter handles (grid mode only) -->
         <div
           v-for="(pos, i) in colHandlePositions"
@@ -29015,6 +29096,10 @@ function paneIsCommander(p: ActivePane): boolean {
   flex: 1;
   min-height: 0;
   position: relative;
+}
+/* Persona mode: the office covers the stage; panes stay laid out, unseen. */
+.grid--persona > :not(.persona) {
+  visibility: hidden;
 }
 /* Grid pane splitter handles */
 .grid-handle {

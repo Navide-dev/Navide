@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "포커스된 pane이 스테이지를 가득 채우고, 나머지는 펼칠 수 있는 플로팅 창으로 접혀요."
+            },
+            "persona": {
+              "behavior": "각 창은 책상에 앉은 사람입니다: 타이핑 = 실행 중, 손 들기 = 답변 대기, 커피나 졸기 = 유휴, 모니터 연기 = 오류. 탭마다 방 하나이며, 창이 많으면 건물 전체 보기를 열 수 있습니다. 클릭하면 상태, 더블클릭하면 그 창에 포커스."
             }
           },
           "p2": "직접 고르지 않는 동작도 하나 있어요. <strong>이중 포커스</strong>: pane이 정확히 두 개 실행 중이면 자동으로 좌우로 나뉘며, 사이의 구분선을 드래그할 수 있어요.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "유형별 필터",
     "all-stages-finished": "Stage {count}개가 모두 성공적으로 끝났어요",
     "region-switching": "{title}을(를) {version}(으)로 전환하는 중…",
-    "region-unavailable": "{title}을(를) 사용할 수 없어요"
+    "region-unavailable": "{title}을(를) 사용할 수 없어요",
+    "view-mode-persona": "페르소나 — 각 창이 사무실의 사람이 되어 동작으로 상태를 보여 줍니다"
   },
   "layout": {
     "expand": "패널 펼치기",
@@ -12736,5 +12740,35 @@
     "digest-sent": "전송을 예약했습니다",
     "error-at": "시간은 HH:MM 형식이어야 합니다",
     "error-tz": "알 수 없는 시간대"
+  },
+  "persona": {
+    "rooms-label": "방",
+    "people": "{n}명",
+    "running": "{n} 실행 중",
+    "awaiting-count": "{n}명 답변 대기",
+    "failing-count": "{n}명 오류 또는 할당량 소진",
+    "building": "건물 보기",
+    "building-back": "방으로 돌아가기",
+    "attention": "확인 필요",
+    "attention-hint": "{n}명 · 클릭하여 상태 보기",
+    "canvas-label": "페르소나 사무실, 창 {n}개",
+    "empty-room": "이 방에는 아직 창이 없습니다",
+    "legend-type": "타이핑 = 실행 중",
+    "legend-raise": "손 들기 = 답변 대기",
+    "legend-idle": "커피 / 졸기 = 유휴",
+    "legend-error": "연기 = 오류 또는 할당량 소진",
+    "close": "닫기",
+    "waited-under-minute": "1분 미만",
+    "waited-minutes": "{n}분",
+    "quota-empty": "할당량 소진",
+    "quota-low": "할당량 40% 이하",
+    "quota-critical": "할당량 15% 이하",
+    "focus-pane": "이 창에 포커스",
+    "back-to-grid": "그리드로 돌아가기",
+    "building-label": "건물 보기, 방 {rooms}개, 창 {n}개",
+    "building-title": "건물 전체",
+    "failing": "오류 / 할당량 소진",
+    "enter-room": "이 방으로 들어가기",
+    "floor": "{n}층"
   }
 }

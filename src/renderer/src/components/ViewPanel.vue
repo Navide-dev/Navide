@@ -1,5 +1,5 @@
 <script setup lang="ts">
-export type LayoutMode = 'auto' | 'grid' | 'spotlight' | 'fullscreen'
+export type LayoutMode = 'auto' | 'grid' | 'spotlight' | 'fullscreen' | 'persona'
 
 defineProps<{ modelValue: LayoutMode }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: LayoutMode): void }>()
@@ -12,6 +12,8 @@ const modes: [LayoutMode, string, string][] = [
   ['auto',       '◧', 'label.view-mode-sidebar'],
   ['spotlight',  '◎', 'label.view-mode-spotlight'],
   ['fullscreen', '⧉', 'label.view-mode-fullscreen'],
+  // Glyph drawn in CSS (.persona-ico): no text glyph reads as "a person".
+  ['persona',    '',  'label.view-mode-persona'],
 ]
 </script>
 
@@ -24,7 +26,7 @@ const modes: [LayoutMode, string, string][] = [
       :title="$t(titleKey)"
       :aria-pressed="modelValue === mode"
       @click="emit('update:modelValue', mode)"
-    >{{ icon }}</button>
+    ><span v-if="mode === 'persona'" class="persona-ico" aria-hidden="true" /><template v-else>{{ icon }}</template></button>
   </div>
 </template>
 
@@ -55,6 +57,14 @@ const modes: [LayoutMode, string, string][] = [
 .mode-btn:hover {
   background: var(--bg-muted);
   color: var(--text-primary);
+}
+.persona-ico {
+  width: 10px;
+  height: 12px;
+  background:
+    radial-gradient(circle at 50% 50%, currentColor 2.6px, transparent 3px) 50% 0 / 10px 6px no-repeat,
+    linear-gradient(currentColor, currentColor) 50% 100% / 10px 5px no-repeat;
+  border-radius: 0 0 2px 2px;
 }
 .mode-btn.active {
   background: color-mix(in srgb, var(--accent-emphasis) 20%, transparent);

@@ -4750,6 +4750,9 @@
             },
             "fullscreen": {
               "behavior": "El pane con el foco llena el escenario y el resto se contraen en ventanas flotantes desplegables."
+            },
+            "persona": {
+              "behavior": "Cada panel es una persona en su escritorio: teclear = en ejecución, mano levantada = espera tu respuesta, café o dormitando = inactivo, monitor humeante = error. Cada pestaña es una sala; con muchos paneles, abre la vista del edificio. Haz clic para ver el estado y doble clic para enfocar ese panel."
             }
           },
           "p2": "Hay además un comportamiento que no eliges, el <strong>doble foco</strong>: cuando hay exactamente dos panes en ejecución, se reparten automáticamente a izquierda y derecha, y el separador entre ellos se puede arrastrar.",
@@ -8266,7 +8269,8 @@
     "filter-by-type": "Filtrar por tipo",
     "all-stages-finished": "Las {count} etapas terminaron correctamente",
     "region-switching": "Cambiando {title} a {version}…",
-    "region-unavailable": "{title} no disponible"
+    "region-unavailable": "{title} no disponible",
+    "view-mode-persona": "Persona — cada panel es una persona en una oficina; su postura muestra lo que hace"
   },
   "layout": {
     "expand": "Desplegar panel",
@@ -12736,5 +12740,35 @@
     "digest-sent": "Envío en cola",
     "error-at": "La hora debe ser HH:MM",
     "error-tz": "Zona horaria desconocida"
+  },
+  "persona": {
+    "rooms-label": "Salas",
+    "people": "{n} personas",
+    "running": "{n} en ejecución",
+    "awaiting-count": "{n} esperan tu respuesta",
+    "failing-count": "{n} con error o sin cuota",
+    "building": "Edificio",
+    "building-back": "Volver a la sala",
+    "attention": "Requiere atención",
+    "attention-hint": "{n} · clic para ver el estado",
+    "canvas-label": "Oficina persona, {n} paneles",
+    "empty-room": "Aún no hay paneles en esta sala",
+    "legend-type": "Teclear = en ejecución",
+    "legend-raise": "Mano arriba = te espera",
+    "legend-idle": "Café / dormitando = inactivo",
+    "legend-error": "Humo = error o sin cuota",
+    "close": "Cerrar",
+    "waited-under-minute": "menos de un minuto",
+    "waited-minutes": "{n} min",
+    "quota-empty": "Sin cuota",
+    "quota-low": "Cuota por debajo del 40 %",
+    "quota-critical": "Cuota por debajo del 15 %",
+    "focus-pane": "Enfocar este panel",
+    "back-to-grid": "Volver a la cuadrícula",
+    "building-label": "Vista del edificio, {rooms} salas, {n} paneles",
+    "building-title": "Todo el edificio",
+    "failing": "Error / sin cuota",
+    "enter-room": "Entrar en esta sala",
+    "floor": "Planta {n}"
   }
 }

@@ -11211,7 +11211,7 @@ async def project_set_layout_mode(session: "Session", msg_id: str, msg_type: str
 
     ws_raw = payload.get("workspace_path", "") or ""
     mode = payload.get("layout_mode", "grid")
-    if mode not in ("auto", "grid", "spotlight", "fullscreen"):
+    if mode not in ("auto", "grid", "spotlight", "fullscreen", "persona"):
         mode = "grid"
     await run_in_db_thread(app.project_store.set_layout_mode, ws_raw, mode)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
