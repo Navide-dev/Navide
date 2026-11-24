@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "인터페이스의 모든 버튼 아이콘 — 이름, 위치, 누르면 하는 일."
+        },
+        "general-scheduler-runs": {
+          "title": "예약 하루 실행 횟수",
+          "summary": "예약 작업과 agent 작업이 하루에 몇 번 실행되는지"
         }
       },
       "no-results": "일치하는 설정이 없어요"
@@ -7203,7 +7207,8 @@
       "settings-management": "설정 관리",
       "experimental": "실험 기능",
       "theme": "테마",
-      "other": "기타"
+      "other": "기타",
+      "scheduler": "예약"
     },
     "p2p": {
       "title": "연결",
@@ -7946,6 +7951,17 @@
       "all-off-delivery": "이제 메시지는 받는 pane이 유휴 상태가 될 때까지 기다렸다가 입력되므로 도착하는 데 더 오래 걸려요.",
       "all-off-rewake": "유휴 agent를 깨우는 방법은 Claude Code의 rewake뿐이에요. 이를 끄면 agent가 스스로 유휴 상태로 돌아올 때까지 기다릴 수밖에 없어요.",
       "all-off-restart": "이미 실행 중인 pane은 다시 시작할 때까지 처음 시작한 채널을 유지해요."
+    },
+    "scheduler": {
+      "hint": "예약 작업이 하루에 몇 번 실행되는지 정합니다. 기본값은 Navide가 지금까지 사용해 온 값입니다.",
+      "per-job": "작업별 하루 실행 횟수",
+      "per-job-hint": "하루 횟수를 따로 정하지 않은 작업에 적용됩니다.",
+      "agent-job": "agent 작업 하나의 하루 실행 횟수",
+      "agent-job-hint": "agent가 만든 작업 하나가 하루에 실행되는 최대 횟수입니다.",
+      "agent-total": "agent 작업 전체의 하루 실행 횟수",
+      "agent-total-hint": "agent가 만든 모든 작업의 합계입니다. 대상 CLI의 할당량이 소진된 회차는 계속 건너뜁니다.",
+      "no-cap": "제한 없음",
+      "save-failed": "예약 설정을 저장하지 못했습니다"
     }
   },
   "label": {
@@ -9601,7 +9617,9 @@
       "remove": "삭제",
       "remove-confirm": "이 예약 작업을 삭제할까요?",
       "cancel": "취소",
-      "save": "저장"
+      "save": "저장",
+      "max-runs-follow": "설정: {n}",
+      "max-runs-follow-none": "설정: 제한 없음"
     },
     "owner": {
       "user": "사용자가 만듦",

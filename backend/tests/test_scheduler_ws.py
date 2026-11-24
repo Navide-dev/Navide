@@ -198,3 +198,16 @@ async def test_keep_stops_an_agent_job_from_expiring(wired) -> None:
     reply = await call(session, "scheduler.keep", {"id": job["id"]})
     assert reply["payload"]["job"]["owner"] == {"kind": "external", "expires_at": None}
     assert changed(wired["events"])[0][1] is session
+
+
+async def test_settings_get_and_set(wired) -> None:
+    session = _Session()
+    reply = await call(session, "scheduler.settings.get", {})
+    assert reply["payload"] == {"ok": True, "settings": {
+        "max_runs_per_day": 24, "agent_max_runs_per_day": 288, "agent_runs_per_day": 300,
+    }}
+    reply = await call(session, "scheduler.settings.set", {"settings": {"agent_runs_per_day": None}})
+    assert reply["payload"]["settings"]["agent_runs_per_day"] is None
+    assert len(changed(wired["events"])) == 1
+    reply = await call(session, "scheduler.settings.set", {"settings": {"max_runs_per_day": 0}})
+    assert reply["ok"] is False and reply["error"]["code"] == "BAD_REQUEST"

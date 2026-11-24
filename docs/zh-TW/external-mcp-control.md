@@ -682,7 +682,9 @@ Pipeline 的執行則不受影響。`workspace_path` 指的是「要檢查哪個
 WS 訊息）同一個後端排程器，所以在這裡建立的 job 會立刻出現在面板上 —— 每次變更都會廣播
 `scheduler.changed`。job **只在 Navide 執行中觸發**；App 關閉期間錯過的槽，下次啟動時補跑一次
 （`catch_up: "once"`，預設）或直接略過（`"skip"`）。無人值守會燒額度：每個 job 每日最多執行
-`max_runs_per_day` 次（預設 24），失敗時退避 30s → 1m → 5m → 15m → 60m。
+`max_runs_per_day` 次（job 自己的 policy 值，沒有就照使用者的設定，預設 24），失敗時退避 30s → 1m → 5m → 15m → 60m。
+這個每日次數，以及下表兩個 agent 執行次數（288 與 300），都由使用者在「設定 → 排程」調整，也可以選不限制；
+`scheduler_list` 的 `limits` 會回報目前的值（不限制時為 `null`）。
 
 | Tool | 參數 | 作用 |
 |---|---|---|

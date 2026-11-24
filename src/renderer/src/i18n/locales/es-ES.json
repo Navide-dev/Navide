@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Todos los iconos de botón de la interfaz: cómo se llaman, dónde están y qué hace cada uno al pulsarlo."
+        },
+        "general-scheduler-runs": {
+          "title": "Ejecuciones diarias del programador",
+          "summary": "Cuántas veces al día se ejecutan las tareas programadas y las de agents"
         }
       },
       "no-results": "No hay ajustes que coincidan"
@@ -7203,7 +7207,8 @@
       "settings-management": "Gestión de ajustes",
       "experimental": "Funciones experimentales",
       "theme": "Tema",
-      "other": "Otros"
+      "other": "Otros",
+      "scheduler": "Programador"
     },
     "p2p": {
       "title": "Conexión",
@@ -7946,6 +7951,17 @@
       "all-off-delivery": "Ahora un mensaje espera a que el pane receptor quede inactivo y luego se escribe en él, así que tarda más en llegar.",
       "all-off-rewake": "El despertar de Claude Code es la única forma de despertar a un agent inactivo; si está desactivado, no queda más que esperar a que el agent vuelva a estar inactivo por sí solo.",
       "all-off-restart": "Un pane que ya está en ejecución conserva el canal con el que se inició hasta que se reinicie."
+    },
+    "scheduler": {
+      "hint": "Cuántas veces al día se ejecutan las tareas programadas. Los valores predeterminados son los que Navide ha usado siempre.",
+      "per-job": "Ejecuciones al día por tarea",
+      "per-job-hint": "Para las tareas que no fijan su propio número diario.",
+      "agent-job": "Ejecuciones al día por tarea de agent",
+      "agent-job-hint": "El máximo de veces al día que se ejecuta una tarea creada por un agent.",
+      "agent-total": "Ejecuciones al día entre todas las tareas de agents",
+      "agent-total-hint": "Todas las tareas creadas por agents, sumadas. Una ejecución cuya CLI de destino no tiene cuota se sigue omitiendo.",
+      "no-cap": "Sin tope",
+      "save-failed": "No se pudo guardar el ajuste del programador"
     }
   },
   "label": {
@@ -9601,7 +9617,9 @@
       "remove": "Eliminar",
       "remove-confirm": "¿Eliminar esta tarea programada?",
       "cancel": "Cancelar",
-      "save": "Guardar"
+      "save": "Guardar",
+      "max-runs-follow": "Ajustes: {n}",
+      "max-runs-follow-none": "Ajustes: sin tope"
     },
     "owner": {
       "user": "creada por ti",

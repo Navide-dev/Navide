@@ -130,6 +130,26 @@ def test_login_shell_order_wins_for_entries_already_on_path(monkeypatch):
 
 
 @_needs_login_shell_probe
+def test_isolated_backend_keeps_its_launchers_path_first(monkeypatch, tmp_path):
+    """Dev web mode's isolated backend gets PATH=<run dir>/bin:... from its
+    launcher so stand-ins there (a fake `ssh`, `security`) win. The login
+    shell's /usr/bin used to be moved ahead of it, so the real ssh ran."""
+    _no_fallbacks(monkeypatch)
+    run_bin = tmp_path / "bin"
+    run_bin.mkdir()
+    fake = run_bin / "ssh"
+    fake.write_text("#!/bin/sh\nexit 0\n")
+    fake.chmod(0o755)
+    monkeypatch.setenv("AGENT_TEAM_ISOLATED_HOME", "1")
+    monkeypatch.setenv("PATH", f"{run_bin}:/usr/bin:/bin")
+    shell_path = "/opt/homebrew/bin:/usr/bin:/bin"
+    with patch("subprocess.run", return_value=_make_run_result(_probe_output(shell_path))):
+        _refresh_path_from_login_shell()
+    assert os.environ["PATH"].split(os.pathsep) == [str(run_bin), "/usr/bin", "/bin", "/opt/homebrew/bin"]
+    assert shutil.which("ssh") == str(fake)
+
+
+@_needs_login_shell_probe
 def test_entries_only_the_process_has_follow_the_login_shell_ones(monkeypatch):
     """Nothing the process PATH carries is dropped; it just no longer outranks
     what the user's own terminal would resolve first."""

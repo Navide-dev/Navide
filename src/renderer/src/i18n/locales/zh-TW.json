@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "介面上每一顆按鈕圖示——它叫什麼名字、出現在哪裡、按下去會發生什麼事。"
+        },
+        "general-scheduler-runs": {
+          "title": "排程每日次數",
+          "summary": "排程與 agent 排程每天執行幾次"
         }
       },
       "no-results": "找不到相符設定"
@@ -7203,7 +7207,8 @@
       "settings-management": "設定管理",
       "experimental": "實驗功能",
       "theme": "主題",
-      "other": "其他"
+      "other": "其他",
+      "scheduler": "排程"
     },
     "p2p": {
       "title": "連線",
@@ -7946,6 +7951,17 @@
       "all-off-delivery": "訊息會排隊等收件的分格回到閒置，再用打字的方式注入，因此延遲變大。",
       "all-off-rewake": "Claude Code 的 rewake 是喚醒閒置 agent 的唯一手段，關閉後只能等它自己回到閒置。",
       "all-off-restart": "已經開著的分格會保留原本的通道，直到重新啟動。"
+    },
+    "scheduler": {
+      "hint": "排程每天執行幾次。預設值和 Navide 一直以來的做法相同。",
+      "per-job": "每個排程每天最多幾次",
+      "per-job-hint": "排程沒有自己設定每日次數時，照這個值。",
+      "agent-job": "Agent 建的單一排程每天最多幾次",
+      "agent-job-hint": "由 agent 建立的任一個排程，一天最多執行的次數。",
+      "agent-total": "Agent 建的所有排程每天加總最多幾次",
+      "agent-total-hint": "所有由 agent 建立的排程加總。目標 CLI 額度用完時，那一次仍會略過。",
+      "no-cap": "不限制",
+      "save-failed": "排程設定沒有存成功"
     }
   },
   "label": {
@@ -9601,7 +9617,9 @@
       "remove": "刪除",
       "remove-confirm": "確定刪除這個排程工作？",
       "cancel": "取消",
-      "save": "儲存"
+      "save": "儲存",
+      "max-runs-follow": "設定：{n}",
+      "max-runs-follow-none": "設定：不限制"
     },
     "owner": {
       "user": "由你建立",

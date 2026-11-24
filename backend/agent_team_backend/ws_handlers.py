@@ -14310,6 +14310,28 @@ async def scheduler_list(session: "Session", msg_id: str, msg_type: str, payload
     )
 
 
+@handler("scheduler.settings.get")
+async def scheduler_settings_get(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's run counts (Settings → Scheduler); None means no cap."""
+    from . import scheduler
+
+    settings = await scheduler.get_service().settings()
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "settings": settings}))
+
+
+@handler("scheduler.settings.set")
+async def scheduler_settings_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Change any of the run counts: ``settings`` holds the keys that change."""
+    from . import scheduler
+
+    try:
+        result = await scheduler.get_service().set_settings(payload.get("settings"))
+    except scheduler.JobInvalid as err:
+        await _scheduler_bad_request(session, msg_id, msg_type, str(err))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("scheduler.upsert")
 async def scheduler_upsert(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Create (no id) or update (with id) a job; the definition is validated

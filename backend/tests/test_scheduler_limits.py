@@ -318,6 +318,7 @@ async def test_mcp_limit_answer_and_list_limits(env) -> None:
     await plan_mcp.scheduler_upsert(job(env), _pane_ctx("a"))
     limits = (await plan_mcp.scheduler_list(_pane_ctx("a")))["limits"]
     assert limits == {
+        "max_runs_per_day": 24,
         "agent_enabled_per_owner": 10, "agent_enabled_total": 100, "agent_enabled": 1,
         "agent_min_every_ms": 300_000, "agent_max_runs_per_day": 288,
         "agent_runs_per_day": 300, "agent_runs_today": 0,
@@ -333,9 +334,99 @@ async def test_v2_database_gains_the_usage_table(tmp_path: Path) -> None:
     db.migrate("scheduler", 1, _create_scheduler_schema)
     db.migrate("scheduler", 2, _add_owners)
     store = SchedulerStore(db)
-    assert db.schema_version("scheduler") == 3
+    assert db.schema_version("scheduler") >= 3
     await store.add_usage("2027-01-01")
     await store.add_usage("2027-01-01")
     await store.add_usage("2027-01-02")
     assert (await store.usage("2027-01-01"), await store.usage("2027-01-02")) == (0, 1)
+    db.close()
+
+
+# ── the run counts are the user's settings ───────────────────────────────
+
+
+async def scheduled_runs(env, job_id: str, slots: int) -> list[tuple[str, str | None]]:
+    for _ in range(slots):
+        env.clock.advance_ms(MINUTE)
+        await env.service.tick()
+        await settle(env)
+    runs = (await env.service.runs(job_id))["runs"]
+    return [(r["status"], r.get("reason")) for r in reversed(runs)]
+
+
+async def test_settings_default_to_the_old_constants_and_validate(env) -> None:
+    assert await env.service.settings() == {
+        "max_runs_per_day": 24, "agent_max_runs_per_day": 288, "agent_runs_per_day": 300,
+    }
+    changed = await env.service.set_settings({"max_runs_per_day": None, "agent_runs_per_day": 1000})
+    assert changed["settings"] == {
+        "max_runs_per_day": None, "agent_max_runs_per_day": 288, "agent_runs_per_day": 1000,
+    }
+    for bad in ({"max_runs_per_day": 0}, {"agent_max_runs_per_day": 1441}, {"agent_runs_per_day": "x"}, []):
+        with pytest.raises(sched_mod.JobInvalid):
+            await env.service.set_settings(bad)
+    # Persisted: a fresh service over the same database reads them back.
+    fresh = SchedulerService(SchedulerStore(env.db), clock=env.clock, bridge=env.bridge)
+    assert (await fresh.settings())["agent_runs_per_day"] == 1000
+    limits = (await env.service.list())["limits"]
+    assert (limits["max_runs_per_day"], limits["agent_runs_per_day"]) == (None, 1000)
+
+
+async def test_a_job_without_its_own_cap_follows_the_setting(env) -> None:
+    fast = job(env, schedule={"kind": "every", "every_ms": MINUTE})
+    saved = (await env.service.upsert(fast))["job"]
+    assert "max_runs_per_day" not in saved["policy"]
+    await env.service.set_settings({"max_runs_per_day": 2})
+    statuses = await scheduled_runs(env, saved["id"], 3)
+    assert [s for s, _ in statuses] == ["ok", "ok", "skipped"]
+    assert statuses[2][1] == "budget"
+    # No cap at all: the job keeps running.
+    await env.service.set_settings({"max_runs_per_day": None})
+    statuses = await scheduled_runs(env, saved["id"], 2)
+    assert [s for s, _ in statuses[-2:]] == ["ok", "ok"]
+
+
+async def test_agent_caps_follow_the_settings_and_may_be_off(env) -> None:
+    me = agent(env, "a")
+    await env.service.set_settings({"agent_max_runs_per_day": 10})
+    greedy = await env.service.upsert(job(env, policy={"max_runs_per_day": 11}), me)
+    assert (greedy["limit"], greedy["max"], greedy["used"]) == ("max_runs_per_day", 10, 11)
+    await env.service.set_settings({"agent_max_runs_per_day": None})
+    assert (await env.service.upsert(job(env, policy={"max_runs_per_day": 1440}), me))["ok"] is True
+    # The agents' daily total off: run_now is never refused for it.
+    mine = (await env.service.upsert(job(env), me))["job"]
+    await fill_usage(env, AGENT_RUNS_PER_DAY_TOTAL)
+    assert (await env.service.run_now(mine["id"], me))["code"] == "SCHEDULER_LIMIT"
+    await env.service.set_settings({"agent_runs_per_day": None})
+    assert await env.service.run_now(mine["id"], me) == {"ok": True, "enqueued": True}
+    await settle(env)
+
+
+async def test_an_agent_job_following_the_setting_still_meets_the_agent_cap(env) -> None:
+    me = agent(env, "a")
+    mine = (await env.service.upsert(job(env, schedule={"kind": "every", "every_ms": 5 * MINUTE}), me))["job"]
+    await env.service.set_settings({"max_runs_per_day": None, "agent_max_runs_per_day": 1})
+    statuses = await scheduled_runs(env, mine["id"], 10)
+    assert [s for s, _ in statuses] == ["ok", "skipped"]
+
+
+async def test_v3_database_drops_the_old_default_cap(tmp_path: Path) -> None:
+    from agent_team_backend.scheduler_store import _add_owners, _create_scheduler_schema, _create_usage
+
+    db = Database(tmp_path / "navide.db")
+    db.migrate("scheduler", 1, _create_scheduler_schema)
+    db.migrate("scheduler", 2, _add_owners)
+    db.migrate("scheduler", 3, _create_usage)
+    with db.transaction() as cur:
+        for job_id, policy in (("a", '{"catch_up":"once","max_runs_per_day":24,"timeout_s":1800}'),
+                               ("b", '{"catch_up":"once","max_runs_per_day":5,"timeout_s":1800}')):
+            cur.execute(
+                "INSERT INTO scheduler_jobs (id, name, enabled, created_at, updated_at, schedule, action,"
+                " policy, state) VALUES (?, 'j', 1, 0, 0, '{}', '{}', ?, '{}')",
+                (job_id, policy),
+            )
+    store = SchedulerStore(db)
+    assert db.schema_version("scheduler") == 4
+    assert (await store.get_job("a"))["policy"] == {"catch_up": "once", "timeout_s": 1800}
+    assert (await store.get_job("b"))["policy"]["max_runs_per_day"] == 5
     db.close()
