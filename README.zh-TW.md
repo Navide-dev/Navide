@@ -190,7 +190,7 @@ Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS �
 
 ## 為 Navide 開發外掛
 
-自己做一個 Navide 外掛，上架到 [Navide Marketplace](https://marketplace.navide.dev/)。`navide-plugin init --template vue` 五分鐘就有一個可以建置的外掛（Navide 0.2.47 起），用 Developer Mode 不必上架就能載入試用；在 [developers.navide.dev](https://developers.navide.dev/developer) 實名申請一次，通過審核後即可發佈。
+自己做一個 Navide 外掛，上架到 [Navide Marketplace](https://marketplace.navide.dev/)。`navide-plugin init --template vue` 五分鐘就有一個可以建置的外掛（Navide 0.2.39 起），用 Developer Mode 不必上架就能載入試用；在 [developers.navide.dev](https://developers.navide.dev/developer) 實名申請一次，通過審核後即可發佈。
 從英文版 [Build for Navide](docs/en-US/build-for-navide.md) 開始，一頁講完整個流程；問題請到 [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)。
 
 ## 文件與深入閱讀

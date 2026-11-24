@@ -28,24 +28,25 @@ manifest rules the Registry enforces, see
 
 ### Install the CLI
 
-The packages are not on npm yet. Install them from the GitHub Release
-[`plugin-packages-1.0.0`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.0)
+The packages are distributed only as GitHub Release files, not through npm or
+PyPI. Install them from the newest `plugin-packages-*` release,
+[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
 (its notes list each file's SHA-256), the same files Navide's own plugins
 build against:
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0
-npm install --save-dev $R/navide-plugin-contracts-1.0.0.tgz $R/navide-plugin-sdk-1.0.0.tgz
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
+npm install --save-dev $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
 npx navide-plugin
 ```
 
 Before a project exists, run the CLI straight from the release:
-`npx --yes --package $R/navide-plugin-contracts-1.0.0.tgz --package $R/navide-plugin-sdk-1.0.0.tgz navide-plugin init …`
+`npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz navide-plugin init …`
 (see [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)).
-Publication to npm is a later release step,
-`scripts/publish-public-packages.sh`, under one shared 1.x version with a
-[twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x).
-To try an unreleased build, pack them from a Navide checkout instead:
+The packages keep one shared 1.x version with a
+[twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x);
+a new version is a new `plugin-packages-<version>` release. To try an
+unreleased build, pack them from a Navide checkout instead:
 
 ```bash
 # in the Navide checkout
@@ -54,8 +55,8 @@ scripts/publish-public-packages.sh        # dry run: builds and packs into dist/
 
 # in your plugin project
 npm init -y
-npm install --save-dev <checkout>/dist/npm/navide-plugin-contracts-1.0.0.tgz \
-  <checkout>/dist/npm/navide-plugin-sdk-1.0.0.tgz
+npm install --save-dev <checkout>/dist/npm/navide-plugin-contracts-<version>.tgz \
+  <checkout>/dist/npm/navide-plugin-sdk-<version>.tgz
 npx navide-plugin
 ```
 
@@ -570,7 +571,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | 預覽版 | Testplace | 本機安裝 |
 |---|---|---|---|
-| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（每個 Navide 外掛最多 100 位） | 你把 `.vsix` 檔案寄給的任何人 |
+| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（人數沒有上限） | 你把 `.vsix` 檔案寄給的任何人 |
 | 審核 | 和正式版相同的審核 | 受邀測試者只跑自動掃描；公開測試碼另有輕量人工審核 | 沒有；Navide 不會掃描 |
 | Navide 市集簽章 | 有 | 有 | 沒有（最多只有發佈者自己的簽章） |
 | Navide 裡的標記 | 「預覽版（已審核）」 | 「測試版，沒有人工審核，*日期* 到期」 | 「本機檔案」，並註明未經 Navide 審核 |
@@ -581,7 +582,7 @@ Testplace needs Navide 0.2.27 or later on the tester's side.
 
 | | プレリリース版 | Testplace | ローカルインストール |
 |---|---|---|---|
-| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（Navide プラグインごとに最大 100 人） | `.vsix` ファイルを受け取った人なら誰でも |
+| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（人数の上限なし） | `.vsix` ファイルを受け取った人なら誰でも |
 | 審査 | 正式版と同じ審査 | 招待テスターは自動スキャンのみ。公開テストコードには簡易な人による審査が加わります | なし。Navide はスキャンしません |
 | Navide マーケットプレイスの署名 | あり | あり | なし（あっても発行者自身の署名のみ） |
 | Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
@@ -631,9 +632,9 @@ navide-plugin testplace invite list acme.files
   it is approved it becomes an ordinary stable or pre-release version (by its
   SemVer), and testers keep it without reinstalling.
 
-## 7. Extension packs
+## 7. Navide Plugin Packs
 
-An Extension Pack installs a set of plugins together. It is a manifest with
+A Navide Plugin Pack installs a set of plugins together. It is a manifest with
 `extensionPack` and nothing else to run:
 
 ```json
@@ -661,14 +662,16 @@ category.
 
 Yanking withdraws a version on every target: Navide no longer installs it or
 updates to it, and it accepts no further targets. Copies already installed are
-not removed. Use a dashboard token (or the one `login` stored) as
-`NAVIDE_PLUGIN_TOKEN`; the header goes to `curl` on standard input so the
-token stays out of the process list:
+not removed. In Navide, use the yank button on Settings → Navide Marketplace
+→ Developer; from a terminal, the CLI reads `NAVIDE_PLUGIN_TOKEN` or the token
+`login` stored:
 
 ```bash
-printf 'Authorization: Bearer %s\n' "$NAVIDE_PLUGIN_TOKEN" \
-  | curl -sS -X POST -H @- https://server.navide.dev/registry/api/extensions/acme/hello/0.2.0-beta.1/yank
+navide-plugin yank acme.hello@0.2.0-beta.1 --yes
+navide-plugin yank acme.hello@0.3.0 --yes --channel testplace   # the Testplace build of that version
 ```
+
+Without `--yes` it only says what the yank would do.
 
 A yank cannot be undone; publish a new version instead.
 
@@ -765,6 +768,7 @@ navide-plugin status [<namespace.name>[@<version>]] [--registry <url>] [--json]
 navide-plugin logout [--registry <url>]
 navide-plugin publish <package> [--registry <url>] [--target <target>] [--signature <file-or-value>] [--channel testplace] [--insecure-http]
 navide-plugin publish <package.vsix> --via-navide [--target <target>] [--no-browser]
+navide-plugin yank <namespace.name>@<version> --yes [--channel testplace] [--registry <url>]
 navide-plugin testplace invite add <namespace.name> <label>... | invite list <namespace.name> | invite revoke <namespace.name> <invite-id>
 navide-plugin testplace code create <namespace.name> --max-testers <n> | code list <namespace.name> | code revoke <namespace.name> <code-id>
 navide-plugin testplace versions <namespace.name> | revoke <namespace.name> <version> [--reason <text>] | promote <namespace.name> <version>

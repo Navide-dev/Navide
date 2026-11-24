@@ -4,6 +4,7 @@
 // one agent tool that calls it, a test suite, and a `check` script that runs
 // `validate` and `scan` on the staged package. Everything the files do is
 // explained in the generated README; the generator itself only spells them.
+import { readFileSync } from 'node:fs'
 
 const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 // A tool name is `<prefix>_<name>`; the prefix is the id's last segment with
@@ -12,8 +13,11 @@ const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 const TOOL_PREFIX = /^[a-z][a-z0-9]{1,15}$/
 const MIN_NAVIDE = '>=0.2.39'
 // The public packages are not on npm; first-party plugins install these pinned
-// GitHub Release tarballs too (sha256 in that release's notes).
-const PLUGIN_PACKAGES_RELEASE = 'https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0'
+// GitHub Release tarballs too (sha256 in that release's notes). The scaffold
+// pins the release this SDK itself came from: the three packages share one
+// version, so the SDK's own package.json names the release.
+const SDK_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+const PLUGIN_PACKAGES_RELEASE = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${SDK_VERSION}`
 
 export function vueTemplateNames(id) {
   if (!PLUGIN_ID.test(id)) throw new Error(`plugin id '${id}' must be <namespace>.<name> in lowercase letters, digits and hyphens`)
@@ -86,8 +90,8 @@ export function vueTemplateFiles(id, name) {
         typecheck: 'vue-tsc --noEmit -p tsconfig.json',
       },
       dependencies: {
-        '@navide/plugin-contracts': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-contracts-1.0.0.tgz`,
-        '@navide/plugin-sdk': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-sdk-1.0.0.tgz`,
+        '@navide/plugin-contracts': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-contracts-${SDK_VERSION}.tgz`,
+        '@navide/plugin-sdk': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-sdk-${SDK_VERSION}.tgz`,
         vue: '^3.5.43',
       },
       devDependencies: {
