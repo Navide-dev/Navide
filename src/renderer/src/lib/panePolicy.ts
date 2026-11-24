@@ -19,6 +19,12 @@ export interface PolicyRule {
   from: { memberId: string; deviceId: string }
   to: { workspace: string; paneName: string }
   action: 'allow'
+  /** Set on a rule written for another organization's machine: it applies
+   *  only through that grant, and must survive every rewrite of the document
+   *  or the rule would outlive the grant (backend pane_policy.for_grant). */
+  grantId?: string
+  /** When a grant-tagged rule was allowed; kept through rewrites like grantId. */
+  grantedAt?: number
 }
 
 export interface PolicyDocument {
@@ -42,7 +48,15 @@ function readRule(raw: unknown): PolicyRule | null {
   const workspace = text(to.workspace)
   const paneName = text(to.paneName)
   if (!memberId || !deviceId || !workspace || !paneName) return null
-  return { from: { memberId, deviceId }, to: { workspace, paneName }, action: 'allow' }
+  const grantId = text(rule.grantId)
+  const grantedAt = typeof rule.grantedAt === 'number' && Number.isFinite(rule.grantedAt) ? rule.grantedAt : undefined
+  return {
+    from: { memberId, deviceId },
+    to: { workspace, paneName },
+    action: 'allow',
+    ...(grantId ? { grantId } : {}),
+    ...(grantId && grantedAt !== undefined ? { grantedAt } : {}),
+  }
 }
 
 /**
@@ -88,12 +102,27 @@ export function makeRule(input: {
   }
 }
 
+/**
+ * Whether a rule can also let a machine paired through an organization in.
+ *
+ * Shown, not restricted: such a rule is the user's own, and the format denies
+ * by default. A rule tagged with a grant is that organization pairing's own;
+ * one naming this account's member is not reachable by an organization
+ * machine (it is judged by the member its grant named). Everything else —
+ * a wildcard member, or another account's member — may be.
+ */
+export function mayApplyToOrgMachines(rule: PolicyRule, ownMemberId: string): boolean {
+  if (rule.grantId) return false
+  return rule.from.memberId === ANY || rule.from.memberId !== text(ownMemberId)
+}
+
 export function sameRule(a: PolicyRule, b: PolicyRule): boolean {
   return (
     a.from.memberId === b.from.memberId &&
     a.from.deviceId === b.from.deviceId &&
     a.to.workspace === b.to.workspace &&
-    a.to.paneName === b.to.paneName
+    a.to.paneName === b.to.paneName &&
+    (a.grantId ?? '') === (b.grantId ?? '')
   )
 }
 

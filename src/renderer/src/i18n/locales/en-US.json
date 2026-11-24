@@ -308,6 +308,7 @@
       "effort-label": "Effort",
       "effort-default": "Vendor default",
       "shadowed-by-command": "This CLI has a launch command set (Settings → CLI Agents). That line runs as written and Navide adds no model or effort to it, so neither can be picked here. Put the model in the launch command, or clear it.",
+      "effort-conflict": "The model id already names the \"{suffix}\" level, but \"{effort}\" is picked as the effort. Some CLIs (such as agy) refuse this combination at launch. Use the id without the level suffix, or set the effort to {suffix}.",
       "refuse": {
         "model-unsupported": "\"{agent}\" cannot be given a model at launch; opened this way it falls back to its default model. Remove the model and switch models inside the CLI instead.",
         "effort-unsupported": "\"{agent}\" has no separate effort setting. Remove the effort; if this CLI encodes the level in the model id (e.g. gpt-5.3-codex-high), put it in the model instead.",
@@ -6808,7 +6809,8 @@
         "aria": "Navide Cloud sections",
         "sync": "Sync",
         "share": "Share",
-        "devices": "Devices"
+        "devices": "Devices",
+        "org": "Organizations"
       },
       "inventory": {
         "title": "This machine and the cloud",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "Replace the Link Now",
         "rekeyed-old-alive": "New link copied. The server did not confirm the old link stopped; revoke it if it must not open.",
         "refresh": "Refresh"
+      },
+      "org": {
+        "title": "Organizations you can pair with",
+        "intro": "Your organization {org} is linked with the organizations below. Only machines their members chose to share are listed. Pairing still uses the six-digit comparison, and is done only when both sides press Match.",
+        "intro-generic": "Your organization is linked with the organizations below. Only machines their members chose to share are listed. Pairing still uses the six-digit comparison, and is done only when both sides press Match.",
+        "manage": "Manage on teams.navide.dev",
+        "manage-failed": "Could not open the organization site: {reason}",
+        "not-joined": "Not in an organization yet. Once you join or create one, machines shared by linked organizations appear here.",
+        "not-exposed": "Not in an organization yet, or this machine is not shared with one. You can view and set this up on teams.navide.dev.",
+        "machines": "{count} machines shared",
+        "linked": "Linked",
+        "owner": "Owner {name}",
+        "state-pending": "Not paired",
+        "state-trusted": "Paired",
+        "state-blocked": "Blocked",
+        "reason-link-revoked": "Organization link revoked",
+        "reason-member-removed": "Member removed from the organization",
+        "reason-exposure-withdrawn": "No longer shared",
+        "reason-org-deleted": "Organization deleted",
+        "reason-lapsed": "Organization link expired",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "Pairings with every machine of this organization are back to “not approved”, and messages from them are no longer delivered. The records stay below. To restore, link the organizations again on teams.navide.dev, then pair with six digits again.",
+        "repair-hint": "Link the organizations again on teams.navide.dev, then pair with six digits again",
+        "pair": "Pair",
+        "unpair": "Unpair",
+        "offline-title": "Pairing needs both machines online",
+        "footer": "Pairing only confirms who the other side is. After pairing, which panes their messages may reach is still decided by the rules for who may instruct this device, which deny by default.",
+        "from-org": "From organization {org}",
+        "field-org": "Organization",
+        "field-owner": "Owner",
+        "field-device": "Machine",
+        "knock-paired": "Paired (organization)",
+        "knock-hint": "Machines from other organizations appear here only after pairing. If the organization link is revoked, this rule lapses with it.",
+        "allow-one": "Allow this pane",
+        "refresh": "Refresh",
+        "loading": "Loading…",
+        "paired-on": "Paired on {when}",
+        "pairing-elsewhere": "Six-digit comparison in progress — check both machines",
+        "same-org-title": "Members of your organization · {org}",
+        "same-org-hint": "Machines that members of your own organization chose to share. Pairing still uses the six-digit comparison and is done only when both sides press Match.",
+        "same-org-badge": "Same organization",
+        "same-org-tag": "Member of your organization · {org}",
+        "knock-paired-same": "Paired (same organization)",
+        "state-pairing": "Comparing",
+        "state-ended": "Pairing ended",
+        "revoked-since": "since {when}",
+        "offline-note": "The other machine is offline; pairing can finish once it is online",
+        "act-failed": "Not completed: {reason}",
+        "manage-opening": "Opening…",
+        "manage-hint-signin": "sign this machine in to Navide Cloud, then try again.",
+        "manage-hint-unreachable": "the organization site could not be reached right now; try again in a moment.",
+        "reshare-hint": "Its owner can share this machine again on teams.navide.dev; pair with six digits after that",
+        "rejoin-hint": "Once its owner is back in the organization and shares this machine, pair with six digits again"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} cannot read its trust record right now, so it refused this pairing and the pairing has ended. On {device}, deal with the “Navide Cloud is stopped” card in the account window (for example, press “Start Over”), then press “Pair” again.",
         "failed-remote-policy-denied": "{device} refused this pairing, so it has ended. This machine may be on the block list on {device}; check there in the account window, then press “Pair” again.",
         "failed-remote-unauthenticated": "{device} could not verify this pairing’s signature, so it refused it and the pairing has ended. Make sure both machines run the latest Navide, then press “Pair” again.",
-        "failed-remote-pairing-refused": "{device} refused this pairing, so it has ended. Usually {device} already has a pairing in progress (for example, both sides pressed “Pair” at once). Wait for it to finish or cancel it on {device}, then press “Pair” again.",
+        "failed-remote-pairing-refused": "{device} refused this pairing, so it has ended. Usually {device} already has a pairing in progress (for example, both sides pressed “Pair” at once). Wait for it to finish or cancel it on {device}, then press “Pair” again. It may also be that the two machines are on different accounts and not linked through an organization; link them on teams.navide.dev first.",
         "failed-remote-other": "{device} refused this pairing ({reason}), so it has ended. Press “Pair” to try again.",
         "busy": "A pairing with {device} is still in progress and ends by itself in about {minutes} min. To start over now, press “Cancel Request” in the Pairing section above, then press “Pair” again.",
         "trust-unavailable-start": "This machine cannot read its trust record right now, so pairing cannot succeed. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start Over”), then press “Pair”."
@@ -7264,7 +7319,9 @@
         "my-account": "My account",
         "any-member": "Any account",
         "any-device": "Any device",
-        "any": "any"
+        "any": "any",
+        "org-note": "This rule also applies to machines paired through an organization",
+        "grant-note": "Allowed through an organization; it lapses if the organizations are unlinked"
       },
       "account": {
         "tab-login": "Sign In",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "Yes, Erase and Start Over",
         "rebuild-cancel": "Keep It Stopped",
         "rebuild-done": "The trust record was cleared. Pair your devices again when you are ready.",
-        "locked-retrying": "This may be temporary — a locked keychain or a dismissed permission dialog reads the same way from here. It is still being retried; if it clears, nothing was lost."
+        "locked-retrying": "This may be temporary — a locked keychain or a dismissed permission dialog reads the same way from here. It is still being retried; if it clears, nothing was lost.",
+        "approve-trust-unavailable": "This machine cannot read its trust record right now, so no rule was written. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start Over”), then allow the request again.",
+        "state-revoked": "Organization link revoked"
       },
       "link": {
         "pause": "Turn Off",

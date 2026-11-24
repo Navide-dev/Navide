@@ -82,6 +82,11 @@ class RemotePane:
     #: field is compared against the pin and never replaces it, so a server that
     #: swaps it makes the device unreachable rather than impersonable.
     device_sign_public_key: str = ""
+    #: Set only on a row reachable through a cross-organisation grant: the
+    #: other organisation's name and the person whose machine it is. Rows from
+    #: this account's own machines carry neither, exactly as before.
+    org_name: str = ""
+    owner_name: str = ""
 
     @property
     def device_label(self) -> str:
@@ -127,6 +132,10 @@ class RemotePane:
             "status": self.status,
             # Which segment is down, so a report can say so (2026-11-22).
             **({"offline_reason": self.offline_reason} if self.offline else {}),
+            # Another organisation's machine: say whose, so an agent never
+            # mistakes it for one of this account's own.
+            **({"org": self.org_name} if self.org_name else {}),
+            **({"owner": self.owner_name} if self.owner_name else {}),
         }
 
     @property
@@ -180,6 +189,8 @@ def _pane_from_row(row: dict[str, Any]) -> RemotePane | None:
         host_online=bool(row.get("hostOnline")),
         device_public_key=_text(row.get("devicePublicKey")),
         device_sign_public_key=_text(row.get("deviceSignPublicKey")),
+        org_name=_text((row.get("peerOrg") or {}).get("name")) if isinstance(row.get("peerOrg"), dict) else "",
+        owner_name=_text(row.get("hostOwnerName")) if row.get("grantId") else "",
     )
 
 

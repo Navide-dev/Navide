@@ -308,6 +308,7 @@
       "effort-label": "Esforço",
       "effort-default": "Padrão do fornecedor",
       "shadowed-by-command": "Esta CLI tem um comando de inicialização definido (Configurações → Agents de CLI). Essa linha é executada como está escrita e o Navide não acrescenta modelo nem esforço a ela; por isso, nenhum dos dois pode ser escolhido aqui. Coloque o modelo no comando de inicialização ou limpe-o.",
+      "effort-conflict": "O id do modelo já indica o nível \"{suffix}\", mas o esforço escolhido é \"{effort}\". Algumas CLIs (como o agy) recusam essa combinação ao iniciar. Use o id sem o sufixo de nível ou defina o esforço como {suffix}.",
       "refuse": {
         "model-unsupported": "Não é possível informar um modelo a “{agent}” na inicialização; aberto assim, ele volta ao modelo padrão. Remova o modelo e troque de modelo dentro da CLI.",
         "effort-unsupported": "“{agent}” não tem uma configuração de esforço separada. Remova o esforço; se esta CLI codifica o nível no id do modelo (ex.: gpt-5.3-codex-high), coloque-o no modelo.",
@@ -6808,7 +6809,8 @@
         "aria": "Seções do Navide Cloud",
         "sync": "Sincronização",
         "share": "Compartilhar",
-        "devices": "Dispositivos"
+        "devices": "Dispositivos",
+        "org": "Organizações"
       },
       "inventory": {
         "title": "Esta máquina e a nuvem",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "Substituir o link agora",
         "rekeyed-old-alive": "Novo link copiado. O servidor não confirmou que o link antigo parou de funcionar; revogue-o se ele não puder ser aberto.",
         "refresh": "Atualizar"
+      },
+      "org": {
+        "title": "Organizações para parear",
+        "intro": "Sua organização {org} está vinculada às organizações abaixo. Só aparecem as máquinas que os membros delas escolheram compartilhar. O pareamento continua usando a comparação de seis dígitos e só termina quando os dois lados tocam em “Coincidem”.",
+        "intro-generic": "Sua organização está vinculada às organizações abaixo. Só aparecem as máquinas que os membros delas escolheram compartilhar. O pareamento continua usando a comparação de seis dígitos e só termina quando os dois lados tocam em “Coincidem”.",
+        "manage": "Gerenciar em teams.navide.dev",
+        "manage-failed": "Não foi possível abrir o site da organização: {reason}",
+        "not-joined": "Você ainda não está em uma organização. Ao entrar ou criar uma, as máquinas compartilhadas pelas organizações vinculadas aparecem aqui.",
+        "not-exposed": "Você ainda não está em uma organização, ou esta máquina não está compartilhada com nenhuma. Veja e configure em teams.navide.dev.",
+        "machines": "{count} máquinas compartilhadas",
+        "linked": "Vinculada",
+        "owner": "Proprietário {name}",
+        "state-pending": "Não pareada",
+        "state-trusted": "Pareada",
+        "state-blocked": "Bloqueada",
+        "reason-link-revoked": "Vínculo de organização revogado",
+        "reason-member-removed": "Membro removido da organização",
+        "reason-exposure-withdrawn": "Não é mais compartilhada",
+        "reason-org-deleted": "Organização excluída",
+        "reason-lapsed": "Vínculo de organização expirado",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "Os pareamentos com todas as máquinas desta organização voltaram para “não aprovado” e as mensagens delas não são mais entregues. O histórico fica abaixo. Para restaurar, vincule as organizações de novo em teams.navide.dev e pareie outra vez com seis dígitos.",
+        "repair-hint": "Vincule as organizações de novo em teams.navide.dev e pareie outra vez com seis dígitos",
+        "pair": "Parear",
+        "unpair": "Desfazer pareamento",
+        "offline-title": "O pareamento precisa das duas máquinas online",
+        "footer": "Parear só confirma quem é o outro lado. Depois disso, quais painéis as mensagens deles alcançam continua definido pelas regras de quem pode dar instruções a este dispositivo, que negam por padrão.",
+        "from-org": "Da organização {org}",
+        "field-org": "Organização",
+        "field-owner": "Proprietário",
+        "field-device": "Máquina",
+        "knock-paired": "Pareada (organização)",
+        "knock-hint": "Máquinas de outras organizações só aparecem aqui depois do pareamento. Se o vínculo de organização for revogado, esta regra perde o efeito junto.",
+        "allow-one": "Permitir este painel",
+        "refresh": "Atualizar",
+        "loading": "Carregando…",
+        "paired-on": "Pareada em {when}",
+        "pairing-elsewhere": "Comparação de seis dígitos em andamento — confira nas duas máquinas",
+        "same-org-title": "Membros da sua organização · {org}",
+        "same-org-hint": "Máquinas que membros da sua própria organização escolheram compartilhar. O pareamento continua usando a comparação de seis dígitos e só termina quando os dois lados tocam em “Coincidem”.",
+        "same-org-badge": "Mesma organização",
+        "same-org-tag": "Membro da sua organização · {org}",
+        "knock-paired-same": "Pareada (mesma organização)",
+        "state-pairing": "Comparando",
+        "state-ended": "Pareamento encerrado",
+        "revoked-since": "desde {when}",
+        "offline-note": "A outra máquina está offline; o pareamento termina quando ela ficar online",
+        "act-failed": "Não concluído: {reason}",
+        "manage-opening": "Abrindo…",
+        "manage-hint-signin": "confira se esta máquina está conectada ao Navide Cloud e tente de novo.",
+        "manage-hint-unreachable": "não foi possível alcançar o site da organização agora; tente de novo em instantes.",
+        "reshare-hint": "Quando o dono compartilhar esta máquina de novo em teams.navide.dev, pareie outra vez com seis dígitos",
+        "rejoin-hint": "Quando o dono voltar à organização e compartilhar esta máquina, pareie outra vez com seis dígitos"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} não consegue ler o registro de confiança agora, então recusou este pareamento e ele terminou. Em {device}, resolva o cartão “O Navide Cloud está parado” na janela da conta (por exemplo, pressione “Recomeçar”) e depois pressione “Parear” de novo.",
         "failed-remote-policy-denied": "{device} recusou este pareamento, então ele terminou. Esta máquina pode estar na lista de bloqueio de {device}; verifique lá na janela da conta e depois pressione “Parear” de novo.",
         "failed-remote-unauthenticated": "{device} não conseguiu verificar a assinatura deste pareamento, então o recusou e ele terminou. Confira se as duas máquinas usam o Navide mais recente e depois pressione “Parear” de novo.",
-        "failed-remote-pairing-refused": "{device} recusou este pareamento, então ele terminou. Normalmente {device} já tem um pareamento em andamento (por exemplo, os dois lados pressionaram “Parear” ao mesmo tempo). Espere ele terminar ou cancele-o em {device} e depois pressione “Parear” de novo.",
+        "failed-remote-pairing-refused": "{device} recusou este pareamento, então ele terminou. Normalmente {device} já tem um pareamento em andamento (por exemplo, os dois lados pressionaram “Parear” ao mesmo tempo). Espere ele terminar ou cancele-o em {device} e depois pressione “Parear” de novo. Também pode ser que as duas máquinas estejam em contas diferentes e não vinculadas por uma organização; vincule-as primeiro em teams.navide.dev.",
         "failed-remote-other": "{device} recusou este pareamento ({reason}), então ele terminou. Pressione “Parear” para tentar de novo.",
         "busy": "Um pareamento com {device} ainda está em andamento e termina sozinho em cerca de {minutes} min. Para recomeçar agora, pressione “Cancelar solicitação” na seção Pareamento acima e depois pressione “Parear” de novo.",
         "trust-unavailable-start": "Esta máquina não consegue ler o registro de confiança agora, então o pareamento não pode dar certo. Resolva primeiro o cartão “O Navide Cloud está parado” abaixo (por exemplo, pressione “Recomeçar”) e depois pressione “Parear”."
@@ -7264,7 +7319,9 @@
         "my-account": "Minha conta",
         "any-member": "Qualquer conta",
         "any-device": "Qualquer dispositivo",
-        "any": "qualquer"
+        "any": "qualquer",
+        "org-note": "Esta regra também vale para máquinas pareadas por meio de uma organização",
+        "grant-note": "Permitida por meio de uma organização; deixa de valer se as organizações forem desvinculadas"
       },
       "account": {
         "tab-login": "Entrar",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "Sim, apagar e recomeçar",
         "rebuild-cancel": "Manter parado",
         "rebuild-done": "O registro de confiança foi limpo. Pareie seus dispositivos de novo quando quiser.",
-        "locked-retrying": "Isto pode ser temporário: um chaveiro bloqueado ou uma caixa de permissão dispensada têm a mesma aparência daqui. Ainda há novas tentativas; se resolver, nada terá sido perdido."
+        "locked-retrying": "Isto pode ser temporário: um chaveiro bloqueado ou uma caixa de permissão dispensada têm a mesma aparência daqui. Ainda há novas tentativas; se resolver, nada terá sido perdido.",
+        "approve-trust-unavailable": "Esta máquina não consegue ler o registro de confiança agora, então nenhuma regra foi gravada. Resolva primeiro o cartão “O Navide Cloud está parado” abaixo (por exemplo, pressione “Recomeçar”) e depois permita a solicitação de novo.",
+        "state-revoked": "Vínculo de organização revogado"
       },
       "link": {
         "pause": "Desativar",

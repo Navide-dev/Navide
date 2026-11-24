@@ -210,8 +210,13 @@ class AccessRequests:
         device_name: str,
         workspace: str,
         pane_name: str,
+        grant_id: str = "",
     ) -> dict[str, Any]:
-        """Note a refused attempt and return the row as it now stands."""
+        """Note a refused attempt and return the row as it now stands.
+
+        ``grant_id`` is the organisation grant the sender was paired through,
+        kept so the knock is still known to come from one when the pin cannot
+        be read later."""
         self._evict()
         key = f"{device_id}\n{workspace}\n{pane_name}"
         now = time.time()
@@ -232,6 +237,12 @@ class AccessRequests:
         # now, not the one it had the first time it knocked.
         if device_name:
             row["deviceName"] = device_name
+        # Overwritten every time, cleared when absent: the row says how the
+        # sender is paired *now*, never how it was paired some earlier time.
+        if grant_id:
+            row["grantId"] = grant_id
+        else:
+            row.pop("grantId", None)
         row["lastSeenAt"] = now
         row["attempts"] = int(row["attempts"]) + 1
         return dict(row)

@@ -1555,6 +1555,7 @@ def pin_paired_device(
     enc_key: str,
     member_id: str,
     own_member_id: str = "",
+    org: dict[str, str] | None = None,
 ) -> bool:
     """Write the pin a completed pairing earns. Blocking; call off the loop.
 
@@ -1577,6 +1578,13 @@ def pin_paired_device(
     the signing key — and a reader that needs the encryption key treats its
     absence as "not pinned", not as "ask the directory".
 
+    ``org`` is set when the pairing ran through a cross-organisation grant
+    (``org_peers.pin_org``). The pin then carries that ``grantId`` and where
+    it came from, which is what lets a later revocation of that one grant
+    downgrade exactly these pins — see ``revoke_org_pins``. A pin without it
+    is one of this account's own and no grant can touch it. Re-pairing a pin a
+    grant downgraded records the grant it was paired through this time.
+
     Returns whether anything changed.
     """
     with _lock:
@@ -1588,7 +1596,18 @@ def pin_paired_device(
         if isinstance(existing, dict):
             if existing.get("approved") is True:
                 return False
+            # A pin a grant earned is approved again only through a grant;
+            # without one it would be approved still carrying the old grant.
+            if existing.get("grantId") and not (org and org.get("grantId")):
+                return False
             existing["approved"] = True
+            if org and org.get("grantId"):
+                existing["grantId"] = org["grantId"]
+                existing["org"] = _pin_org_fields(org)
+                existing.pop("orgRevoked", None)
+                # When it was approved again: one-click rules from before
+                # this belong to the pairing a grant ended (pane_policy.for_grant).
+                existing["reapprovedAt"] = time.time()
             _save_locked(state)
             return True
         if len(pins) >= MAX_DEVICES:
@@ -1602,6 +1621,9 @@ def pin_paired_device(
             # pin left unapproved here would be a state nobody asked for.
             "approved": True,
         }
+        if org and org.get("grantId"):
+            pins[device_id]["grantId"] = org["grantId"]
+            pins[device_id]["org"] = _pin_org_fields(org)
         if not _fits_with_reserve_locked(state):
             del pins[device_id]
             raise TrustStoreFull(_FULL_MESSAGE)
@@ -1755,6 +1777,11 @@ def unapproved_devices() -> list[dict[str, Any]]:
         for device_id, pin in pins.items():
             if not isinstance(pin, dict) or pin.get("approved") is True:
                 continue
+            # An organisation pin is unapproved only because its grant went
+            # away, and the answer to that is on the organisation view (pair
+            # again once the organisations are linked again), not here.
+            if pin.get("grantId"):
+                continue
             out.append(
                 {
                     "deviceId": device_id,
@@ -1768,6 +1795,114 @@ def unapproved_devices() -> list[dict[str, Any]]:
                 }
             )
         out.sort(key=lambda row: (row.get("at") or 0))
+        return out
+
+
+def _pin_org_fields(org: dict[str, str]) -> dict[str, str]:
+    return {
+        "orgId": str(org.get("orgId") or "")[:200],
+        "orgName": str(org.get("orgName") or "")[:200],
+        "ownerName": str(org.get("ownerName") or "")[:200],
+        "sameOrg": org.get("sameOrg") is True,
+    }
+
+
+def _downgrade_locked(pin: dict[str, Any], *, reason: str, at: int) -> bool:
+    if pin.get("approved") is not True and pin.get("orgRevoked"):
+        return False
+    pin["approved"] = False
+    pin["orgRevoked"] = {"reason": reason, "at": at}
+    return True
+
+
+def revoke_org_pins(
+    grant_id: str,
+    *,
+    device_ids: list[str] | None,
+    local_device_id: str,
+    reason: str,
+    at: int,
+) -> list[str]:
+    """Downgrade the pins one grant earned. Blocking; call off the loop.
+
+    ``device_ids`` None is the whole grant; a list is the devices taken out of
+    it, which downgrades a pin when the peer is listed or when *this* device is
+    (it was the one taken out, so every pin it holds through the grant goes).
+
+    Downgraded, never deleted: ``approved`` goes False and the pin keeps its
+    keys, its history and a note of why, so the view can say what happened and
+    the device is refused as not paired rather than met as a stranger. Pins
+    without a ``grantId`` — this account's own machines — are never touched.
+    Returns the device ids that changed.
+    """
+    if not grant_id:
+        return []
+    with _lock:
+        state = _load_locked()
+        hit_self = device_ids is not None and bool(local_device_id) and local_device_id in device_ids
+        changed: list[str] = []
+        for device_id, pin in state["pins"].items():
+            if not isinstance(pin, dict) or pin.get("grantId") != grant_id:
+                continue
+            if device_ids is not None and not hit_self and device_id not in device_ids:
+                continue
+            if _downgrade_locked(pin, reason=reason, at=at):
+                changed.append(device_id)
+        if changed:
+            _save_locked(state)
+        return changed
+
+
+def reconcile_org_pins(live: dict[str, set[str]], *, reason: str, at: int) -> list[str]:
+    """Downgrade organisation pins the server no longer vouches for.
+
+    *live* is grantId -> the peer devices a fresh ``peers.list`` lists. A pin
+    whose grant is missing (revoked while this machine was offline, or
+    expired), or whose device the grant no longer lists, is downgraded exactly
+    as a revocation would. Only grant-bearing pins are read. Blocking.
+    """
+    with _lock:
+        state = _load_locked()
+        changed: list[str] = []
+        for device_id, pin in state["pins"].items():
+            if not isinstance(pin, dict):
+                continue
+            grant_id = pin.get("grantId")
+            if not grant_id or pin.get("approved") is not True:
+                continue
+            if device_id in live.get(grant_id, set()):
+                continue
+            if _downgrade_locked(pin, reason=reason, at=at):
+                changed.append(device_id)
+        if changed:
+            _save_locked(state)
+        return changed
+
+
+def org_pins() -> list[dict[str, Any]]:
+    """Every pin taken through an organisation grant. Never raises."""
+    with _lock:
+        state = _try_load() if _state is None else _state
+        pins = (state or {}).get("pins") or {}
+        out = []
+        for device_id, pin in pins.items():
+            if not isinstance(pin, dict) or not pin.get("grantId"):
+                continue
+            org = pin.get("org") if isinstance(pin.get("org"), dict) else {}
+            revoked = pin.get("orgRevoked") if isinstance(pin.get("orgRevoked"), dict) else None
+            out.append(
+                {
+                    "deviceId": device_id,
+                    "grantId": str(pin.get("grantId")),
+                    "orgId": str(org.get("orgId") or ""),
+                    "orgName": str(org.get("orgName") or ""),
+                    "ownerName": str(org.get("ownerName") or ""),
+                    "sameOrg": org.get("sameOrg") is True,
+                    "approved": pin.get("approved") is True,
+                    "pairedAt": pin.get("at"),
+                    "revoked": dict(revoked) if revoked else None,
+                }
+            )
         return out
 
 

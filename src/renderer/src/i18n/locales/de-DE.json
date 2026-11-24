@@ -308,6 +308,7 @@
       "effort-label": "Aufwand",
       "effort-default": "Standard des Anbieters",
       "shadowed-by-command": "Für diese CLI ist ein Startbefehl festgelegt („Einstellungen → CLI-Agents“). Diese Zeile wird unverändert ausgeführt und Navide fügt weder Modell noch Aufwand hinzu, daher kann hier beides nicht gewählt werden. Tragen Sie das Modell in den Startbefehl ein oder leeren Sie ihn.",
+      "effort-conflict": "Die Modell-ID nennt bereits die Stufe „{suffix}“, als Aufwand ist aber „{effort}“ gewählt. Manche CLIs (etwa agy) lehnen diese Kombination beim Start ab. Verwenden Sie die ID ohne Stufen-Suffix oder setzen Sie den Aufwand auf {suffix}.",
       "refuse": {
         "model-unsupported": "„{agent}“ kann beim Start kein Modell erhalten; auf diese Weise geöffnet, fällt es auf sein Standardmodell zurück. Entfernen Sie das Modell und wechseln Sie das Modell stattdessen in der CLI.",
         "effort-unsupported": "„{agent}“ hat keine eigene Aufwandseinstellung. Entfernen Sie den Aufwand; falls diese CLI die Stufe in der Modell-ID kodiert (z. B. gpt-5.3-codex-high), tragen Sie sie stattdessen beim Modell ein.",
@@ -6808,7 +6809,8 @@
         "aria": "Bereiche von Navide Cloud",
         "sync": "Synchronisierung",
         "share": "Teilen",
-        "devices": "Geräte"
+        "devices": "Geräte",
+        "org": "Organisationen"
       },
       "inventory": {
         "title": "Dieser Rechner und die Cloud",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "Link jetzt ersetzen",
         "rekeyed-old-alive": "Neuer Link kopiert. Der Server hat nicht bestätigt, dass der alte Link nicht mehr funktioniert; widerrufen Sie ihn, falls er sich nicht öffnen lassen darf.",
         "refresh": "Aktualisieren"
+      },
+      "org": {
+        "title": "Organisationen zum Koppeln",
+        "intro": "Deine Organisation {org} ist mit den unten stehenden Organisationen verbunden. Aufgeführt sind nur Rechner, die deren Mitglieder selbst freigegeben haben. Gekoppelt wird weiterhin per sechsstelligem Vergleich – fertig erst, wenn beide Seiten „Stimmt überein“ drücken.",
+        "intro-generic": "Deine Organisation ist mit den unten stehenden Organisationen verbunden. Aufgeführt sind nur Rechner, die deren Mitglieder selbst freigegeben haben. Gekoppelt wird weiterhin per sechsstelligem Vergleich – fertig erst, wenn beide Seiten „Stimmt überein“ drücken.",
+        "manage": "Auf teams.navide.dev verwalten",
+        "manage-failed": "Die Organisationsseite konnte nicht geöffnet werden: {reason}",
+        "not-joined": "Noch in keiner Organisation. Sobald du einer beitrittst oder eine erstellst, erscheinen hier Rechner, die verbundene Organisationen freigeben.",
+        "not-exposed": "Noch in keiner Organisation, oder dieser Rechner ist für keine freigegeben. Auf teams.navide.dev kannst du das ansehen und einrichten.",
+        "machines": "{count} Rechner freigegeben",
+        "linked": "Verbunden",
+        "owner": "Besitzer {name}",
+        "state-pending": "Nicht gekoppelt",
+        "state-trusted": "Gekoppelt",
+        "state-blocked": "Blockiert",
+        "reason-link-revoked": "Organisationsverbindung aufgehoben",
+        "reason-member-removed": "Mitglied aus der Organisation entfernt",
+        "reason-exposure-withdrawn": "Nicht mehr freigegeben",
+        "reason-org-deleted": "Organisation gelöscht",
+        "reason-lapsed": "Organisationsverbindung abgelaufen",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "Die Kopplungen mit allen Rechnern dieser Organisation sind wieder „nicht bestätigt“, und ihre Nachrichten werden nicht mehr zugestellt. Die Einträge bleiben unten erhalten. Zum Wiederherstellen die Organisationen auf teams.navide.dev erneut verknüpfen und dann wieder mit sechs Ziffern koppeln.",
+        "repair-hint": "Organisationen auf teams.navide.dev erneut verbinden, dann erneut sechsstellig koppeln",
+        "pair": "Koppeln",
+        "unpair": "Kopplung aufheben",
+        "offline-title": "Zum Koppeln müssen beide Rechner online sein",
+        "footer": "Koppeln bestätigt nur, wer die Gegenseite ist. Welche Bereiche ihre Nachrichten danach erreichen, entscheiden weiterhin die Regeln dafür, wer diesem Gerät Anweisungen geben darf – standardmäßig abgelehnt.",
+        "from-org": "Aus Organisation {org}",
+        "field-org": "Organisation",
+        "field-owner": "Besitzer",
+        "field-device": "Rechner",
+        "knock-paired": "Gekoppelt (Organisation)",
+        "knock-hint": "Rechner anderer Organisationen erscheinen hier erst nach dem Koppeln. Wird die Organisationsverbindung aufgehoben, verfällt diese Regel mit.",
+        "allow-one": "Diesen Bereich erlauben",
+        "refresh": "Aktualisieren",
+        "loading": "Wird geladen…",
+        "paired-on": "Gekoppelt am {when}",
+        "pairing-elsewhere": "Sechsstelliger Vergleich läuft – auf beiden Rechnern prüfen",
+        "same-org-title": "Mitglieder deiner Organisation · {org}",
+        "same-org-hint": "Rechner, die Mitglieder deiner eigenen Organisation selbst freigegeben haben. Gekoppelt wird weiterhin per sechsstelligem Vergleich – fertig erst, wenn beide Seiten „Stimmt überein“ drücken.",
+        "same-org-badge": "Gleiche Organisation",
+        "same-org-tag": "Mitglied deiner Organisation · {org}",
+        "knock-paired-same": "Gekoppelt (gleiche Organisation)",
+        "state-pairing": "Wird verglichen",
+        "state-ended": "Kopplung beendet",
+        "revoked-since": "seit {when}",
+        "offline-note": "Der andere Rechner ist offline; die Kopplung lässt sich abschließen, sobald er online ist",
+        "act-failed": "Nicht abgeschlossen: {reason}",
+        "manage-opening": "Wird geöffnet …",
+        "manage-hint-signin": "prüfe, ob dieser Rechner bei Navide Cloud angemeldet ist, und versuche es erneut.",
+        "manage-hint-unreachable": "die Organisationsseite ist gerade nicht erreichbar; versuche es gleich noch einmal.",
+        "reshare-hint": "Sobald der Besitzer diesen Rechner auf teams.navide.dev wieder freigibt, erneut mit sechs Ziffern koppeln",
+        "rejoin-hint": "Sobald der Besitzer wieder in der Organisation ist und diesen Rechner freigibt, erneut mit sechs Ziffern koppeln"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} kann seinen Vertrauenseintrag derzeit nicht lesen, hat diese Kopplung daher abgelehnt, und sie wurde beendet. Kümmern Sie sich auf {device} um die Karte „Navide Cloud ist angehalten“ im Kontofenster (klicken Sie zum Beispiel auf „Neu beginnen“) und klicken Sie dann erneut auf „Koppeln“.",
         "failed-remote-policy-denied": "{device} hat diese Kopplung abgelehnt, daher wurde sie beendet. Dieser Rechner steht auf {device} möglicherweise auf der Sperrliste; prüfen Sie das dort im Kontofenster und klicken Sie dann erneut auf „Koppeln“.",
         "failed-remote-unauthenticated": "{device} konnte die Signatur dieser Kopplung nicht überprüfen, hat sie daher abgelehnt, und sie wurde beendet. Stellen Sie sicher, dass auf beiden Rechnern die neueste Navide-Version läuft, und klicken Sie dann erneut auf „Koppeln“.",
-        "failed-remote-pairing-refused": "{device} hat diese Kopplung abgelehnt, daher wurde sie beendet. Meist hat {device} bereits eine laufende Kopplung (zum Beispiel, weil beide Seiten gleichzeitig auf „Koppeln“ geklickt haben). Warten Sie, bis sie abgeschlossen ist, oder brechen Sie sie auf {device} ab, und klicken Sie dann erneut auf „Koppeln“.",
+        "failed-remote-pairing-refused": "{device} hat diese Kopplung abgelehnt, daher wurde sie beendet. Meist hat {device} bereits eine laufende Kopplung (zum Beispiel, weil beide Seiten gleichzeitig auf „Koppeln“ geklickt haben). Warten Sie, bis sie abgeschlossen ist, oder brechen Sie sie auf {device} ab, und klicken Sie dann erneut auf „Koppeln“. Es kann auch sein, dass die beiden Rechner zu verschiedenen Konten gehören und nicht über eine Organisation verbunden sind; verbinden Sie sie dann zuerst auf teams.navide.dev.",
         "failed-remote-other": "{device} hat diese Kopplung abgelehnt ({reason}), daher wurde sie beendet. Klicken Sie auf „Koppeln“, um es erneut zu versuchen.",
         "busy": "Eine Kopplung mit {device} läuft noch und endet von selbst in etwa {minutes} Min. Um jetzt neu zu beginnen, klicken Sie oben im Bereich „Kopplung“ auf „Anfrage abbrechen“ und dann erneut auf „Koppeln“.",
         "trust-unavailable-start": "Dieser Rechner kann seinen Vertrauenseintrag derzeit nicht lesen, daher kann die Kopplung nicht gelingen. Kümmern Sie sich zuerst um die Karte „Navide Cloud ist angehalten“ unten (klicken Sie zum Beispiel auf „Neu beginnen“) und klicken Sie dann auf „Koppeln“."
@@ -7264,7 +7319,9 @@
         "my-account": "Mein Konto",
         "any-member": "Beliebiges Konto",
         "any-device": "Beliebiges Gerät",
-        "any": "beliebig"
+        "any": "beliebig",
+        "org-note": "Diese Regel gilt auch für Rechner, die über eine Organisation gekoppelt sind",
+        "grant-note": "Über eine Organisation erlaubt; endet, wenn die Organisationen getrennt werden"
       },
       "account": {
         "tab-login": "Anmelden",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "Ja, löschen und neu beginnen",
         "rebuild-cancel": "Angehalten lassen",
         "rebuild-done": "Der Vertrauenseintrag wurde gelöscht. Koppeln Sie Ihre Geräte erneut, wenn Sie so weit sind.",
-        "locked-retrying": "Dies ist möglicherweise vorübergehend – ein gesperrter Schlüsselbund oder ein weggeklickter Berechtigungsdialog sieht von hier aus genauso aus. Es wird weiter versucht; wenn es sich klärt, ist nichts verloren."
+        "locked-retrying": "Dies ist möglicherweise vorübergehend – ein gesperrter Schlüsselbund oder ein weggeklickter Berechtigungsdialog sieht von hier aus genauso aus. Es wird weiter versucht; wenn es sich klärt, ist nichts verloren.",
+        "approve-trust-unavailable": "Dieser Rechner kann seinen Vertrauenseintrag derzeit nicht lesen, daher wurde keine Regel geschrieben. Kümmern Sie sich zuerst um die Karte „Navide Cloud ist angehalten“ unten (klicken Sie zum Beispiel auf „Neu beginnen“) und erlauben Sie die Anfrage dann erneut.",
+        "state-revoked": "Organisationsverbindung aufgehoben"
       },
       "link": {
         "pause": "Ausschalten",

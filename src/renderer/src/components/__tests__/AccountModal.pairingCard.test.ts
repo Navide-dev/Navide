@@ -104,3 +104,86 @@ describe('the pairing card', () => {
     expect(card().find('.pair-code').text()).toBe('482 913')
   })
 })
+
+describe('the pairing card for another organization', () => {
+  const ORG = { grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' }
+
+  it('names the organization, owner and machine; the rest is unchanged', async () => {
+    await mountWith({ ...EXCHANGE, org: ORG })
+    expect(card().find('[data-org-tag]').text()).toBe(t('settings.cloud.org.from-org', { org: 'North Design' }))
+    const facts = card().find('[data-org-facts]').text()
+    expect(facts).toContain('North Design')
+    expect(facts).toContain('Chen')
+    expect(facts).toContain('M4')
+    expect(card().find('.pair-code').text()).toBe('482 913')
+  })
+
+  it('says "member of your organization" for a same-organization pairing', async () => {
+    await mountWith({ ...EXCHANGE, org: { ...ORG, orgName: 'Galaxy Studio', sameOrg: true } })
+    expect(card().find('[data-org-tag]').text()).toBe(t('settings.cloud.org.same-org-tag', { org: 'Galaxy Studio' }))
+    expect(card().text()).not.toContain(t('settings.cloud.org.from-org', { org: 'Galaxy Studio' }))
+  })
+
+  it('adds nothing for one of your own machines', async () => {
+    await mountWith(EXCHANGE)
+    expect(card().find('[data-org-tag]').exists()).toBe(false)
+    expect(card().find('[data-org-facts]').exists()).toBe(false)
+  })
+})
+
+describe('a knock from another organization', () => {
+  async function mountKnock(org?: Record<string, string>) {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      trustConfirm: vi.fn().mockResolvedValue({ token: 't' }),
+    }
+    const mock = createMockBackend('connected')
+    mock.setResponse('p2p.link.status', {
+      status: { state: 'connected', accountEmail: 'a@b.c', serverUrl: 'wss://x', emailVerified: true },
+    })
+    mock.setResponse('p2p.network.snapshot', {
+      state: 'connected',
+      deviceId: 'me',
+      devices: [{ deviceId: 'me', deviceName: 'This one', isLocal: true, online: true, paneCount: 1, panes: [] }],
+      pairings: [],
+      accessRequests: [
+        { key: 'k1', memberId: 'm-org', deviceId: 'dev-org', deviceName: 'iMac', workspace: 'Agent-Team', paneName: 'lead', attempts: 3, ...(org ? { org } : {}) },
+      ],
+    })
+    wrapper = mount(AccountModal, { props: { open: true, backend: mock.backend as never }, global: { plugins: [i18n] } })
+    await flushPromises()
+    return mock
+  }
+
+  it('explains a refusal while the trust record cannot be read', async () => {
+    const mock = await mountKnock({ grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' })
+    mock.setResponse('p2p.access_requests.approve', null, {
+      ok: false,
+      error: { code: 'TRUST_UNAVAILABLE', message: 'the device trust store could not be opened' },
+    })
+    const allow = wrapper!.findAll('button').find((b) => b.text() === t('settings.cloud.org.allow-one'))!
+    await allow.trigger('click')
+    await flushPromises()
+    expect(wrapper!.text()).toContain(t('settings.p2p.trust.approve-trust-unavailable'))
+  })
+
+  it('says which organization and offers to allow just that pane', async () => {
+    await mountKnock({ grantId: 'g_1', orgName: 'North Design', ownerName: 'Chen' })
+    expect(wrapper!.find('[data-org-tag]').text()).toBe(t('settings.cloud.org.from-org', { org: 'North Design' }))
+    expect(wrapper!.find('[data-org-facts]').text()).toContain(t('settings.cloud.org.owner', { name: 'Chen' }))
+    expect(wrapper!.text()).toContain(t('settings.cloud.org.allow-one'))
+    expect(wrapper!.find('[data-org-hint]').exists()).toBe(true)
+  })
+
+  it('says "member of your organization" on a same-organization knock', async () => {
+    await mountKnock({ grantId: 'g_same', orgName: 'Galaxy Studio', ownerName: 'Chen', sameOrg: true } as never)
+    expect(wrapper!.find('[data-org-tag]').text()).toBe(t('settings.cloud.org.same-org-tag', { org: 'Galaxy Studio' }))
+    expect(wrapper!.find('[data-org-facts]').text()).toContain(t('settings.cloud.org.knock-paired-same'))
+  })
+
+  it('looks exactly as before for a knock with no organization', async () => {
+    await mountKnock()
+    expect(wrapper!.find('[data-org-tag]').exists()).toBe(false)
+    expect(wrapper!.find('[data-org-hint]').exists()).toBe(false)
+    expect(wrapper!.text()).toContain(t('settings.p2p.trust.approve'))
+  })
+})

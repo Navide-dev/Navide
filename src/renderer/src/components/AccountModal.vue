@@ -144,7 +144,9 @@ interface NetworkPane {
 }
 
 interface NetworkDevice {
-  /** self | trusted | pending | blocked — where this device stands with this
+  /** Set for a machine reached through an organization grant. */
+  org?: OrgLabel
+  /** self | trusted | pending | blocked | revoked — where this device stands with this
    *  machine. The list said nothing about it, so an unvouched device looked
    *  exactly like a vouched one while the card above asked you to confirm it. */
   trustState?: string
@@ -189,6 +191,17 @@ interface Pairing {
   fingerprint: string
   /** When it stops waiting, in seconds since the epoch. */
   expiresAt?: number
+  /** Set only for another organization's machine. */
+  org?: OrgLabel
+}
+
+/** Which organization a machine belongs to, and whose it is. */
+interface OrgLabel {
+  grantId: string
+  orgName: string
+  ownerName: string
+  /** A member of your own organization rather than of a linked one. */
+  sameOrg?: boolean
 }
 
 /** A device that tried to reach a pane here and was refused. */
@@ -200,6 +213,8 @@ interface AccessRequest {
   workspace: string
   paneName: string
   attempts: number
+  /** Set only when the knock came from another organization's machine. */
+  org?: OrgLabel
 }
 
 /** A device or member refused ahead of every rule. */
@@ -1129,6 +1144,7 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
     if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
     if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
     if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
+    if (type === 'p2p.access_requests.approve' && resp.error?.code === 'TRUST_UNAVAILABLE') error.value = t('settings.p2p.trust.approve-trust-unavailable')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1539,6 +1555,19 @@ onUnmounted(() => {
                         { device: row.deviceName || row.deviceId }) }}
                 </span>
               </div>
+              <!-- Another organization's machine: say which, and whose, before
+                   anyone compares digits. Everything else on the card is the
+                   same as pairing one of your own machines. -->
+              <template v-if="row.org">
+                <span class="dev-tag org-tag" data-org-tag v-truncate>
+                  {{ t(row.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: row.org.orgName }) }}
+                </span>
+                <dl class="org-facts" data-org-facts>
+                  <dt>{{ t('settings.cloud.org.field-org') }}</dt><dd>{{ row.org.orgName }}</dd>
+                  <dt>{{ t('settings.cloud.org.field-owner') }}</dt><dd>{{ row.org.ownerName }}</dd>
+                  <dt>{{ t('settings.cloud.org.field-device') }}</dt><dd>{{ row.deviceName || row.deviceId }}</dd>
+                </dl>
+              </template>
               <!-- Nothing to compare yet: the other machine has not answered.
                    A button that decided something here would be offered before
                    the question it answers exists. -->
@@ -1547,7 +1576,7 @@ onUnmounted(() => {
                      has gone, and the other machine has not answered. They are
                      different waits and the second one is the one worth
                      mentioning to somebody standing at the other machine. -->
-                <span class="dev-tag pair-step">
+                <span class="dev-tag pair-step" v-truncate>
                   {{ t(row.role === 'initiator' ? 'settings.p2p.pair.step-waiting-them'
                                                 : 'settings.p2p.pair.step-sent') }}
                 </span>
@@ -1593,7 +1622,7 @@ onUnmounted(() => {
                      person reading two screens is out of its reach.
                      See device_pairing.complete. -->
                 <template v-if="row.state === 'awaiting-remote'">
-                  <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
+                  <span class="dev-tag pair-step" v-truncate>{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
                   <p class="req-what">{{ t('settings.p2p.pair.waiting-remote') }}</p>
                   <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
                   <div class="req-acts">
@@ -1611,7 +1640,7 @@ onUnmounted(() => {
                      which exchange this is, not who it is waiting on, so this
                      is the only thing on the card that answers "and now what". -->
                 <template v-else>
-                <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-your-turn') }}</span>
+                <span class="dev-tag pair-step" v-truncate>{{ t('settings.p2p.pair.step-your-turn') }}</span>
                 <p class="req-what">{{ t('settings.p2p.pair.your-turn') }}</p>
                 <div class="req-acts">
                   <button class="btn small" :disabled="!!pending || !linkReady" @click="answerPairing(row, true)" :title="linkWaitReason || undefined">
@@ -1648,7 +1677,7 @@ onUnmounted(() => {
             <p class="hint">{{ t('settings.p2p.trust.pending-body') }}</p>
             <div v-for="row in trustPending" :key="row.deviceId" class="req pending-card">
               <div class="req-head">
-                <span class="dev-tag">{{ t('settings.p2p.trust.kind-device') }}</span>
+                <span class="dev-tag" v-truncate>{{ t('settings.p2p.trust.kind-device') }}</span>
                 <!-- The name, at the same weight as the device list uses, so
                      the two surfaces name the same machine the same way. The id
                      is a tooltip: it is what the logs show, and it is not the
@@ -1709,18 +1738,25 @@ onUnmounted(() => {
           <div v-if="accessRequests.length" class="card net-card">
             <div v-for="req in accessRequests" :key="req.key" class="req">
               <div class="req-head">
-                <span class="dev-tag">{{ t('settings.p2p.trust.kind-access') }}</span>
+                <span class="dev-tag" v-truncate>{{ t('settings.p2p.trust.kind-access') }}</span>
                 <span class="dev-name" v-truncate>{{ req.deviceName || req.deviceId }}</span>
                 <span v-if="req.attempts > 1" class="dev-count">
                   {{ t('settings.p2p.trust.attempts', { count: req.attempts }) }}
                 </span>
               </div>
+              <span v-if="req.org" class="dev-tag org-tag" data-org-tag v-truncate>
+                {{ t(req.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: req.org.orgName }) }}
+              </span>
               <p class="req-what">
                 {{ t('settings.p2p.trust.wants', { workspace: req.workspace, pane: req.paneName }) }}
               </p>
+              <p v-if="req.org" class="pend-facts" data-org-facts>
+                <span class="ok-text">{{ t(req.org.sameOrg ? 'settings.cloud.org.knock-paired-same' : 'settings.cloud.org.knock-paired') }}</span>
+                <span v-if="req.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: req.org.ownerName }) }}</span>
+              </p>
               <div class="req-acts">
                 <button class="btn small" :disabled="!!deciding || !linkReady" @click="approveRequest(req)" :title="linkWaitReason || undefined">
-                  {{ t('settings.p2p.trust.approve') }}
+                  {{ req.org ? t('settings.cloud.org.allow-one') : t('settings.p2p.trust.approve') }}
                 </button>
                 <button class="btn ghost small" :disabled="!!deciding || !linkReady" @click="dismissRequest(req)" :title="linkWaitReason || undefined">
                   {{ t('settings.p2p.trust.dismiss') }}
@@ -1732,6 +1768,7 @@ onUnmounted(() => {
             </div>
           </div>
           <p v-if="accessRequests.length" class="hint">{{ t('settings.p2p.trust.requests-hint') }}</p>
+          <p v-if="accessRequests.some((r) => r.org)" class="hint" data-org-hint>{{ t('settings.cloud.org.knock-hint') }}</p>
         </section>
 
         <!-- The account card sits below the things that are waiting on
@@ -1831,7 +1868,7 @@ onUnmounted(() => {
                        prose further down: the refusal is in force while this is
                        on screen, which is the part that decides how urgent it
                        is. -->
-                  <span class="dev-tag ts-blocked">
+                  <span class="dev-tag ts-blocked" v-truncate>
                     {{ t('settings.p2p.trust.key-changed-refusing') }}
                   </span>
                 </div>
@@ -1923,7 +1960,7 @@ onUnmounted(() => {
                   <span class="dev-name" v-truncate>
                     {{ t('settings.p2p.trust.first-seen', { device: n.deviceId }) }}
                   </span>
-                  <span v-if="n.own" class="dev-tag">
+                  <span v-if="n.own" class="dev-tag" v-truncate>
                     {{ t('settings.p2p.trust.first-seen-own') }}
                   </span>
                 </div>
@@ -2207,7 +2244,7 @@ onUnmounted(() => {
                        while a two-line sentence about being offline sat beside
                        it. -->
                   <span class="dev-name" v-truncate="device.deviceName || device.deviceId">{{ deviceLabel(device) }}</span>
-                  <span v-if="device.isLocal" class="dev-tag">
+                  <span v-if="device.isLocal" class="dev-tag" v-truncate>
                     {{ t('settings.p2p.network.this-device') }}
                   </span>
                   <!-- Where the machine is, or what it is running. Beside the
@@ -2227,6 +2264,7 @@ onUnmounted(() => {
                   <span
                     v-if="!device.isLocal && device.trustState"
                     class="dev-tag"
+                    v-truncate
                     :class="'ts-' + device.trustState"
                   >
                     {{ t('settings.p2p.trust.state-' + device.trustState) }}
@@ -2275,6 +2313,15 @@ onUnmounted(() => {
                     {{ t('settings.p2p.trust.unpair') }}
                   </button>
                 </div>
+                <!-- A machine reached through an organization says whose it
+                     is, so a paired one never reads as one of your own. On its
+                     own line: beside the name it took the name's room. -->
+                <p v-if="!device.isLocal && device.org" class="dev-org">
+                  <span class="dev-tag org-tag" data-org-tag v-truncate>
+                    {{ t(device.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: device.org.orgName }) }}<template
+                      v-if="device.org.ownerName"> · {{ t('settings.cloud.org.owner', { name: device.org.ownerName }) }}</template>
+                  </span>
+                </p>
                 <template v-if="!deviceFolded(device)">
                   <!-- One block per state, each foldable. The pane rows below
                        carry no status pill: the section they are in is the
@@ -2807,6 +2854,15 @@ input:focus {
 .dev-tag.ts-trusted { color: var(--success-fg); }
 .dev-tag.ts-pending { color: var(--attention-fg); }
 .dev-tag.ts-blocked { color: var(--danger-fg); }
+.dev-tag.ts-revoked { color: var(--danger-fg); }
+/* Another organization's machine, on the pairing and knock cards. */
+.dev-tag.org-tag { color: var(--accent-fg, var(--text-bright)); align-self: flex-start; }
+/* The organization line under a device's name, indented to the name. */
+.dev-org { display: flex; min-width: 0; margin: 2px 0 0 30px; }
+.dev-org .dev-tag.org-tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org-facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; padding: 6px 8px; font-size: 12px; border: 1px solid var(--border-muted); border-radius: 6px; }
+.org-facts dt { color: var(--text-secondary); }
+.org-facts dd { margin: 0; }
 /* Secondary, so it is the first thing to give way when the row runs out of
    room — that is what the large shrink factor buys. The name has shrink 1 and
    is therefore the last thing clipped, which is the whole point: a row reading

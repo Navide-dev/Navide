@@ -116,3 +116,24 @@ export function supportsModel(spec: CliModelCapability | undefined): boolean {
 export function supportsEffort(spec: CliModelCapability | undefined): boolean {
   return Boolean(spec?.effortArgs)
 }
+
+/** The effort a model id already names in its suffix, when the separately
+ *  picked effort differs from it — or '' when there is nothing to warn about.
+ *
+ *  Some ids carry their level (`gemini-4-neon-low`); agy refuses such an id
+ *  together with a different `--effort` (measured on agy 1.5.13: "--model
+ *  gemini-4-neon-low conflicts with --effort=high", exit 1). This is a hint for
+ *  the UI, never a refusal: the user's pick is launched as chosen, and the CLI
+ *  remains the authority on which combinations it accepts. */
+export function effortSuffixConflict(input: {
+  spec: CliModelCapability | undefined
+  request: CliModelRequest
+}): string {
+  const model = input.request.model.trim()
+  const effort = input.request.effort.trim()
+  const known = input.spec?.knownEfforts
+  if (!model || !effort || !known) return ''
+  const suffix = model.slice(model.lastIndexOf('-') + 1)
+  if (!model.includes('-') || !known.includes(suffix) || suffix === effort) return ''
+  return suffix
+}

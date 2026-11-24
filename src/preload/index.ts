@@ -1038,6 +1038,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
   /** Open one legal page in the default browser; the URL is main's, not the caller's. */
   openLegal: (route: LegalRoute): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('legal:open', route),
+  /** Open the organisation site signed in (app-to-site handoff); main holds the address. */
+  openOrgSite: (): Promise<{ ok: boolean; code?: string; message?: string }> =>
+    ipcRenderer.invoke('org:open-site'),
   /** Open Spotlight's privacy settings (macOS); the destination is main's. */
   openSpotlightSettings: (): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('system:open-spotlight-settings'),

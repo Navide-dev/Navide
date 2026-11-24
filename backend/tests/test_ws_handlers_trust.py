@@ -212,6 +212,64 @@ async def test_approving_writes_one_narrow_allow_rule(link) -> None:
     )
 
 
+async def test_approving_an_organisation_knock_ties_the_rule_to_its_grant(link, monkeypatch) -> None:
+    """A knock from another organisation's machine writes the same narrow rule,
+    plus the grant it was paired through, so the rule lapses with that grant."""
+    key = _knock(link)
+    from agent_team_backend import trust_store
+
+    pins = {THEIR_BOX: {"grantId": "g_1", "approved": True}}
+    monkeypatch.setattr(trust_store, "pin_for", lambda device_id: pins.get(device_id))
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["ok"] is True
+    (rule,) = link.writes[-1]["rules"]
+    assert rule["grantId"] == "g_1"
+    from agent_team_backend import pane_policy
+
+    assert pane_policy.validate(link.writes[-1]) == ""
+
+
+async def test_approving_an_org_knock_while_the_trust_record_is_locked_writes_nothing(link, monkeypatch) -> None:
+    """Which grant the sender is under cannot be read, so no rule — one without
+    its grantId would outlive the grant."""
+    key = link.requests.record(
+        member_id=THEIRS, device_id=THEIR_BOX, device_name="their box",
+        workspace="proj", pane_name="reviewer", grant_id="g_1",
+    )["key"]
+    from agent_team_backend import trust_store
+
+    def locked(_device_id):
+        raise trust_store.TrustStoreLocked("locked (test)")
+
+    monkeypatch.setattr(trust_store, "pin_for", locked)
+    before = len(link.writes)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["ok"] is False
+    assert reply["error"]["code"] == "TRUST_UNAVAILABLE"
+    assert len(link.writes) == before
+    assert [r["key"] for r in link.requests.list()] == [key]
+
+
+async def test_approving_an_ordinary_knock_while_the_trust_record_is_locked_still_writes_the_rule(link, monkeypatch) -> None:
+    """Not from an organisation: approving works exactly as before the lock."""
+    key = _knock(link)
+    from agent_team_backend import trust_store
+
+    def locked(_device_id):
+        raise trust_store.TrustStoreLocked("locked (test)")
+
+    monkeypatch.setattr(trust_store, "pin_for", locked)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["ok"] is True
+    assert link.writes[-1]["rules"] == [
+        {
+            "from": {"memberId": THEIRS, "deviceId": THEIR_BOX},
+            "to": {"workspace": "proj", "paneName": "reviewer"},
+            "action": "allow",
+        }
+    ]
+
+
 async def test_approving_one_pane_grants_nothing_next_door(link) -> None:
     key = _knock(link, pane="reviewer")
     await _call("p2p.access_requests.approve", {"key": key})
@@ -1025,3 +1083,48 @@ def test_canonical_json_matches_the_renderer_fixture_literally() -> None:
     instead of every policy save quietly refusing."""
     fixture = {'version': 1, 'default': 'deny', 'rules': [{'to': {'paneName': '審查者', 'workspace': '/w/α'}, 'from': {'deviceId': 'd-1', 'memberId': 'm-1'}, 'action': 'allow'}], 'blocked': [], 'note': 'tab\there "q" \\ /slash\u2028😀\x7f'}
     assert confirm_token.canonical_json(fixture) == '{"blocked":[],"default":"deny","note":"tab\\there \\"q\\" \\\\ /slash\\u2028\\ud83d\\ude00\\u007f","rules":[{"action":"allow","from":{"deviceId":"d-1","memberId":"m-1"},"to":{"paneName":"\\u5be9\\u67e5\\u8005","workspace":"/w/\\u03b1"}}],"version":1}'
+
+
+async def test_a_personal_knock_does_not_survive_into_an_organisation_pairing(link, monkeypatch) -> None:
+    """Knock while personally paired → unpair → paired through a grant →
+    knock → trust record locked → approve: no rule without a grantId."""
+    async def quiet(*_a, **_k) -> None:
+        return None
+
+    monkeypatch.setattr(server_link, "revoke_pairing", quiet)
+    monkeypatch.setattr(server_link, "trust_full", lambda: False)
+    trust_store.load()
+    trust_store.pin_device(THEIR_BOX, sign_key=_A_KEY, member_id=THEIRS)
+    _knock(link)
+
+    reply = await _call("p2p.trust.device.unpair", {"deviceId": THEIR_BOX})
+    assert reply["ok"] is True
+    assert link.requests.list() == []
+
+    key = link.requests.record(
+        member_id=THEIRS, device_id=THEIR_BOX, device_name="their box",
+        workspace="proj", pane_name="reviewer", grant_id="g_1",
+    )["key"]
+
+    def locked(_device_id):
+        raise trust_store.TrustStoreLocked("locked (test)")
+
+    monkeypatch.setattr(trust_store, "pin_for", locked)
+    before = len(link.writes)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["error"]["code"] == "TRUST_UNAVAILABLE"
+    assert len(link.writes) == before
+
+
+@pytest.mark.parametrize("pin", [None, {"approved": True}])
+async def test_an_org_knock_whose_sender_has_no_grant_now_writes_no_rule(link, monkeypatch, pin) -> None:
+    """Pin gone, or no grantId on it: an untagged rule would apply outside any grant."""
+    key = link.requests.record(
+        member_id=THEIRS, device_id=THEIR_BOX, device_name="their box",
+        workspace="proj", pane_name="reviewer", grant_id="g_1",
+    )["key"]
+    monkeypatch.setattr(trust_store, "pin_for", lambda _device_id: pin)
+    before = len(link.writes)
+    reply = await _call("p2p.access_requests.approve", {"key": key})
+    assert reply["error"]["code"] == "NOT_PAIRED"
+    assert len(link.writes) == before

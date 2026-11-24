@@ -12,6 +12,7 @@ import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
 import { AVAILABLE_UI_LOCALES, isBetaUiLocale, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
+import { usePairingState } from '../composables/usePairingState'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
   cliPermissionKey,
@@ -78,6 +79,7 @@ import {
   cliCommandKey,
   cliEnvKey,
   cliModelKey,
+  effortSuffixConflict,
   isReservedSpawnEnvKey,
   isValidEnvName,
   modelArgsFor,
@@ -93,10 +95,12 @@ import {
   addRule as addPolicyRuleTo,
   allowsOwnDevices,
   makeRule as makePolicyRule,
+  mayApplyToOrgMachines,
   readPolicy,
   removeRuleAt as removePolicyRuleAt,
   withOwnDevices,
   type PolicyDocument,
+  type PolicyRule,
 } from '../lib/panePolicy'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
@@ -148,6 +152,7 @@ import SyncSettings from './SyncSettings.vue'
 import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
 import CloudInventorySection from './cloud/CloudInventorySection.vue'
 import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
+import CloudOrgPeersSection from './cloud/CloudOrgPeersSection.vue'
 import ShareLinksPane from './cloud/ShareLinksPane.vue'
 import { useShareLinks } from '../composables/useShareLinks'
 import { forgetSyncInventory } from '../composables/useSyncInventory'
@@ -603,6 +608,15 @@ function applyLaunchModel(k: string, next: CliModelDefault): void {
   launchModelErrors.value = rest
   launchModels.value = { ...launchModels.value, [k]: next }
   settingsSet(cliModelKey(k), serializeCliModelDefault(next))
+}
+
+/** The stored pair names a level in the id and a different effort — a hint
+ *  only, the pair is still saved (see effortSuffixConflict). */
+function launchEffortConflict(k: string): string {
+  const spec = CLI_AGENT_SPECS.find((s) => s.agentKey === k)
+  const request = launchModelFor(k)
+  const suffix = effortSuffixConflict({ spec, request })
+  return suffix ? t('spawn.model.effort-conflict', { suffix, effort: request.effort.trim() }) : ''
 }
 
 function onLaunchModelInput(k: string, e: Event): void {
@@ -2174,7 +2188,7 @@ const cloudLinkUp = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
 const shareProbe = useShareLinks(props.backend)
 const cloudSubtabsShown = computed(() => cloudLinkUp.value && shareProbe.supported.value)
 const cloudTabs = computed<CloudSubtab[]>(() =>
-  shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
+  shareProbe.supported.value ? ['sync', 'share', 'devices', 'org'] : ['sync', 'devices', 'org']
 )
 watch(cloudLinkUp, (up) => {
   if (up) {
@@ -2335,7 +2349,33 @@ function policyMemberLabel(memberId: string): string {
 function policyDeviceLabel(deviceId: string): string {
   if (deviceId === POLICY_ANY) return t('settings.p2p.policy.any-device')
   const known = policyDevices.value.find((device) => device.deviceId === deviceId)
-  return known?.deviceName || deviceId
+  return known?.deviceName || policyOrgDevice(deviceId)?.deviceName || deviceId
+}
+
+/**
+ * Another organization's machine, as the network snapshot names it. The rule
+ * stores ids only; the shared snapshot (already polled for the pairing prompt)
+ * is what knows whose machine an id is.
+ */
+interface PolicyOrgDevice { deviceId: string; deviceName?: string; org?: { orgName: string; ownerName?: string; sameOrg?: boolean } }
+const pairingSnapshot = usePairingState(props.backend).snapshot
+function policyOrgDevice(deviceId: string): PolicyOrgDevice | undefined {
+  const devices = (pairingSnapshot.value?.devices ?? []) as PolicyOrgDevice[]
+  return devices.find((device) => device.deviceId === deviceId && !!device.org)
+}
+/** "Owner · machine" for a rule written through an organization grant. */
+function policySourceLabel(rule: PolicyRule): string {
+  const orgDevice = rule.grantId ? policyOrgDevice(rule.from.deviceId) : undefined
+  const member = orgDevice?.org?.ownerName || policyMemberLabel(rule.from.memberId)
+  return `${member} · ${policyDeviceLabel(rule.from.deviceId)}`
+}
+/** Which organization a grant-tagged rule came through, and that it ends with it. */
+function policyGrantNote(rule: PolicyRule): string {
+  const org = policyOrgDevice(rule.from.deviceId)?.org
+  const where = org
+    ? t(org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: org.orgName }) + ' · '
+    : ''
+  return where + t('settings.p2p.policy.grant-note')
 }
 
 watch([activeTab, cloudSubtab], ([tab, sub]) => {
@@ -3785,6 +3825,9 @@ watch(activeTab, (tab) => {
                   <p v-if="launchModelErrors[row.agentKey]" class="launch-error">
                     {{ launchModelErrors[row.agentKey] }}
                   </p>
+                  <p v-else-if="launchEffortConflict(row.agentKey)" class="launch-effort-conflict">
+                    {{ launchEffortConflict(row.agentKey) }}
+                  </p>
 
                   <div class="launch-field">
                     <span class="launch-field-label">{{ $t('settings.cliLaunch.command-label') }}</span>
@@ -4504,7 +4547,16 @@ watch(activeTab, (tab) => {
                   </li>
                   <li v-for="(rule, index) in policyDoc.rules" :key="index" class="policy-rule">
                     <span class="policy-rule-from">
-                      {{ policyMemberLabel(rule.from.memberId) }} · {{ policyDeviceLabel(rule.from.deviceId) }}
+                      {{ policySourceLabel(rule) }}
+                      <small v-if="rule.grantId" class="policy-org-note" data-org-grant-note>
+                        {{ policyGrantNote(rule) }}
+                      </small>
+                      <!-- Disclosed rather than narrowed: the rule is the user's,
+                           and it may also let in a machine paired through an
+                           organization. -->
+                      <small v-if="mayApplyToOrgMachines(rule, policyMemberId)" class="policy-org-note" data-org-note>
+                        {{ $t('settings.p2p.policy.org-note') }}
+                      </small>
                     </span>
                     <span class="policy-rule-to">
                       <span :class="{ 'policy-any': isAnyField(rule.to.workspace) }">
@@ -4607,6 +4659,9 @@ watch(activeTab, (tab) => {
           </template>
           <template #devices>
             <CloudDevicesSection :backend="props.backend" />
+          </template>
+          <template #org>
+            <CloudOrgPeersSection :backend="props.backend" />
           </template>
           </CloudSubtabs>
         </div>
@@ -5664,6 +5719,7 @@ watch(activeTab, (tab) => {
 .launch-input { flex: 1; min-width: 0; font-size: var(--font-2xs); }
 .launch-note { margin: 0; }
 .launch-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); }
+.launch-effort-conflict { margin: 0; font-size: var(--font-2xs); color: var(--attention-fg); }
 .launch-warn {
   padding: 6px 10px; border-radius: var(--radius-md);
   border: 1px solid var(--border-default); border-left: 3px solid #c77400;
@@ -6240,6 +6296,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .policy-section-label { margin: 14px 0 6px; font-size: var(--font-2xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .policy-empty { margin: 0; }
 .policy-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.policy-org-note { display: block; font-size: var(--font-row-desc); color: var(--text-secondary); }
 .policy-rule { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-muted); }
 .policy-rule-from, .policy-rule-to {
   flex: 1; min-width: 0; font-size: var(--font-xs); color: var(--text-bright);

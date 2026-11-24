@@ -4343,25 +4343,37 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
 
-    async def notify_mcp_never_connected(self, pane: str) -> None:
-        """Every bound direct chat once, in the user's language: a pane's CLI
-        has been up for minutes and never reached Navide's tool server."""
-        await self._notify_mcp_connection("mcp_never_connected", pane)
+    async def notify_mcp_never_connected(self, pane: str, pane_id: str = "", workspace_path: str = "",
+                                         parent_pane_id: str = "") -> None:
+        """Each bound direct chat of the pane, its workspace or the pane that opened it
+        once, in the user's language: a pane's CLI has been up for minutes and never
+        reached Navide's tool server."""
+        await self._notify_mcp_connection("mcp_never_connected", pane, pane_id, workspace_path, parent_pane_id)
 
-    async def notify_mcp_disconnected(self, pane: str) -> None:
+    async def notify_mcp_disconnected(self, pane: str, pane_id: str = "", workspace_path: str = "",
+                                      parent_pane_id: str = "") -> None:
         """The same, for a pane's CLI that was connected and gave up after
         losing the connection."""
-        await self._notify_mcp_connection("mcp_disconnected", pane)
+        await self._notify_mcp_connection("mcp_disconnected", pane, pane_id, workspace_path, parent_pane_id)
 
-    async def _notify_mcp_connection(self, key: str, pane: str) -> None:
+    async def _notify_mcp_connection(self, key: str, pane: str, pane_id: str, workspace_path: str,
+                                     parent_pane_id: str) -> None:
+        # A pane-level event: only chats bound to that pane, to a pane of its workspace or
+        # to its direct parent (2026-11-23: one stuck pane told every client's bot). None
+        # of them, no chat notice; the window still badges and toasts the pane.
         lang = prompt_skills.language(await self._ui_settings())
         text = quick_menu.text(lang, key, pane=pane)
+        parent = self._seams.resolve_pane(parent_pane_id) if parent_pane_id else ""
         seen: set[str] = set()
         for b in self.store.bindings():
-            key = b.location().key()
-            if key in seen or self._chat_kind(b) != "direct":
+            chat = b.location().key()
+            if chat in seen or self._chat_kind(b) != "direct":
                 continue
-            seen.add(key)
+            bound = self._seams.resolve_pane(b.pane_id)
+            if not bound or not ((pane_id and bound == pane_id) or (parent and bound == parent)
+                                 or (workspace_path and self._seams.pane_workspace(bound) == workspace_path)):
+                continue
+            seen.add(chat)
             try:
                 await self.mirror.send(b.location(), redact.redact_text(text))
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others

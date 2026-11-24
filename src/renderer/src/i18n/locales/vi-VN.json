@@ -308,6 +308,7 @@
       "effort-label": "Mức nỗ lực",
       "effort-default": "Mặc định của nhà cung cấp",
       "shadowed-by-command": "CLI này đã đặt lệnh khởi chạy (Cài đặt → CLI agent). Dòng lệnh đó chạy đúng như đã viết và Navide không thêm model hay mức nỗ lực nào vào, nên không chọn được ở đây. Hãy đưa model vào lệnh khởi chạy, hoặc xóa trống lệnh đó.",
+      "effort-conflict": "ID model đã ghi sẵn mức \"{suffix}\", nhưng mức nỗ lực đang chọn là \"{effort}\". Một số CLI (như agy) từ chối tổ hợp này khi khởi chạy. Hãy dùng ID không có hậu tố mức, hoặc đặt mức nỗ lực là {suffix}.",
       "refuse": {
         "model-unsupported": "Không thể chỉ định model cho “{agent}” lúc khởi chạy; mở theo cách này nó sẽ dùng model mặc định. Hãy bỏ model và đổi model ngay trong CLI.",
         "effort-unsupported": "“{agent}” không có cài đặt mức nỗ lực riêng. Hãy bỏ mức nỗ lực; nếu CLI này mã hóa mức trong ID model (ví dụ gpt-5.3-codex-high), hãy đưa vào model.",
@@ -6808,7 +6809,8 @@
         "aria": "Các mục của Navide Cloud",
         "sync": "Đồng bộ",
         "share": "Chia sẻ",
-        "devices": "Thiết bị"
+        "devices": "Thiết bị",
+        "org": "Tổ chức"
       },
       "inventory": {
         "title": "Máy này và đám mây",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "Thay liên kết ngay",
         "rekeyed-old-alive": "Đã sao chép liên kết mới. Máy chủ chưa xác nhận liên kết cũ đã ngừng hoạt động; hãy thu hồi nó nếu không được để nó mở.",
         "refresh": "Làm mới"
+      },
+      "org": {
+        "title": "Tổ chức có thể ghép đôi",
+        "intro": "Tổ chức {org} của bạn đã liên kết với các tổ chức dưới đây. Chỉ liệt kê các máy mà thành viên của họ tự chọn chia sẻ. Ghép đôi vẫn dùng phép so sánh sáu chữ số và chỉ hoàn tất khi cả hai bên đều bấm “Khớp”.",
+        "intro-generic": "Tổ chức của bạn đã liên kết với các tổ chức dưới đây. Chỉ liệt kê các máy mà thành viên của họ tự chọn chia sẻ. Ghép đôi vẫn dùng phép so sánh sáu chữ số và chỉ hoàn tất khi cả hai bên đều bấm “Khớp”.",
+        "manage": "Quản lý trên teams.navide.dev",
+        "manage-failed": "Không mở được trang tổ chức: {reason}",
+        "not-joined": "Bạn chưa tham gia tổ chức nào. Sau khi tham gia hoặc tạo tổ chức, các máy do tổ chức liên kết chia sẻ sẽ hiện ở đây.",
+        "not-exposed": "Bạn chưa tham gia tổ chức nào, hoặc máy này chưa được chia sẻ với tổ chức. Bạn có thể xem và thiết lập trên teams.navide.dev.",
+        "machines": "{count} máy được chia sẻ",
+        "linked": "Đã liên kết",
+        "owner": "Chủ sở hữu {name}",
+        "state-pending": "Chưa ghép đôi",
+        "state-trusted": "Đã ghép đôi",
+        "state-blocked": "Đã chặn",
+        "reason-link-revoked": "Đã thu hồi liên kết tổ chức",
+        "reason-member-removed": "Thành viên đã bị đưa khỏi tổ chức",
+        "reason-exposure-withdrawn": "Không còn chia sẻ",
+        "reason-org-deleted": "Tổ chức đã bị xóa",
+        "reason-lapsed": "Liên kết tổ chức đã hết hạn",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "Ghép đôi với mọi máy của tổ chức này đã trở về “chưa phê duyệt” và tin nhắn họ gửi sẽ không còn được chuyển tới. Lịch sử vẫn giữ bên dưới. Để khôi phục, hãy liên kết lại các tổ chức trên teams.navide.dev rồi ghép đôi lại bằng sáu chữ số.",
+        "repair-hint": "Liên kết lại các tổ chức trên teams.navide.dev rồi ghép đôi sáu chữ số lần nữa",
+        "pair": "Ghép đôi",
+        "unpair": "Hủy ghép đôi",
+        "offline-title": "Ghép đôi cần cả hai máy đều trực tuyến",
+        "footer": "Ghép đôi chỉ xác nhận bên kia là ai. Sau khi ghép đôi, tin nhắn của họ đến được khung nào vẫn do quy tắc “ai được ra lệnh cho thiết bị này” quyết định, mặc định là từ chối.",
+        "from-org": "Từ tổ chức {org}",
+        "field-org": "Tổ chức",
+        "field-owner": "Chủ sở hữu",
+        "field-device": "Máy",
+        "knock-paired": "Đã ghép đôi (tổ chức)",
+        "knock-hint": "Máy của tổ chức khác chỉ hiện ở đây sau khi ghép đôi. Nếu liên kết tổ chức bị thu hồi, quy tắc này cũng mất hiệu lực theo.",
+        "allow-one": "Cho phép khung này",
+        "refresh": "Làm mới",
+        "loading": "Đang tải…",
+        "paired-on": "Đã ghép đôi lúc {when}",
+        "pairing-elsewhere": "Đang so sánh sáu chữ số — hãy kiểm tra trên cả hai máy",
+        "same-org-title": "Thành viên tổ chức của bạn · {org}",
+        "same-org-hint": "Các máy mà thành viên trong chính tổ chức của bạn tự chọn chia sẻ. Ghép đôi vẫn dùng phép so sánh sáu chữ số và chỉ hoàn tất khi cả hai bên đều bấm “Khớp”.",
+        "same-org-badge": "Cùng tổ chức",
+        "same-org-tag": "Thành viên tổ chức của bạn · {org}",
+        "knock-paired-same": "Đã ghép đôi (cùng tổ chức)",
+        "state-pairing": "Đang so khớp",
+        "state-ended": "Đã kết thúc ghép đôi",
+        "revoked-since": "từ {when}",
+        "offline-note": "Máy bên kia đang ngoại tuyến; có thể hoàn tất ghép đôi khi máy trực tuyến",
+        "act-failed": "Chưa hoàn tất: {reason}",
+        "manage-opening": "Đang mở…",
+        "manage-hint-signin": "hãy kiểm tra máy này đã đăng nhập Navide Cloud rồi thử lại.",
+        "manage-hint-unreachable": "hiện không kết nối được trang tổ chức; hãy thử lại sau ít phút.",
+        "reshare-hint": "Khi chủ máy chia sẻ lại máy này trên teams.navide.dev, hãy ghép đôi lại bằng sáu chữ số",
+        "rejoin-hint": "Khi chủ máy quay lại tổ chức và chia sẻ máy này, hãy ghép đôi lại bằng sáu chữ số"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} hiện không đọc được bản ghi tin cậy của nó, nên đã từ chối lần ghép đôi này và nó đã kết thúc. Trên {device}, hãy xử lý thẻ “Navide Cloud đã dừng” trong cửa sổ tài khoản (ví dụ nhấn “Bắt đầu lại”), rồi nhấn “Ghép đôi” lần nữa.",
         "failed-remote-policy-denied": "{device} đã từ chối lần ghép đôi này, nên nó đã kết thúc. Máy này có thể nằm trong danh sách chặn trên {device}; hãy kiểm tra trong cửa sổ tài khoản ở đó, rồi nhấn “Ghép đôi” lần nữa.",
         "failed-remote-unauthenticated": "{device} không xác minh được chữ ký của lần ghép đôi này, nên đã từ chối và lần ghép đôi đã kết thúc. Hãy đảm bảo cả hai máy đều chạy Navide mới nhất, rồi nhấn “Ghép đôi” lần nữa.",
-        "failed-remote-pairing-refused": "{device} đã từ chối lần ghép đôi này, nên nó đã kết thúc. Thường là do {device} đang có một lần ghép đôi khác (ví dụ cả hai bên cùng nhấn “Ghép đôi” một lúc). Hãy chờ nó xong hoặc hủy nó trên {device}, rồi nhấn “Ghép đôi” lần nữa.",
+        "failed-remote-pairing-refused": "{device} đã từ chối lần ghép đôi này, nên nó đã kết thúc. Thường là do {device} đang có một lần ghép đôi khác (ví dụ cả hai bên cùng nhấn “Ghép đôi” một lúc). Hãy chờ nó xong hoặc hủy nó trên {device}, rồi nhấn “Ghép đôi” lần nữa. Cũng có thể hai máy thuộc hai tài khoản khác nhau và chưa liên kết qua tổ chức; hãy liên kết chúng trên teams.navide.dev trước.",
         "failed-remote-other": "{device} đã từ chối lần ghép đôi này ({reason}), nên nó đã kết thúc. Nhấn “Ghép đôi” để thử lại.",
         "busy": "Một lần ghép đôi với {device} vẫn đang diễn ra và sẽ tự kết thúc sau khoảng {minutes} phút. Để bắt đầu lại ngay, hãy nhấn “Hủy yêu cầu” trong phần Ghép đôi ở trên, rồi nhấn “Ghép đôi” lần nữa.",
         "trust-unavailable-start": "Máy này hiện không đọc được bản ghi tin cậy của nó, nên không ghép đôi được. Hãy xử lý thẻ “Navide Cloud đã dừng” bên dưới trước (ví dụ nhấn “Bắt đầu lại”), rồi nhấn “Ghép đôi”."
@@ -7264,7 +7319,9 @@
         "my-account": "Tài khoản của tôi",
         "any-member": "Bất kỳ tài khoản nào",
         "any-device": "Bất kỳ thiết bị nào",
-        "any": "bất kỳ"
+        "any": "bất kỳ",
+        "org-note": "Quy tắc này cũng áp dụng cho các máy được ghép đôi qua tổ chức",
+        "grant-note": "Cho phép qua tổ chức; hết hiệu lực khi các tổ chức bị hủy liên kết"
       },
       "account": {
         "tab-login": "Đăng nhập",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "Có, xóa và bắt đầu lại",
         "rebuild-cancel": "Giữ trạng thái dừng",
         "rebuild-done": "Đã xóa bản ghi tin cậy. Hãy ghép đôi lại các thiết bị khi bạn sẵn sàng.",
-        "locked-retrying": "Có thể chỉ là tạm thời — keychain bị khóa hoặc hộp thoại cấp quyền bị đóng đều trông giống nhau từ đây. Hệ thống vẫn đang thử lại; nếu ổn trở lại, sẽ không mất gì."
+        "locked-retrying": "Có thể chỉ là tạm thời — keychain bị khóa hoặc hộp thoại cấp quyền bị đóng đều trông giống nhau từ đây. Hệ thống vẫn đang thử lại; nếu ổn trở lại, sẽ không mất gì.",
+        "approve-trust-unavailable": "Máy này hiện không đọc được bản ghi tin cậy của nó, nên chưa ghi quy tắc nào. Hãy xử lý thẻ “Navide Cloud đã dừng” bên dưới trước (ví dụ nhấn “Bắt đầu lại”), rồi cho phép yêu cầu này lần nữa.",
+        "state-revoked": "Đã thu hồi liên kết tổ chức"
       },
       "link": {
         "pause": "Tắt",

@@ -308,6 +308,7 @@
       "effort-label": "Effort",
       "effort-default": "공급업체 기본값",
       "shadowed-by-command": "이 CLI에는 실행 명령이 설정되어 있어요(설정 → CLI Agent). 그 명령은 적힌 그대로 실행되며 Navide가 모델이나 effort를 추가하지 않으므로 여기서 둘 다 고를 수 없어요. 모델을 실행 명령에 넣거나 실행 명령을 지우세요.",
+      "effort-conflict": "모델 ID에 이미 \"{suffix}\" 강도가 들어 있는데 effort는 \"{effort}\"로 선택되어 있어요. 일부 CLI(예: agy)는 실행할 때 이 조합을 거부해요. 강도 접미사가 없는 ID를 쓰거나 effort를 {suffix}(으)로 설정하세요.",
       "refuse": {
         "model-unsupported": "\"{agent}\"은(는) 실행할 때 모델을 지정할 수 없어요. 이렇게 열면 기본 모델로 돌아가요. 모델을 지우고 CLI 안에서 모델을 바꾸세요.",
         "effort-unsupported": "\"{agent}\"에는 별도의 effort 설정이 없어요. effort를 지우세요. 이 CLI가 모델 id에 수준을 담는다면(예: gpt-5.3-codex-high) 모델에 넣으세요.",
@@ -6808,7 +6809,8 @@
         "aria": "Navide Cloud 섹션",
         "sync": "동기화",
         "share": "공유",
-        "devices": "기기"
+        "devices": "기기",
+        "org": "조직"
       },
       "inventory": {
         "title": "이 컴퓨터와 클라우드",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "지금 링크 교체",
         "rekeyed-old-alive": "새 링크를 복사했어요. 서버가 이전 링크의 중지를 확인하지 않았으니, 열리면 안 된다면 폐기하세요.",
         "refresh": "새로 고침"
+      },
+      "org": {
+        "title": "페어링할 수 있는 조직",
+        "intro": "내 조직 {org}은(는) 아래 조직과 연결되어 있습니다. 상대 멤버가 직접 공개한 기기만 표시됩니다. 페어링은 여전히 6자리 비교로 진행되며, 양쪽이 모두 「일치」를 눌러야 완료됩니다.",
+        "intro-generic": "내 조직은 아래 조직과 연결되어 있습니다. 상대 멤버가 직접 공개한 기기만 표시됩니다. 페어링은 여전히 6자리 비교로 진행되며, 양쪽이 모두 「일치」를 눌러야 완료됩니다.",
+        "manage": "teams.navide.dev에서 관리",
+        "manage-failed": "조직 사이트를 열 수 없습니다: {reason}",
+        "not-joined": "아직 조직에 가입하지 않았습니다. 조직에 가입하거나 만들면 연결된 조직이 공개한 기기가 여기에 표시됩니다.",
+        "not-exposed": "아직 조직에 가입하지 않았거나 이 기기가 조직에 공개되지 않았습니다. teams.navide.dev에서 확인하고 설정할 수 있습니다.",
+        "machines": "기기 {count}대 공개",
+        "linked": "연결됨",
+        "owner": "소유자 {name}",
+        "state-pending": "페어링 안 됨",
+        "state-trusted": "페어링됨",
+        "state-blocked": "차단됨",
+        "reason-link-revoked": "조직 연결이 해제됨",
+        "reason-member-removed": "멤버가 조직에서 제외됨",
+        "reason-exposure-withdrawn": "공개가 해제됨",
+        "reason-org-deleted": "조직이 삭제됨",
+        "reason-lapsed": "조직 연결이 만료됨",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "이 조직의 모든 기기와의 페어링이 「미승인」으로 돌아갔고, 이 기기들이 보내는 메시지는 더 이상 전달되지 않습니다. 기록은 아래에 남아 있습니다. 복구하려면 teams.navide.dev에서 조직을 다시 연결한 뒤 6자리 페어링을 다시 진행하세요.",
+        "repair-hint": "teams.navide.dev에서 조직을 다시 연결한 뒤 6자리 페어링을 다시 진행하세요",
+        "pair": "페어링",
+        "unpair": "페어링 해제",
+        "offline-title": "페어링하려면 두 기기 모두 온라인이어야 합니다",
+        "footer": "페어링은 상대가 누구인지 확인할 뿐입니다. 페어링 후에도 상대의 메시지가 어느 창에 닿을지는 「이 기기에 지시할 수 있는 사람」 규칙이 정하며, 기본값은 거부입니다.",
+        "from-org": "조직 {org}에서",
+        "field-org": "조직",
+        "field-owner": "소유자",
+        "field-device": "기기",
+        "knock-paired": "페어링됨(조직)",
+        "knock-hint": "다른 조직의 기기는 페어링을 마친 뒤에만 여기에 표시됩니다. 조직 연결이 해제되면 이 규칙도 함께 무효가 됩니다.",
+        "allow-one": "이 창 허용",
+        "refresh": "새로 고침",
+        "loading": "불러오는 중…",
+        "paired-on": "{when}에 페어링",
+        "pairing-elsewhere": "6자리 비교 진행 중 — 두 기기에서 확인하세요",
+        "same-org-title": "내 조직 멤버 · {org}",
+        "same-org-hint": "같은 조직 멤버가 직접 공개한 기기입니다. 페어링은 여전히 6자리 비교로 진행되며, 양쪽이 모두 「일치」를 눌러야 완료됩니다.",
+        "same-org-badge": "같은 조직",
+        "same-org-tag": "같은 조직 멤버 · {org}",
+        "knock-paired-same": "페어링됨(같은 조직)",
+        "state-pairing": "비교 중",
+        "state-ended": "페어링 종료",
+        "revoked-since": "{when}부터",
+        "offline-note": "상대 기기가 오프라인입니다. 온라인이 되면 페어링을 완료할 수 있습니다",
+        "act-failed": "완료되지 않았습니다: {reason}",
+        "manage-opening": "여는 중…",
+        "manage-hint-signin": "이 기기가 Navide Cloud에 로그인되어 있는지 확인한 뒤 다시 시도하세요.",
+        "manage-hint-unreachable": "지금은 조직 사이트에 연결할 수 없습니다. 잠시 후 다시 시도하세요.",
+        "reshare-hint": "소유자가 teams.navide.dev에서 이 기기를 다시 공개하면 6자리 페어링을 다시 진행하세요",
+        "rejoin-hint": "소유자가 조직에 다시 참여해 이 기기를 공개하면 6자리 페어링을 다시 진행하세요"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device}이(가) 지금 신뢰 기록을 읽을 수 없어서 이 페어링을 거부했고 페어링이 종료됐어요. {device}의 계정 창에서 “Navide Cloud가 중지됨” 카드를 처리한 뒤(예: “처음부터 다시” 누르기) “페어링”을 다시 누르세요.",
         "failed-remote-policy-denied": "{device}에서 이 페어링을 거부해서 종료됐어요. 이 컴퓨터가 {device}의 차단 목록에 있을 수 있어요. 그 기기의 계정 창에서 확인한 뒤 “페어링”을 다시 누르세요.",
         "failed-remote-unauthenticated": "{device}이(가) 이 페어링의 서명을 확인하지 못해 거부했고 페어링이 종료됐어요. 두 컴퓨터 모두 최신 Navide를 실행하는지 확인한 뒤 “페어링”을 다시 누르세요.",
-        "failed-remote-pairing-refused": "{device}에서 이 페어링을 거부해서 종료됐어요. 대개 {device}에서 이미 다른 페어링이 진행 중일 때 그래요(예: 양쪽이 동시에 “페어링”을 누름). 끝날 때까지 기다리거나 {device}에서 취소한 뒤 “페어링”을 다시 누르세요.",
+        "failed-remote-pairing-refused": "{device}에서 이 페어링을 거부해서 종료됐어요. 대개 {device}에서 이미 다른 페어링이 진행 중일 때 그래요(예: 양쪽이 동시에 “페어링”을 누름). 끝날 때까지 기다리거나 {device}에서 취소한 뒤 “페어링”을 다시 누르세요. 두 기기가 서로 다른 계정이고 조직으로도 연결되지 않았을 수도 있어요. 이 경우 먼저 teams.navide.dev에서 연결하세요.",
         "failed-remote-other": "{device}에서 이 페어링을 거부해서({reason}) 종료됐어요. 다시 시도하려면 “페어링”을 누르세요.",
         "busy": "{device}와(과)의 페어링이 아직 진행 중이며 약 {minutes}분 후 저절로 끝나요. 지금 다시 시작하려면 위 페어링 섹션에서 “요청 취소”를 누른 뒤 “페어링”을 다시 누르세요.",
         "trust-unavailable-start": "이 컴퓨터가 지금 신뢰 기록을 읽을 수 없어서 페어링에 성공할 수 없어요. 먼저 아래의 “Navide Cloud가 중지됨” 카드를 처리한 뒤(예: “처음부터 다시” 누르기) “페어링”을 누르세요."
@@ -7264,7 +7319,9 @@
         "my-account": "내 계정",
         "any-member": "모든 계정",
         "any-device": "모든 기기",
-        "any": "모두"
+        "any": "모두",
+        "org-note": "이 규칙은 조직을 통해 페어링한 기기에도 적용됩니다",
+        "grant-note": "조직을 통해 한 번에 허용됨. 조직 연결이 해제되면 함께 무효가 됩니다"
       },
       "account": {
         "tab-login": "로그인",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "예, 지우고 다시 시작",
         "rebuild-cancel": "중지 상태 유지",
         "rebuild-done": "신뢰 기록을 지웠어요. 준비되면 기기를 다시 페어링하세요.",
-        "locked-retrying": "일시적인 문제일 수 있어요. 키체인이 잠겼거나 권한 대화 상자를 닫은 경우도 여기서는 똑같이 보여요. 계속 재시도 중이며, 해결되면 잃은 것은 없어요."
+        "locked-retrying": "일시적인 문제일 수 있어요. 키체인이 잠겼거나 권한 대화 상자를 닫은 경우도 여기서는 똑같이 보여요. 계속 재시도 중이며, 해결되면 잃은 것은 없어요.",
+        "approve-trust-unavailable": "이 컴퓨터가 지금 신뢰 기록을 읽을 수 없어서 규칙을 쓰지 않았어요. 먼저 아래의 “Navide Cloud가 중지됨” 카드를 처리한 뒤(예: “처음부터 다시” 누르기) 이 요청을 다시 허용하세요.",
+        "state-revoked": "조직 연결이 해제됨"
       },
       "link": {
         "pause": "끄기",

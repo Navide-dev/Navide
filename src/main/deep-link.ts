@@ -13,6 +13,7 @@ import {
   DEEP_LINK_OPEN_CHANNEL,
   DEEP_LINK_PUBLISH_CHANNEL,
   DEEP_LINK_READY_CHANNEL,
+  isOrgLoginDeepLink,
   isPublishDeepLink,
   parseDeepLink,
   parsePublishDeepLink,
@@ -34,6 +35,8 @@ export interface DeepLinkRouterDeps {
   ensureWindow: () => void
   log: (message: string) => void
   now?: () => number
+  /** `navide://org/login`: start the organisation-site handoff. Needs no window. */
+  onOrgLogin?: () => void
 }
 
 export interface DeepLinkRouter {
@@ -62,6 +65,15 @@ export function createDeepLinkRouter(deps: DeepLinkRouterDeps): DeepLinkRouter {
   const recent = new Map<string, number>()
 
   function handle(url: unknown): void {
+    if (isOrgLoginDeepLink(url)) {
+      const at = now()
+      const seen = recent.get('org:login')
+      if (seen !== undefined && at - seen < DEEP_LINK_REPEAT_MS) return
+      recent.set('org:login', at)
+      deps.log('[deeplink] organisation sign-in')
+      deps.onOrgLogin?.()
+      return
+    }
     // A publish link only opens the publish form with that package (W3).
     const publish = parsePublishDeepLink(url)
     const parsed = publish.ok ? publish : parseDeepLink(url)

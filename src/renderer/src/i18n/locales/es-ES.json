@@ -308,6 +308,7 @@
       "effort-label": "Esfuerzo",
       "effort-default": "Predeterminado del proveedor",
       "shadowed-by-command": "Esta CLI tiene definido un comando de arranque (Ajustes → Agents de CLI). Esa línea se ejecuta tal cual y Navide no le añade modelo ni nivel de esfuerzo, así que aquí no se puede elegir ninguno de los dos. Pon el modelo en el comando de arranque o bórralo.",
+      "effort-conflict": "El id del modelo ya indica el nivel \"{suffix}\", pero el esfuerzo elegido es \"{effort}\". Algunas CLI (como agy) rechazan esta combinación al arrancar. Usa el id sin el sufijo de nivel o pon el esfuerzo en {suffix}.",
       "refuse": {
         "model-unsupported": "A «{agent}» no se le puede indicar un modelo al arrancar; abierto así, usa su modelo predeterminado. Quita el modelo y cámbialo dentro de la CLI.",
         "effort-unsupported": "«{agent}» no tiene un ajuste de esfuerzo aparte. Quita el nivel de esfuerzo; si esta CLI codifica el nivel en el id del modelo (p. ej., gpt-5.3-codex-high), ponlo en el modelo.",
@@ -6808,7 +6809,8 @@
         "aria": "Secciones de Navide Cloud",
         "sync": "Sincronizar",
         "share": "Compartir",
-        "devices": "Dispositivos"
+        "devices": "Dispositivos",
+        "org": "Organizaciones"
       },
       "inventory": {
         "title": "Este equipo y la nube",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "Sustituir el enlace ahora",
         "rekeyed-old-alive": "Nuevo enlace copiado. El servidor no confirmó que el enlace anterior haya dejado de funcionar; revócalo si no debe abrirse.",
         "refresh": "Actualizar"
+      },
+      "org": {
+        "title": "Organizaciones con las que emparejar",
+        "intro": "Tu organización {org} está vinculada con las organizaciones de abajo. Solo se muestran las máquinas que sus miembros eligieron compartir. El emparejamiento sigue usando la comparación de seis dígitos y termina solo cuando ambos lados pulsan «Coinciden».",
+        "intro-generic": "Tu organización está vinculada con las organizaciones de abajo. Solo se muestran las máquinas que sus miembros eligieron compartir. El emparejamiento sigue usando la comparación de seis dígitos y termina solo cuando ambos lados pulsan «Coinciden».",
+        "manage": "Gestionar en teams.navide.dev",
+        "manage-failed": "No se pudo abrir el sitio de la organización: {reason}",
+        "not-joined": "Aún no perteneces a ninguna organización. Cuando te unas o crees una, aquí aparecerán las máquinas que compartan las organizaciones vinculadas.",
+        "not-exposed": "Aún no perteneces a una organización, o esta máquina no se comparte con ninguna. Puedes verlo y configurarlo en teams.navide.dev.",
+        "machines": "{count} máquinas compartidas",
+        "linked": "Vinculada",
+        "owner": "Propietario {name}",
+        "state-pending": "Sin emparejar",
+        "state-trusted": "Emparejada",
+        "state-blocked": "Bloqueada",
+        "reason-link-revoked": "Vínculo de organización revocado",
+        "reason-member-removed": "Miembro retirado de la organización",
+        "reason-exposure-withdrawn": "Ya no se comparte",
+        "reason-org-deleted": "Organización eliminada",
+        "reason-lapsed": "Vínculo de organización caducado",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "Los emparejamientos con todas las máquinas de esta organización volvieron a «no aprobado» y sus mensajes ya no se entregan. El historial queda abajo. Para restaurarlo, vuelve a vincular las organizaciones en teams.navide.dev y empareja de nuevo con seis dígitos.",
+        "repair-hint": "Vuelve a vincular las organizaciones en teams.navide.dev y empareja de nuevo con seis dígitos",
+        "pair": "Emparejar",
+        "unpair": "Desemparejar",
+        "offline-title": "Para emparejar, ambas máquinas deben estar en línea",
+        "footer": "Emparejar solo confirma quién es el otro lado. Después, a qué paneles llegan sus mensajes lo siguen decidiendo las reglas de quién puede dar instrucciones a este dispositivo, que deniegan por defecto.",
+        "from-org": "De la organización {org}",
+        "field-org": "Organización",
+        "field-owner": "Propietario",
+        "field-device": "Máquina",
+        "knock-paired": "Emparejada (organización)",
+        "knock-hint": "Las máquinas de otras organizaciones solo aparecen aquí después de emparejarse. Si se revoca el vínculo de organización, esta regla caduca con él.",
+        "allow-one": "Permitir este panel",
+        "refresh": "Actualizar",
+        "loading": "Cargando…",
+        "paired-on": "Emparejada el {when}",
+        "pairing-elsewhere": "Comparación de seis dígitos en curso: compruébalo en ambas máquinas",
+        "same-org-title": "Miembros de tu organización · {org}",
+        "same-org-hint": "Máquinas que miembros de tu propia organización eligieron compartir. El emparejamiento sigue usando la comparación de seis dígitos y termina solo cuando ambos lados pulsan «Coinciden».",
+        "same-org-badge": "Misma organización",
+        "same-org-tag": "Miembro de tu organización · {org}",
+        "knock-paired-same": "Emparejada (misma organización)",
+        "state-pairing": "Comparando",
+        "state-ended": "Emparejamiento terminado",
+        "revoked-since": "desde {when}",
+        "offline-note": "La otra máquina está desconectada; el emparejamiento se completa cuando vuelva a estar en línea",
+        "act-failed": "No se completó: {reason}",
+        "manage-opening": "Abriendo…",
+        "manage-hint-signin": "comprueba que esta máquina haya iniciado sesión en Navide Cloud y vuelve a intentarlo.",
+        "manage-hint-unreachable": "ahora no se puede conectar con el sitio de la organización; inténtalo de nuevo en un momento.",
+        "reshare-hint": "Cuando su propietario vuelva a compartir esta máquina en teams.navide.dev, empareja de nuevo con seis dígitos",
+        "rejoin-hint": "Cuando su propietario vuelva a la organización y comparta esta máquina, empareja de nuevo con seis dígitos"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} no puede leer ahora su registro de confianza, así que rechazó este emparejamiento y este ha terminado. En {device}, resuelve la tarjeta «Navide Cloud está detenido» de la ventana de la cuenta (por ejemplo, pulsa «Empezar de nuevo») y vuelve a pulsar «Emparejar».",
         "failed-remote-policy-denied": "{device} rechazó este emparejamiento, así que ha terminado. Puede que este equipo esté en la lista de bloqueo de {device}; compruébalo allí en la ventana de la cuenta y vuelve a pulsar «Emparejar».",
         "failed-remote-unauthenticated": "{device} no pudo verificar la firma de este emparejamiento, así que lo rechazó y ha terminado. Asegúrate de que ambos equipos tengan la última versión de Navide y vuelve a pulsar «Emparejar».",
-        "failed-remote-pairing-refused": "{device} rechazó este emparejamiento, así que ha terminado. Normalmente {device} ya tiene un emparejamiento en curso (por ejemplo, ambos lados pulsaron «Emparejar» a la vez). Espera a que termine o cancélalo en {device} y vuelve a pulsar «Emparejar».",
+        "failed-remote-pairing-refused": "{device} rechazó este emparejamiento, así que ha terminado. Normalmente {device} ya tiene un emparejamiento en curso (por ejemplo, ambos lados pulsaron «Emparejar» a la vez). Espera a que termine o cancélalo en {device} y vuelve a pulsar «Emparejar». También puede que los dos equipos estén en cuentas distintas y no vinculados mediante una organización; vincúlalos primero en teams.navide.dev.",
         "failed-remote-other": "{device} rechazó este emparejamiento ({reason}), así que ha terminado. Pulsa «Emparejar» para volver a intentarlo.",
         "busy": "Sigue en curso un emparejamiento con {device}, que terminará solo en unos {minutes} min. Para empezar de nuevo ahora, pulsa «Cancelar solicitud» en la sección Emparejamiento de arriba y vuelve a pulsar «Emparejar».",
         "trust-unavailable-start": "Este equipo no puede leer ahora su registro de confianza, así que el emparejamiento no puede salir bien. Resuelve primero la tarjeta «Navide Cloud está detenido» de abajo (por ejemplo, pulsa «Empezar de nuevo») y luego pulsa «Emparejar»."
@@ -7264,7 +7319,9 @@
         "my-account": "Mi cuenta",
         "any-member": "Cualquier cuenta",
         "any-device": "Cualquier dispositivo",
-        "any": "cualquiera"
+        "any": "cualquiera",
+        "org-note": "Esta regla también se aplica a las máquinas emparejadas a través de una organización",
+        "grant-note": "Permitida a través de una organización; deja de valer si se desvinculan las organizaciones"
       },
       "account": {
         "tab-login": "Iniciar sesión",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "Sí, borrar y empezar de nuevo",
         "rebuild-cancel": "Mantenerlo detenido",
         "rebuild-done": "Se ha borrado el registro de confianza. Vuelve a emparejar tus dispositivos cuando quieras.",
-        "locked-retrying": "Puede que sea temporal: un llavero bloqueado o un cuadro de permiso descartado se ven igual desde aquí. Se sigue reintentando; si se resuelve, no se habrá perdido nada."
+        "locked-retrying": "Puede que sea temporal: un llavero bloqueado o un cuadro de permiso descartado se ven igual desde aquí. Se sigue reintentando; si se resuelve, no se habrá perdido nada.",
+        "approve-trust-unavailable": "Este equipo no puede leer ahora su registro de confianza, así que no se escribió ninguna regla. Resuelve primero la tarjeta «Navide Cloud está detenido» de abajo (por ejemplo, pulsa «Empezar de nuevo») y luego vuelve a permitir la solicitud.",
+        "state-revoked": "Vínculo de organización revocado"
       },
       "link": {
         "pause": "Desactivar",

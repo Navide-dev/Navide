@@ -37,7 +37,7 @@ export {
 } from './lib/cliLaunchOverride'
 export type { CliEnvEntry, LaunchCommandSource } from './lib/cliLaunchOverride'
 
-export { modelArgsFor, supportsEffort, supportsModel } from './lib/cliModel'
+export { effortSuffixConflict, modelArgsFor, supportsEffort, supportsModel } from './lib/cliModel'
 export type {
   CliModelCapability,
   CliModelRefusal,

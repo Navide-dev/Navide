@@ -308,6 +308,7 @@
       "effort-label": "推理强度",
       "effort-default": "厂商默认",
       "shadowed-by-command": "这个 CLI 设了启动指令（设置 → CLI Agents），整条命令照原样运行，Navide 不会再加上模型与 effort，所以这里无法选。要指定模型，请写进该启动指令，或清空它。",
+      "effort-conflict": "模型 ID 已经带了“{suffix}”强度，但 effort 选的是“{effort}”。部分 CLI（例如 agy）启动时会拒绝这种组合。请改用不带强度后缀的 ID，或把 effort 设为 {suffix}。",
       "refuse": {
         "model-unsupported": "“{agent}”无法在启动时指定模型，这样开会落回它的默认模型 — 请拿掉 model 参数，改在 CLI 里自己切换模型",
         "effort-unsupported": "“{agent}”没有独立的 effort 参数 — 请拿掉 effort；若这家 CLI 是把强度写在模型 id 里（例如 gpt-5.3-codex-high），请改写进 model",
@@ -6808,7 +6809,8 @@
         "aria": "Navide Cloud 子标签页",
         "sync": "同步",
         "share": "分享",
-        "devices": "设备"
+        "devices": "设备",
+        "org": "组织"
       },
       "inventory": {
         "title": "这台机器与云端",
@@ -6865,6 +6867,59 @@
         "rekey-confirm": "确定换新链接",
         "rekeyed-old-alive": "已复制新链接。server 没有确认旧链接已失效，若旧链接不可再打开，请手动撤销。",
         "refresh": "刷新"
+      },
+      "org": {
+        "title": "可配对的组织",
+        "intro": "你的组织 {org} 已和下面这些组织互连。这里只列出对方成员自己选择公开的机器。配对仍然走六码比对，两边都按「一致」才算配对完成。",
+        "intro-generic": "你的组织已和下面这些组织互连。这里只列出对方成员自己选择公开的机器。配对仍然走六码比对，两边都按「一致」才算配对完成。",
+        "manage": "在 teams.navide.dev 管理",
+        "manage-failed": "无法打开组织网站：{reason}",
+        "not-joined": "尚未加入组织。加入或创建组织后，互连组织公开的机器会列在这里。",
+        "not-exposed": "尚未加入组织，或这台机器尚未对组织公开。可以到 teams.navide.dev 查看与设置。",
+        "machines": "{count} 台机器公开",
+        "linked": "已互连",
+        "owner": "所有者 {name}",
+        "state-pending": "尚未配对",
+        "state-trusted": "已配对",
+        "state-blocked": "已屏蔽",
+        "reason-link-revoked": "组织连接已撤销",
+        "reason-member-removed": "成员已移出组织",
+        "reason-exposure-withdrawn": "已取消公开",
+        "reason-org-deleted": "组织已删除",
+        "reason-lapsed": "组织连接已失效",
+        "revoked-on": "{when} {reason}",
+        "revoked-body": "这个组织所有机器的配对已一起改回「未核准」，它们发来的消息不会再送达。记录保留在下面。要恢复，先在 teams.navide.dev 重新互连，再走一次六码配对。",
+        "repair-hint": "先在 teams.navide.dev 重新互连，再走一次六码配对",
+        "pair": "配对",
+        "unpair": "解除配对",
+        "offline-title": "配对需要两台机器都在线",
+        "footer": "配对只代表确认了对方是谁。配对之后，对方的消息能送到哪个分格，仍然按「谁能对这台设备下指令」的规则决定，默认是拒绝。",
+        "from-org": "来自组织 {org}",
+        "field-org": "组织",
+        "field-owner": "所有者",
+        "field-device": "机器",
+        "knock-paired": "已配对（组织配对）",
+        "knock-hint": "来自其他组织的机器要先完成配对，才会出现在这里。组织连接被撤销时，这条规则也会随之失效。",
+        "allow-one": "一键允许",
+        "refresh": "刷新",
+        "loading": "读取中…",
+        "paired-on": "曾于 {when} 配对",
+        "pairing-elsewhere": "六码比对进行中，请在两台机器上核对",
+        "same-org-title": "本组织成员 · {org}",
+        "same-org-hint": "和你同组织的成员自己选择公开的机器。配对一样走六码比对，两边都按「一致」才算完成。",
+        "same-org-badge": "同组织",
+        "same-org-tag": "同组织成员 · {org}",
+        "knock-paired-same": "已配对（同组织成员）",
+        "state-pairing": "比对中",
+        "state-ended": "配对已结束",
+        "revoked-since": "自 {when} 起",
+        "offline-note": "对方离线，上线后才能完成配对",
+        "act-failed": "这个操作没有完成：{reason}",
+        "manage-opening": "正在打开…",
+        "manage-hint-signin": "请确认这台机器已登录 Navide Cloud，再试一次。",
+        "manage-hint-unreachable": "组织网站暂时连不上，请稍后再试。",
+        "reshare-hint": "所有者在 teams.navide.dev 重新公开这台机器后，再走一次六码配对",
+        "rejoin-hint": "所有者重新加入组织并公开这台机器后，再走一次六码配对"
       }
     },
     "sync": {
@@ -7216,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} 的信任记录目前读不出来，所以拒收了这次配对，这一轮已结束。请到 {device} 的账号窗口处理“Navide Cloud 已停止”卡片（例如按“重新开始”），再重新按“配对”。",
         "failed-remote-policy-denied": "{device} 拒收了这次配对，这一轮已结束。这台机器可能在 {device} 的封锁清单里，请到 {device} 的账号窗口确认后，再重新按“配对”。",
         "failed-remote-unauthenticated": "{device} 无法验证这次配对的签章，所以拒收了，这一轮已结束。请确认两台都更新到最新版，再重新按“配对”。",
-        "failed-remote-pairing-refused": "{device} 拒收了这次配对，这一轮已结束。通常是 {device} 那边已经有一轮配对在进行（例如两边同时按了“配对”）。请等那一轮结束或在 {device} 上取消，再重新按“配对”。",
+        "failed-remote-pairing-refused": "{device} 拒收了这次配对，这一轮已结束。通常是 {device} 那边已经有一轮配对在进行（例如两边同时按了“配对”）。请等那一轮结束或在 {device} 上取消，再重新按“配对”。也可能是两台机器不在同一个账号，也没有通过组织互连，这种情况要先在 teams.navide.dev 互连。",
         "failed-remote-other": "{device} 拒收了这次配对（{reason}），这一轮已结束。请重新按“配对”再试一次。",
         "busy": "与 {device} 的配对还在进行中，约 {minutes} 分钟后会自动结束。想现在重来，请在上方“配对”区块按“取消请求”，再重新按“配对”。",
         "trust-unavailable-start": "这台机器的信任记录目前读不出来，配对不会成功。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再按“配对”。"
@@ -7264,7 +7319,9 @@
         "my-account": "我的账号",
         "any-member": "任何账号",
         "any-device": "任何设备",
-        "any": "不限"
+        "any": "不限",
+        "org-note": "这条规则也适用于通过组织配对的机器",
+        "grant-note": "通过组织一键允许；组织互连解除时会一起失效"
       },
       "account": {
         "tab-login": "登录",
@@ -7391,7 +7448,9 @@
         "rebuild-confirm": "确定，清除并重新开始",
         "rebuild-cancel": "维持停止状态",
         "rebuild-done": "信任记录已清除。准备好之后再重新配对你的设备。",
-        "locked-retrying": "这可能只是暂时的——钥匙圈被锁住、或权限对话框被按掉，从这里看起来都一样。它还在重试；如果通了，什么都没有损失。"
+        "locked-retrying": "这可能只是暂时的——钥匙圈被锁住、或权限对话框被按掉，从这里看起来都一样。它还在重试；如果通了，什么都没有损失。",
+        "approve-trust-unavailable": "这台机器的信任记录目前读不出来，所以还没写入规则。请先处理下方“Navide Cloud 已停止”卡片（例如按“重新开始”），再允许一次这个请求。",
+        "state-revoked": "组织连接已撤销"
       },
       "link": {
         "pause": "关闭",

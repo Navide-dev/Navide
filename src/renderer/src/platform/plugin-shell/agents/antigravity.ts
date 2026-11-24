@@ -6,11 +6,12 @@ export const SPEC = {
   agentKey: 'antigravity',
   label: 'Antigravity CLI (Google)',
   defaultCommand: 'agy',
-  // agy validates both together and exits 1 on a bad value, naming the
-  // three it accepts.
+  // agy validates both together and exits 1 on a bad value. `agy --help`
+  // (1.5.13) lists five levels; which of them a model offers is per model
+  // (gemini-4-neon has no `max`), and agy names the ones it accepts.
   modelArgs: (m) => `--model ${m}`,
   effortArgs: (e) => `--effort ${e}`,
-  knownEfforts: ['low', 'medium', 'high'],
+  knownEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
   skipPermissionFlag: '--dangerously-skip-permissions',
   resumeArgs: (id) => `--conversation ${id}`,
   needsSessionMarker: true,

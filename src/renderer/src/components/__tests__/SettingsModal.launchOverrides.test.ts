@@ -41,6 +41,12 @@ describe('launch overrides section', () => {
     expect(body).toContain("<option value=\"\">{{ $t('settings.cliLaunch.effort-vendor-default') }}</option>")
   })
 
+  it('hints at an id whose level differs from the effort, after any refusal', () => {
+    // A hint, not a refusal: applyLaunchModel still saves the pair.
+    expect(body).toContain('v-else-if="launchEffortConflict(row.agentKey)" class="launch-effort-conflict"')
+    expect(source).toContain('effortSuffixConflict({ spec, request })')
+  })
+
   it('shows each field only when the vendor declares the flag behind it', () => {
     expect(body).toContain('v-if="row.supportsModel"')
     expect(body).toContain('v-if="row.supportsEffort"')
