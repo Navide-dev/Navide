@@ -4686,7 +4686,7 @@
             "role": "Arriba está el desplegable <strong>Seleccionar rol…</strong>: elige un rol predefinido.",
             "cliList": "Debajo, la lista se divide en dos bloques con encabezado. <strong>{cli}</strong> reúne las CLI de programación y marca las que no están instaladas. <strong>{agents}</strong> muestra tus agentes permanentes (OpenClaw, Hermes Agent) por nombre: si eliges uno abierto, cambias a él; si eliges uno cerrado, se reanuda su conversación. También hay una entrada <em>Nuevo …</em> que primero pide un nombre, y los agentes ACP aparecen en este bloque. Una nota bajo la lista indica que los agentes en la nube, como Grok Bot y dots, se ofrecen como complementos de Navide.",
             "terminal": "Abajo están <strong>Terminal</strong> (un terminal normal sin agent) y <strong>Creación manual…</strong>.",
-            "sshRemote": "Con <strong>Ajustes → General → Funciones experimentales → Panes de contenedor remoto</strong> activado, aparece <strong>SSH Remote…</strong> debajo de <strong>Terminal</strong>. Pide host, usuario, puerto (22 por defecto) y la ruta de la clave privada, y guarda las conexiones recientes solo en este equipo. Solo se guarda la ruta de la clave; nunca se lee ni se copia, y el reenvío del agente SSH sigue desactivado. Conectar comprueba el host y abre un pane de terminal cuyo shell se ejecuta allí; si la conexión se corta, el pane se reconecta solo."
+            "sshRemote": "Con <strong>Ajustes → General → Funciones experimentales → Panes de contenedor remoto</strong> activado, aparece <strong>SSH Remote…</strong> debajo de <strong>Terminal</strong>. Pide host, usuario, puerto (22 por defecto) y la ruta de la clave privada, y guarda las conexiones recientes solo en este equipo. Solo se guarda la ruta de la clave; nunca se lee ni se copia, y el reenvío del agente SSH sigue desactivado. Conectar comprueba el host y abre un pane de terminal cuyo shell se ejecuta allí; si la conexión se corta, el pane se reconecta solo. También puede abrir Claude, Codex u otra CLI en una carpeta remota, con su propio inicio de sesión en ese host (sin cambio de cuenta ni cambio automático por cuota); los paneles SSH se restauran tras reiniciar."
           },
           "p2": "<em>Creación manual…</em> abre el diálogo completo, donde puedes elegir el agent y el rol, decidir si añadirlo al escenario y si abrir un terminal junto a él, y pegar un id de session para reanudar directamente una conversación anterior.",
           "table": {
@@ -12666,7 +12666,22 @@
     "reconnecting": "Reconectando…",
     "retry-in": "Reconexión automática en {seconds} s",
     "reconnect": "Reconectar",
-    "close-pane": "Cerrar pane"
+    "close-pane": "Cerrar pane",
+    "dir-label": "Carpeta remota",
+    "dir-placeholder": "~ (inicio) o una ruta en el host",
+    "run-label": "Abrir",
+    "run-terminal": "Terminal (shell de inicio de sesión)",
+    "tools-note": "{cli} tiene las herramientas de Navide en el host (mensajes a otros paneles, planes). Para ello, Navide envía a este panel su propio token de herramientas por la conexión SSH, escrito con el eco desactivado y nunca en una línea de comandos. El token es solo para este panel y deja de funcionar al cerrarlo. No es una credencial de cuenta: ninguna clave ni inicio de sesión sale de este equipo.",
+    "no-tools-note": "{cli} se ejecuta en el host sin las herramientas de Navide: los mensajes de otros paneles siguen llegando como texto escrito, pero no puede llamar a Navide por sí mismo.",
+    "accounts-note": "Inicia sesión en {cli} tú mismo en el host remoto. Este panel no participa en el cambio de cuenta ni en el cambio automático por cuota.",
+    "resume-note": "Al reconectar o reiniciar Navide se retoma la conversación propia de este panel, nunca otra de la misma carpeta.",
+    "fresh-note": "Al reconectar o reiniciar Navide, {cli} empieza una conversación nueva.",
+    "accounts-chip": "Sesión remota propia",
+    "accounts-chip-title": "Sesión iniciada en {host}. Este panel no participa en el cambio de cuenta ni en el cambio automático por cuota.",
+    "no-tools-chip": "Sin herramientas de Navide",
+    "no-tools-chip-title": "{cli} se ejecuta en {host} sin las herramientas de Navide.",
+    "resume-missed": "No se pudo continuar la conversación anterior, así que empezó una nueva.",
+    "dismiss": "Cerrar"
   },
   "shippedLog": {
     "menu": {

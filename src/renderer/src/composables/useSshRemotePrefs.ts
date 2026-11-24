@@ -11,6 +11,19 @@ import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 export const SSH_REMOTE_RECENT_KEY = 'sshRemoteRecent'
 export const SSH_REMOTE_RECENT_MAX = 8
 export const SSH_DEFAULT_PORT = 22
+export const SSH_DEFAULT_DIR = '~'
+
+/** What an SSH pane can run on the host: a login shell, or one of these CLIs
+ *  (the backend's remote_ssh.CLI_COMMANDS). */
+export const SSH_TERMINAL = 'terminal'
+export const SSH_REMOTE_CLIS = [
+  'claude', 'codex', 'aider', 'antigravity', 'copilot', 'cursor', 'devin', 'droid', 'goose', 'grok',
+  'hermes', 'kilo', 'kimi', 'kiro', 'mcode', 'muse', 'openclaw', 'opencode', 'pi', 'qwen',
+] as const
+/** The CLIs that get Navide's tools on the host (remote_ssh.MCP_CLIS). */
+export const SSH_MCP_CLIS: readonly string[] = ['claude', 'codex']
+/** The CLIs whose remote session a reconnect or restore can resume. */
+export const SSH_RESUMABLE_CLIS: readonly string[] = ['claude', 'codex']
 
 /** One connection target, as the dialog sends it to `remote_ssh.connect`. */
 export interface SshRemoteTarget {
@@ -19,12 +32,19 @@ export interface SshRemoteTarget {
   port: number
   /** Path to a private key on this machine; empty for ssh's own default. */
   keyPath: string
+  /** The folder the pane starts in on the host; '~' (the default) is home. */
+  dir?: string
+  /** What runs there: SSH_TERMINAL (the default) or one of SSH_REMOTE_CLIS. */
+  cli?: string
+  /** The CLI's own session id on the host, once known ('' or absent before):
+   *  a reconnect or restore resumes exactly this conversation. */
+  sessionId?: string
 }
 
 /** Copies the four fields and nothing else; null for a malformed row. */
 export function sshTargetFields(row: unknown): SshRemoteTarget | null {
   if (!row || typeof row !== 'object') return null
-  const { host, user, port, keyPath } = row as Record<string, unknown>
+  const { host, user, port, keyPath, dir, cli } = row as Record<string, unknown>
   if (typeof host !== 'string' || !host.trim()) return null
   const p = typeof port === 'number' ? port : Number(port)
   return {
@@ -32,6 +52,8 @@ export function sshTargetFields(row: unknown): SshRemoteTarget | null {
     user: typeof user === 'string' ? user.trim() : '',
     port: Number.isInteger(p) && p >= 1 && p <= 65535 ? p : SSH_DEFAULT_PORT,
     keyPath: typeof keyPath === 'string' ? keyPath.trim() : '',
+    dir: typeof dir === 'string' && dir.trim() ? dir.trim() : SSH_DEFAULT_DIR,
+    cli: typeof cli === 'string' && (SSH_REMOTE_CLIS as readonly string[]).includes(cli) ? cli : SSH_TERMINAL,
   }
 }
 

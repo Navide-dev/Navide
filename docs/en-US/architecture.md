@@ -328,13 +328,28 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   `REMOTE_SSH_FAILED` with a plain-language reason (`unreachable`, `auth`,
   `host-key`, `other`); a success, or `force` after an `auth` / `host-key`
   refusal, adds the target to the app-level trusted list (`sshRemoteTrusted`).
-  `terminal.create` with `remote = {kind: "ssh", ...}` and agent key
-  `terminal` opens a shell only on a trusted target, so a target named by a
-  pane record alone runs no `ssh`. The pane carries `ssh_remote` metadata, not
-  the container panes' `remote`. Only terminal panes: no CLI and no reverse
-  tunnel run on the host. The renderer reconnects on ssh's exit 255 with
-  backoff, re-running the check each try; such panes are not restored after a
-  restart. The key is passed to `ssh -i` by path and never opened by Navide;
+  `terminal.create` with `remote = {kind: "ssh", ...}` opens a pane only on a
+  trusted target, so a target named by a pane record alone runs no `ssh`. The
+  spec also names a remote folder (`dir`, `~` by default) and what runs there
+  (`cli`): `terminal` (agent key `terminal`, a login shell) or a CLI from
+  `remote_ssh.CLI_COMMANDS` (agent key `remote`, the CLI's default command run
+  under the user's own interactive login shell). Claude and Codex also get the
+  Navide MCP endpoint through `ssh -R` and the pane's own MCP token, written to
+  the PTY with echo off as for container panes; the other CLIs get no tunnel
+  and no token. Nothing about local accounts goes to the host. The pane carries
+  `ssh_remote` metadata, not the container panes' `remote`; either one marks a
+  pane that account switching and quota failover leave alone. A CLI pane
+  resumes only its own remote session: Claude is launched with a
+  `--session-id` chosen by the renderer and resumed with `--resume <id>` when
+  its transcript exists on the host; Codex's id is read on the host from the
+  rollout file its process holds open (`/proc` or `lsof`) and reported back as
+  an OSC sequence carrying a per-launch nonce, then resumed with
+  `codex resume <id>`. A resume that cannot happen starts fresh and reports
+  that (`remote_ssh.resume_missed`); never `--continue` or `resume --last`.
+  SSH panes are recorded (`manual_pane.spawn` with the spec, the id through
+  `remote_ssh.set_session`) and restored like other panes, still only to a
+  trusted target. The renderer reconnects on ssh's exit 255 with backoff,
+  re-running the check each try. The key is passed to `ssh -i` by path and never opened by Navide;
   the argv always carries `ForwardAgent=no` and never `-A`; the spawn
   environment is the same reduced set as above. Recent and trusted targets
   live in `ui_settings` (`sshRemoteRecent`, `sshRemoteTrusted`), which no sync

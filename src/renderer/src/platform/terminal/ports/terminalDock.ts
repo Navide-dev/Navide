@@ -37,8 +37,8 @@ export interface TerminalSpawnOptions {
   accountDirLogin?: boolean
   /** A remote container pane (Settings → Experimental → Remote container
    *  panes): the backend runs the CLI over ssh inside this container and
-   *  ignores `command`; or an SSH Remote terminal pane (`kind: 'ssh'`), whose
-   *  login shell runs on that host. Absent for every local pane. */
+   *  ignores `command`; or an SSH Remote pane (`kind: 'ssh'`), whose login
+   *  shell or CLI runs on that host. Absent for every local pane. */
   remote?: TerminalRemoteTarget | TerminalSshTarget
 }
 
@@ -52,13 +52,21 @@ export interface TerminalRemoteTarget {
   cli: 'claude' | 'codex'
 }
 
-/** The `remote` object of an SSH Remote terminal pane. The key is a path only. */
+/** The `remote` object of an SSH Remote pane. The key is a path only. */
 export interface TerminalSshTarget {
   kind: 'ssh'
   host: string
   user: string
   port: number
   keyPath: string
+  /** Remote folder; '~' or absent for home. */
+  dir?: string
+  /** 'terminal' (a login shell; agent key 'terminal') or a CLI key (agent key 'remote'). */
+  cli?: string
+  /** The CLI's remote session id, when known. */
+  sessionId?: string
+  /** This launch continues an earlier one (reconnect, rebuild, restore). */
+  resume?: boolean
 }
 
 export interface TerminalCreateRequest {

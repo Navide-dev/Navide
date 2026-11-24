@@ -4686,7 +4686,7 @@
             "role": "最上面是 <strong>選擇角色…</strong> 下拉——選一個預設角色。",
             "cliList": "下面的清單分成兩個有標題的區塊。<strong>{cli}</strong> 是寫程式用的 CLI，沒安裝的會標示出來。<strong>{agents}</strong> 依名字列出你的常駐 Agent（OpenClaw、Hermes Agent）：已開啟的點了會切過去，已關閉的點了會接續原本的對話；另有一個<em>新增 …</em>，會先請你取名字。ACP Agent 也列在這一區。清單下方有一行提示：Grok Bot、dots 這類雲端 Agent 是以 Navide 外掛的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（開一般終端機，不掛 agent）與 <strong>啟動 Agent…</strong>。",
-            "sshRemote": "在 <strong>設定 → 一般 → 實驗功能 → 遠端容器分格</strong> 打開後，<strong>終端機</strong> 下方會多出 <strong>SSH Remote…</strong>：填主機、使用者、連接埠（預設 22）與私鑰路徑，最近連線只存在這台電腦。只記住私鑰的路徑，不會讀取或複製私鑰，SSH agent 轉送保持關閉。按「連線」會檢查主機，然後開一個在那台主機上執行 shell 的終端機分格；連線中斷時會自動重新連線。"
+            "sshRemote": "在 <strong>設定 → 一般 → 實驗功能 → 遠端容器分格</strong> 打開後，<strong>終端機</strong> 下方會多出 <strong>SSH Remote…</strong>：填主機、使用者、連接埠（預設 22）與私鑰路徑，最近連線只存在這台電腦。只記住私鑰的路徑，不會讀取或複製私鑰，SSH agent 轉送保持關閉。按「連線」會檢查主機，然後開一個在那台主機上執行 shell 的終端機分格；連線中斷時會自動重新連線。也可以在遠端資料夾開 Claude、Codex 或其他 CLI，使用它在那台主機上自己的登入（不參與帳號切換與額度自動切換）；Navide 重開後會還原 SSH 分格。"
           },
           "p2": "<em>啟動 Agent…</em> 開的是完整對話框，可以指定 agent 與角色、決定要不要加進舞台、要不要同時開終端機，也可以貼一個 session id 直接接續舊對話。",
           "table": {
@@ -12666,7 +12666,22 @@
     "reconnecting": "正在重新連線…",
     "retry-in": "{seconds} 秒後自動重新連線",
     "reconnect": "重新連線",
-    "close-pane": "關閉分格"
+    "close-pane": "關閉分格",
+    "dir-label": "遠端資料夾",
+    "dir-placeholder": "~（家目錄）或主機上的路徑",
+    "run-label": "開啟",
+    "run-terminal": "終端機（登入 shell）",
+    "tools-note": "{cli} 在遠端主機上可以使用 Navide 的工具（傳訊息給其他分格、計畫）。為此，Navide 會透過 SSH 連線把這個分格專屬的工具 token 送過去：在關閉回顯的狀態下輸入，不會出現在命令列上。這個 token 只發給這個分格，分格關閉就失效。它不是帳號憑證：任何金鑰或登入資料都不會離開這台電腦。",
+    "no-tools-note": "{cli} 在遠端主機上執行時沒有 Navide 的工具：其他分格的訊息仍會以輸入文字的方式送達，但它無法主動呼叫 Navide。",
+    "accounts-note": "請自己在遠端主機上登入 {cli}。這個分格不參與帳號切換，也不參與額度自動切換。",
+    "resume-note": "斷線重連或 Navide 重開後，會接續這個分格自己的對話，不會接到同一資料夾裡的其他對話。",
+    "fresh-note": "斷線重連或 Navide 重開後，{cli} 會開始新的對話。",
+    "accounts-chip": "遠端自行登入",
+    "accounts-chip-title": "已在 {host} 上登入。這個分格不參與帳號切換，也不參與額度自動切換。",
+    "no-tools-chip": "沒有 Navide 工具",
+    "no-tools-chip-title": "{cli} 在 {host} 上執行，沒有 Navide 的工具。",
+    "resume-missed": "無法接續上一段對話，已開始新的對話。",
+    "dismiss": "關閉"
   },
   "shippedLog": {
     "menu": {

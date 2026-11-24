@@ -4686,7 +4686,7 @@
             "role": "No topo fica o menu suspenso <strong>Selecionar papel…</strong>: escolha um papel predefinido.",
             "cliList": "Abaixo, a lista se divide em dois blocos com título. <strong>{cli}</strong> reúne as CLIs de programação, marcando as que não estão instaladas. <strong>{agents}</strong> mostra seus agentes permanentes (OpenClaw, Hermes Agent) pelo nome: escolher um que está aberto leva até ele, escolher um fechado retoma a conversa dele. Há também uma entrada <em>Novo …</em> que pede um nome primeiro, e os agentes ACP aparecem nesse bloco. Uma nota sob a lista avisa que agentes na nuvem, como Grok Bot e dots, vêm como plug-ins do Navide.",
             "terminal": "Embaixo ficam <strong>Terminal</strong> (um terminal comum sem agent) e <strong>Iniciar manualmente…</strong>.",
-            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Conectar verifica o host e abre um pane de terminal cujo shell roda lá; se a conexão cair, o pane se reconecta sozinho."
+            "sshRemote": "Com <strong>Configurações → Geral → Recursos experimentais → Panes de contêiner remoto</strong> ligado, <strong>SSH Remote…</strong> aparece abaixo de <strong>Terminal</strong>. Ele pede host, usuário, porta (22 por padrão) e o caminho da chave privada, e guarda as conexões recentes só neste computador. Só o caminho da chave é salvo; a chave nunca é lida nem copiada, e o encaminhamento do agente SSH continua desligado. Conectar verifica o host e abre um pane de terminal cujo shell roda lá; se a conexão cair, o pane se reconecta sozinho. Também pode abrir o Claude, o Codex ou outra CLI numa pasta remota, com o próprio login nesse host (sem troca de conta nem troca automática por cota); os painéis SSH são restaurados depois de reiniciar."
           },
           "p2": "<em>Iniciar manualmente…</em> abre a caixa de diálogo completa, onde você pode escolher o agent e o papel, decidir se ele entra no palco e se um terminal abre ao lado, e colar um id de session para retomar diretamente uma conversa anterior.",
           "table": {
@@ -12666,7 +12666,22 @@
     "reconnecting": "Reconectando…",
     "retry-in": "Reconectando automaticamente em {seconds} s",
     "reconnect": "Reconectar",
-    "close-pane": "Fechar pane"
+    "close-pane": "Fechar pane",
+    "dir-label": "Pasta remota",
+    "dir-placeholder": "~ (início) ou um caminho no host",
+    "run-label": "Abrir",
+    "run-terminal": "Terminal (shell de login)",
+    "tools-note": "{cli} recebe as ferramentas do Navide no host (mensagens para outros painéis, planos). Para isso, o Navide envia a este painel o próprio token de ferramentas pela conexão SSH, digitado com o eco desligado e nunca numa linha de comando. O token é só deste painel e para de funcionar quando ele fecha. Não é uma credencial de conta: nenhuma chave ou login sai deste computador.",
+    "no-tools-note": "{cli} roda no host sem as ferramentas do Navide: mensagens de outros painéis continuam chegando como texto digitado, mas ele não consegue chamar o Navide sozinho.",
+    "accounts-note": "Entre no {cli} você mesmo no host remoto. Este painel não participa da troca de conta nem da troca automática por cota.",
+    "resume-note": "Ao reconectar ou reiniciar o Navide, a conversa deste painel é retomada, nunca outra da mesma pasta.",
+    "fresh-note": "Ao reconectar ou reiniciar o Navide, o {cli} começa uma conversa nova.",
+    "accounts-chip": "Login remoto próprio",
+    "accounts-chip-title": "Conectado em {host}. Este painel não participa da troca de conta nem da troca automática por cota.",
+    "no-tools-chip": "Sem ferramentas do Navide",
+    "no-tools-chip-title": "{cli} roda em {host} sem as ferramentas do Navide.",
+    "resume-missed": "Não foi possível continuar a conversa anterior, então uma nova começou.",
+    "dismiss": "Fechar"
   },
   "shippedLog": {
     "menu": {

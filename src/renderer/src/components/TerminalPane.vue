@@ -34,7 +34,7 @@ import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
 import AgentControlPanel from './agent/AgentControlPanel.vue'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
-import { sshTargetLabel, type SshRemoteTarget } from '../composables/useSshRemotePrefs'
+import { SSH_MCP_CLIS, SSH_TERMINAL, sshTargetLabel, type SshRemoteTarget } from '../composables/useSshRemotePrefs'
 import { useSshReconnect } from '../composables/useSshReconnect'
 import { formatClock } from '../lib/schedulerJobs'
 import {
@@ -182,8 +182,12 @@ interface Props {
   remoteReconnect?: () => void
   /** Banner "Close pane": App.vue's ordinary close path. */
   remoteClosePane?: () => void
-  /** Set for an SSH Remote terminal pane: its shell runs on this host. */
+  /** Set for an SSH Remote pane: its shell or CLI (`cli`) runs on this host. */
   sshRemote?: SshRemoteTarget
+  /** The SSH CLI pane could not resume its conversation and started fresh. */
+  sshResumeMissed?: boolean
+  /** Dismisses that notice. */
+  sshResumeMissedDismiss?: () => void
   /** That pane's last exit code; 255 means ssh lost the link. */
   sshExitCode?: number | null
   /** Checks the host and respawns the pane: null on success, else the reason. */
@@ -323,8 +327,10 @@ const terminal = useTerminal(props.paneId, props.terminalPort, {
   onOpenFileFailure,
   onPtyLostWhileDisconnected: () => emit('pty-lost'),
   // A remote pane's key is 'remote'; its PTY carries the TUI of the CLI run
-  // in the container, so paste, Shift+Enter and snapshots follow that CLI.
-  agentProfileFor: (key) => agentProfileFor(key === REMOTE_AGENT_KEY && props.remote ? props.remote.cli : key),
+  // in the container or on the SSH host, so paste, Shift+Enter and snapshots
+  // follow that CLI.
+  agentProfileFor: (key) => agentProfileFor(
+    key === REMOTE_AGENT_KEY ? (props.remote?.cli ?? props.sshRemote?.cli ?? key) : key),
 })
 // Reattached terminals can keep the backend's old pane id. Actions must use
 // that same backend-owned identity, just like the resource usage projection.
@@ -528,6 +534,9 @@ const sshRetryInSeconds = computed<number | null>(() =>
   ssh.nextAt.value == null ? null : Math.max(0, Math.round((ssh.nextAt.value - sshNow.value) / 1000))
 )
 const sshLabel = computed(() => (props.sshRemote ? sshTargetLabel(props.sshRemote) : ''))
+/** The CLI an SSH pane runs on the host; '' for an SSH terminal. */
+const sshCli = computed(() => (props.sshRemote?.cli && props.sshRemote.cli !== SSH_TERMINAL ? props.sshRemote.cli : ''))
+const sshCliLabel = computed(() => agentProfileFor(sshCli.value)?.label ?? sshCli.value)
 
 // ── Agent pane ───────────────────────────────────────────────────────────────
 const agentConsole = inject(agentConsoleKey, null)
@@ -1146,6 +1155,20 @@ onMounted(() => {
           data-testid="remote-account-disabled"
           :title="`${$t('remoteDevcontainer.account-disabled-title')}\n${$t('remoteDevcontainer.account-disabled-body')}`"
         >{{ $t('remoteDevcontainer.account-disabled') }}</span>
+        <template v-else-if="sshRemote">
+        <span
+          class="remote-account-chip"
+          aria-disabled="true"
+          data-testid="ssh-account-chip"
+          :title="$t('sshRemote.accounts-chip-title', { host: sshRemote.host })"
+        >{{ $t('sshRemote.accounts-chip') }}</span>
+        <span
+          v-if="sshCli && !SSH_MCP_CLIS.includes(sshCli)"
+          class="remote-account-chip"
+          data-testid="ssh-no-tools-chip"
+          :title="$t('sshRemote.no-tools-chip-title', { cli: sshCliLabel, host: sshRemote.host })"
+        >{{ $t('sshRemote.no-tools-chip') }}</span>
+        </template>
         <template v-else>
         <UsageBadge
           v-if="agentKey"
@@ -1246,6 +1269,12 @@ onMounted(() => {
       <div class="remote-actions">
         <button type="button" class="primary" data-testid="ssh-reconnect" :disabled="ssh.busy.value" @click.stop="ssh.reconnectNow()">{{ $t('sshRemote.reconnect') }}</button>
         <button type="button" data-testid="ssh-close-pane" @click.stop="remoteClosePane?.()">{{ $t('sshRemote.close-pane') }}</button>
+      </div>
+    </div>
+    <div v-else-if="sshRemote && sshResumeMissed" class="remote-login" role="status" data-testid="ssh-resume-missed">
+      <p class="remote-login-note">{{ $t('sshRemote.resume-missed') }}</p>
+      <div class="remote-actions">
+        <button type="button" data-testid="ssh-resume-missed-dismiss" @click.stop="sshResumeMissedDismiss?.()">{{ $t('sshRemote.dismiss') }}</button>
       </div>
     </div>
     <div v-else-if="remote && loginCardOpen" class="remote-login" role="dialog" data-testid="remote-login-card" :aria-label="$t('remoteDevcontainer.login-title', { cli: remoteCliLabel })">

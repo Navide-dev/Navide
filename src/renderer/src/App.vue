@@ -237,7 +237,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
-import { sshFailureReason, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
+import { SSH_TERMINAL, sshFailureReason, sshTargetFields, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -1562,9 +1562,11 @@ function paneAgentSpec(agentKey: string | undefined): AgentSpec | undefined {
 }
 
 /** The key whose screen shapes (permission box, update menu) a pane shows: a
- *  remote pane draws the TUI of the CLI it runs in the container. */
-function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget } | undefined): string | undefined {
-  return pane?.remote?.cli ?? pane?.agentKey
+ *  remote pane draws the TUI of the CLI it runs in the container or on the
+ *  SSH host. */
+function paneScreenAgentKey(pane: { agentKey: string; remote?: RemoteTarget; sshRemote?: SshRemoteTarget } | undefined): string | undefined {
+  const sshCli = pane?.sshRemote?.cli
+  return pane?.remote?.cli ?? (sshCli && sshCli !== SSH_TERMINAL ? sshCli : undefined) ?? pane?.agentKey
 }
 
 // The subset (+order) the user chose in Settings → CLI Agents, fed to the manual
@@ -2025,11 +2027,18 @@ interface ActivePane {
    *  reconnect, restore) goes back to the same container. Persisted on the
    *  backend's pane record (manual_pane.spawn `remote`), never in localStorage. */
   remote?: RemoteTarget
-  /** An SSH Remote terminal pane (same experimental switch): its shell runs
-   *  on this host over ssh. Runtime only — such a pane is not restored. */
+  /** An SSH Remote pane (same experimental switch): its login shell, or a CLI
+   *  (agent key 'remote', the CLI in `cli`), runs on this host over ssh. It
+   *  never takes part in account switching or quota failover. Persisted on
+   *  the backend's pane record (manual_pane.spawn `remote` with kind 'ssh'),
+   *  with the CLI's remote session id once known, so a restore reconnects and
+   *  resumes that conversation. */
   sshRemote?: SshRemoteTarget
   /** An SSH pane's last exit code (255: ssh lost or never made the link). */
   sshExitCode?: number | null
+  /** The SSH CLI pane asked to resume its conversation and the host had none
+   *  to resume, so it started fresh: the pane says so until dismissed. */
+  sshResumeMissed?: boolean
   /** CLI session id used to resume this pane on restart. Known immediately for
    *  Claude (the --session-id we pinned); filled in later for Codex/Antigravity once
    *  their CLI-generated id is detected from the session file. */
@@ -8618,8 +8627,11 @@ interface SpawnInternal {
   accountDirLogin?: boolean
   /** Remote container target; see ActivePane.remote. */
   remote?: RemoteTarget
-  /** SSH Remote terminal target; see ActivePane.sshRemote. */
+  /** SSH Remote target; see ActivePane.sshRemote. */
   sshRemote?: SshRemoteTarget
+  /** With `sshRemote`: this launch continues an earlier one (rebuild,
+   *  reconnect, restore), so a CLI resumes its own remote session. */
+  sshResume?: boolean
   /** Runtime-only restore marker kept on replacement panes until first output. */
   restoring?: boolean
 }
@@ -8846,6 +8858,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     sshRemote: opts.sshRemote,
   }
   acp.claim(id, opts)
+  if (opts.sshRemote?.cli && opts.sshRemote.cli !== SSH_TERMINAL) pane.agentLabel = agentSpecs.find((s) => s.agentKey === opts.sshRemote!.cli)?.label || pane.agentLabel
   // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
   // follows account switches; one its pin puts in an account dir is fixed.
   if (
@@ -9012,7 +9025,7 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
       isLogin: opts.isLogin,
       accountDirLogin: opts.accountDirLogin,
       ...(opts.remote ? { remote: opts.remote } : {}),
-      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote } } : {}),
+      ...(opts.sshRemote ? { remote: { kind: 'ssh' as const, ...opts.sshRemote, resume: !!opts.sshResume } } : {}),
     })
 
     // The path above is derived from THIS pane's id, but a spawn that
@@ -10081,8 +10094,9 @@ async function rebuildPaneViaResume(
   // An ACP pane has no terminal session to resume (a rebuild would replace it with a terminal pane).
   if (acp.owns(paneId)) return 'no-session'
   // A remote container pane has no local transcript to resume: the rebuild is
-  // a fresh CLI in the same container (the reconnect banner's path too).
-  if (pane.remote) {
+  // a fresh CLI in the same container (the reconnect banner's path too). An
+  // SSH pane's rebuild resumes its own remote session (rebuildPaneClean).
+  if (pane.remote || pane.sshRemote) {
     await rebuildPaneClean(paneId)
     return undefined
   }
@@ -10715,8 +10729,10 @@ const paneAccountBarItems = computed<PaneAccountBarItem[]>(() =>
  *  on, optionally taking the other panes that ran out on the same account. */
 async function onQuotaSwitchAccount(paneId: string): Promise<void> {
   if (!followSwitchFlag.value) return
-  // A remote pane signs in inside its container; no account here is its own.
-  if (panes.value.find((p) => p.id === paneId)?.remote) return
+  // A remote pane signs in inside its container or on its SSH host; no
+  // account here is its own.
+  const quotaPane = panes.value.find((p) => p.id === paneId)
+  if (quotaPane?.remote || quotaPane?.sshRemote) return
   const inputs = panes.value.map(followPaneInput)
   const self = inputs.find((p) => p.id === paneId)
   if (!self) return
@@ -10962,7 +10978,7 @@ async function fixDescendantsToAccount(paneId: string): Promise<void> {
 async function moveFixedAccountPane(paneId: string, profileId: string): Promise<void> {
   const pane = panes.value.find((p) => p.id === paneId)
   // Not a sign-in pane: it would reopen as an ordinary one (LOW-9, as above).
-  if (pane?.remote) return
+  if (pane?.remote || pane?.sshRemote) return
   if (!pane || pane.isLogin || !paneAccountFixed(pane) || !followDirSignedIn(profileId)) return
   await rebuildPaneViaResume(paneId, { profileId, freshWhenNoTranscript: true })
 }
@@ -11122,8 +11138,8 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
     muted: isPaneMuted(paneId),
     // A remote pane reconnects to the same container.
     remote: pane.remote,
-    // An SSH Remote pane reconnects to the same host.
-    sshRemote: pane.sshRemote,
+    // An SSH Remote pane reconnects to the same host, resuming its session.
+    sshRemote: pane.sshRemote ? { ...pane.sshRemote } : undefined,
   }
   for (const key of lockKeys) rebuildingPanes.add(key)
   try {
@@ -11147,6 +11163,7 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       effort: snap.effort,
       remote: snap.remote,
       sshRemote: snap.sshRemote,
+      sshResume: !!snap.sshRemote,
       replacePaneId: paneId, // Atomic swap to prevent layout shift
     })
     if (newId) {
@@ -11154,10 +11171,10 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
       rekeyLineage(paneId, newId)
       setPaneMuted(paneId, false)
       if (snap.muted) setPaneMuted(newId, true)
-      // An SSH Remote pane has no record (it is not restored); writing one
-      // here would bring it back after a restart as a LOCAL shell.
       if (snap.sshRemote) {
-        // nothing to record
+        // Carries the SSH target: a record without it would come back after
+        // a restart as a LOCAL pane.
+        await recordSshPane(snap.workspacePath, newId, snap.agentKey, snap.runGroupId || '', snap.sshRemote, paneId)
       } else if (snap.origin !== 'pipeline') {
         await sendQuiet<ProjectPayload>('manual_pane.spawn', {
           workspace_path: snap.workspacePath,
@@ -13802,7 +13819,8 @@ const channelAccountDeps: ChannelAccountDeps = {
 
 async function agentPaneAccountSwitch(args: Record<string, unknown>, callerPaneId: string): Promise<Record<string, unknown>> {
   // The backend refuses these first; this keeps the renderer from moving one.
-  if (panes.value.find((p) => p.id === String(args.paneId ?? ''))?.remote) return { status: 'refused', code: 'REMOTE_PANE' }
+  const switchPane = panes.value.find((p) => p.id === String(args.paneId ?? ''))
+  if (switchPane?.remote || switchPane?.sshRemote) return { status: 'refused', code: 'REMOTE_PANE' }
   const ctx = switchToastContext(args, callerPaneId)
   const outcome = await runAgentPaneAccountSwitch(args, {
     accounts: cliProfilesApi,
@@ -14254,6 +14272,17 @@ interface ProjectPane {
   remote?: Partial<RemoteTarget>
 }
 
+/** A saved SSH Remote pane's target, folder, CLI and remote session id, or
+ *  undefined for any other pane. The backend connects only if the target is
+ *  still in its app-level trusted list. */
+function savedSshTarget(saved: { remote?: Partial<RemoteTarget> }): SshRemoteTarget | undefined {
+  const r = saved.remote as (Partial<SshRemoteTarget> & { kind?: unknown }) | undefined
+  if (!r || r.kind !== 'ssh') return undefined
+  const target = sshTargetFields(r)
+  if (!target) return undefined
+  return { ...target, sessionId: typeof r.sessionId === 'string' ? r.sessionId : '' }
+}
+
 /** A saved pane's remote target, or undefined for a local pane. */
 function savedRemoteTarget(saved: { remote?: Partial<RemoteTarget> }): RemoteTarget | undefined {
   const r = saved.remote
@@ -14453,8 +14482,11 @@ async function spawnRestoredPane(opts: RestoredPaneSpawnOptions): Promise<Restor
     formerPaneIds: [saved.pane_id],
     replacePaneId: opts.replacePaneId,
     restoring: opts.restoring,
-    // The backend's record of a remote pane: it goes back to its container.
+    // The backend's record of a remote pane: it goes back to its container,
+    // or to its SSH host, resuming the CLI's own remote session.
     remote: savedRemoteTarget(saved),
+    sshRemote: savedSshTarget(saved),
+    sshResume: !!savedSshTarget(saved),
   })
   if (!paneId) return null
   if (opts.shouldPersist && !opts.shouldPersist(paneId)) {
@@ -24956,13 +24988,18 @@ function openSshRemoteDialog(): void {
 }
 
 /** The dialog connected (the backend checked the host and trusted it): a
- *  terminal pane whose shell runs there. */
+ *  terminal or CLI pane that runs there, recorded so it is restored. Claude
+ *  gets its remote session id now; Codex reports the one it picks
+ *  (remote_ssh.session). */
 async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
   sshRemoteDialogOpen.value = false
   const workspacePath = currentWorkspace.value
   const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
-  await spawnPane({
-    agentKey: 'terminal',
+  const cli = target.cli || SSH_TERMINAL
+  const agentKey = cli === SSH_TERMINAL ? 'terminal' : REMOTE_AGENT_KEY
+  const sshRemote: SshRemoteTarget = { ...target, cli, sessionId: cli === 'claude' ? crypto.randomUUID() : '' }
+  const paneId = await spawnPane({
+    agentKey,
     roleKey: '',
     stageId: '',
     commandOverride: '',
@@ -24970,9 +25007,49 @@ async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
     origin: 'manual',
     runGroupId: spawnGroupId || undefined,
     autoName: sshTargetLabel(target),
-    sshRemote: target,
+    sshRemote,
+  })
+  if (paneId) await recordSshPane(workspacePath, paneId, agentKey, spawnGroupId, sshRemote)
+}
+
+/** The backend's record of an SSH pane: its target, folder, CLI and remote
+ *  session id, which is what a restore reconnects to. */
+async function recordSshPane(
+  workspacePath: string, paneId: string, agentKey: string, runGroupId: string,
+  target: SshRemoteTarget, previousPaneId = '',
+): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  await sendQuiet<ProjectPayload>('manual_pane.spawn', {
+    workspace_path: workspacePath,
+    pane_id: paneId,
+    previous_pane_id: previousPaneId,
+    agent: agentKey,
+    role: '',
+    command: '',
+    session_id: '',
+    run_group_id: runGroupId,
+    output_log_file: pane?.outputLogFile ?? '',
+    remote: { kind: 'ssh', ...target },
   })
 }
+
+// An SSH Codex pane found the id of the session it started: kept on the pane
+// (a reconnect resumes it) and on its record (a restore does).
+backend.on('remote_ssh.session', (raw) => {
+  const ev = raw as { pane_id?: string; session_id?: string }
+  const pane = panes.value.find((p) => p.id === ev?.pane_id)
+  if (!pane?.sshRemote || !ev.session_id) return
+  pane.sshRemote = { ...pane.sshRemote, sessionId: ev.session_id }
+  void sendQuiet('remote_ssh.set_session', {
+    workspace_path: pane.workspacePath, pane_id: pane.id, session_id: ev.session_id,
+  })
+})
+
+// An SSH CLI pane could not resume its conversation and started a new one.
+backend.on('remote_ssh.resume_missed', (raw) => {
+  const pane = panes.value.find((p) => p.id === (raw as { pane_id?: string })?.pane_id)
+  if (pane?.sshRemote) pane.sshResumeMissed = true
+})
 
 /** An SSH pane's banner asks the backend to check the host again (the same
  *  check the dialog runs); only a reachable host gets a new shell. */
@@ -27309,6 +27386,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :remote-close-pane="() => onKill(p.id)"
           :ssh-remote="p.sshRemote"
           :ssh-exit-code="p.sshExitCode ?? null"
+          :ssh-resume-missed="!!p.sshResumeMissed"
+          :ssh-resume-missed-dismiss="() => { p.sshResumeMissed = false }"
           :ssh-reconnect="() => reconnectSshPane(p.id)"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
           @first-output="onPaneFirstOutput(p.id)"

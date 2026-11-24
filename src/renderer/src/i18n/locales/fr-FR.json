@@ -4686,7 +4686,7 @@
             "role": "En haut, la liste déroulante <strong>Sélectionner un rôle…</strong> – choisissez un rôle prédéfini.",
             "cliList": "En dessous, la liste est divisée en deux blocs titrés. <strong>{cli}</strong> regroupe les CLI de développement ; ceux qui ne sont pas installés sont signalés. <strong>{agents}</strong> affiche vos agents permanents (OpenClaw, Hermes Agent) par leur nom : choisir un agent ouvert vous y amène, choisir un agent fermé reprend sa conversation. Une entrée <em>Nouveau …</em> demande d’abord un nom, et les agents ACP figurent aussi dans ce bloc. Une note sous la liste rappelle que les agents cloud comme Grok Bot et dots sont fournis sous forme de plugins Navide.",
             "terminal": "En bas, <strong>Terminal</strong> (un simple terminal sans agent associé) et <strong>Lancement manuel…</strong>.",
-            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. Se connecter vérifie l’hôte et ouvre un pane de terminal dont le shell s’exécute là-bas ; si la connexion tombe, le pane se reconnecte tout seul."
+            "sshRemote": "Avec <strong>Réglages → Général → Fonctions expérimentales → Panes de conteneur distant</strong> activé, <strong>SSH Remote…</strong> apparaît sous <strong>Terminal</strong>. Il demande l’hôte, l’utilisateur, le port (22 par défaut) et le chemin de la clé privée, et garde les connexions récentes sur cet ordinateur. Seul le chemin de la clé est enregistré ; la clé n’est jamais lue ni copiée, et le transfert de l’agent SSH reste désactivé. Se connecter vérifie l’hôte et ouvre un pane de terminal dont le shell s’exécute là-bas ; si la connexion tombe, le pane se reconnecte tout seul. Il peut aussi ouvrir Claude, Codex ou une autre CLI dans un dossier distant, avec sa propre connexion sur cet hôte (sans changement de compte ni basculement automatique de quota) ; les volets SSH sont restaurés après un redémarrage."
           },
           "p2": "<em>Lancement manuel…</em> ouvre la boîte de dialogue complète, où vous pouvez choisir l’agent et le rôle, décider de l’ajouter ou non à la scène, d’ouvrir ou non un terminal à côté, et coller un identifiant de session pour reprendre directement une conversation antérieure.",
           "table": {
@@ -12666,7 +12666,22 @@
     "reconnecting": "Reconnexion…",
     "retry-in": "Reconnexion automatique dans {seconds} s",
     "reconnect": "Reconnecter",
-    "close-pane": "Fermer le pane"
+    "close-pane": "Fermer le pane",
+    "dir-label": "Dossier distant",
+    "dir-placeholder": "~ (dossier personnel) ou un chemin sur l'hôte",
+    "run-label": "Ouvrir",
+    "run-terminal": "Terminal (shell de connexion)",
+    "tools-note": "{cli} dispose des outils de Navide sur l'hôte (messages aux autres volets, plans). Pour cela, Navide envoie à ce volet son propre jeton d'outils par la connexion SSH, saisi avec l'écho désactivé et jamais placé sur une ligne de commande. Le jeton est créé pour ce volet seulement et cesse de fonctionner à sa fermeture. Ce n'est pas un identifiant de compte : aucune clé ni connexion ne quitte cet ordinateur.",
+    "no-tools-note": "{cli} tourne sur l'hôte sans les outils de Navide : les messages des autres volets arrivent toujours comme du texte saisi, mais il ne peut pas appeler Navide lui-même.",
+    "accounts-note": "Connectez-vous vous-même à {cli} sur l'hôte distant. Ce volet ne participe ni au changement de compte ni au basculement automatique de quota.",
+    "resume-note": "Après une reconnexion ou un redémarrage de Navide, la conversation propre à ce volet reprend, jamais une autre du même dossier.",
+    "fresh-note": "Après une reconnexion ou un redémarrage de Navide, {cli} commence une nouvelle conversation.",
+    "accounts-chip": "Connexion distante",
+    "accounts-chip-title": "Connecté sur {host}. Ce volet ne participe ni au changement de compte ni au basculement automatique de quota.",
+    "no-tools-chip": "Sans outils Navide",
+    "no-tools-chip-title": "{cli} tourne sur {host} sans les outils de Navide.",
+    "resume-missed": "Impossible de reprendre la conversation précédente : une nouvelle a commencé.",
+    "dismiss": "Fermer"
   },
   "shippedLog": {
     "menu": {
