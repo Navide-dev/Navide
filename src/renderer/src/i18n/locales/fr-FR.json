@@ -6873,7 +6873,7 @@
         "intro": "Votre organisation {org} est reliée aux organisations ci-dessous. Seules les machines que leurs membres ont choisi de partager sont listées. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
         "intro-generic": "Votre organisation est reliée aux organisations ci-dessous. Seules les machines que leurs membres ont choisi de partager sont listées. L’appairage passe toujours par la comparaison à six chiffres et n’est terminé que lorsque les deux côtés appuient sur « Identique ».",
         "manage": "Gérer sur teams.navide.dev",
-        "manage-failed": "Impossible d’ouvrir le site de l’organisation : {reason}",
+        "manage-failed": "Impossible d’ouvrir le site de l’organisation : {reason}",
         "not-joined": "Pas encore dans une organisation. Une fois que vous en rejoignez ou en créez une, les machines partagées par les organisations reliées apparaissent ici.",
         "not-exposed": "Pas encore dans une organisation, ou cette machine n’est partagée avec aucune. Vous pouvez le consulter et le configurer sur teams.navide.dev.",
         "machines": "{count} machines partagées",
@@ -6913,11 +6913,11 @@
         "state-pairing": "Comparaison en cours",
         "state-ended": "Appairage terminé",
         "revoked-since": "depuis le {when}",
-        "offline-note": "L’autre machine est hors ligne ; l’appairage pourra se terminer quand elle sera en ligne",
-        "act-failed": "Non terminé : {reason}",
+        "offline-note": "L’autre machine est hors ligne ; l’appairage pourra se terminer quand elle sera en ligne",
+        "act-failed": "Non terminé : {reason}",
         "manage-opening": "Ouverture…",
         "manage-hint-signin": "vérifiez que cette machine est connectée à Navide Cloud, puis réessayez.",
-        "manage-hint-unreachable": "le site de l’organisation est injoignable pour le moment ; réessayez dans un instant.",
+        "manage-hint-unreachable": "le site de l’organisation est injoignable pour le moment ; réessayez dans un instant.",
         "reshare-hint": "Quand son propriétaire la partage de nouveau sur teams.navide.dev, appairez-la à nouveau avec six chiffres",
         "rejoin-hint": "Quand son propriétaire a rejoint l’organisation et partage cette machine, appairez-la à nouveau avec six chiffres"
       }
@@ -7271,7 +7271,7 @@
         "failed-remote-trust-unavailable": "{device} ne peut pas lire son registre de confiance pour l’instant ; il a donc refusé cet appairage, qui a pris fin. Sur {device}, traitez la carte « Navide Cloud est arrêté » dans la fenêtre du compte (par exemple, cliquez sur « Recommencer »), puis cliquez de nouveau sur « Appairer ».",
         "failed-remote-policy-denied": "{device} a refusé cet appairage, qui a donc pris fin. Cette machine figure peut-être dans la liste de blocage de {device} ; vérifiez-le dans la fenêtre du compte sur cet appareil, puis cliquez de nouveau sur « Appairer ».",
         "failed-remote-unauthenticated": "{device} n’a pas pu vérifier la signature de cet appairage ; il l’a donc refusé et l’appairage a pris fin. Vérifiez que les deux machines exécutent la dernière version de Navide, puis cliquez de nouveau sur « Appairer ».",
-        "failed-remote-pairing-refused": "{device} a refusé cet appairage, qui a donc pris fin. En général, {device} a déjà un appairage en cours (par exemple, les deux côtés ont cliqué sur « Appairer » en même temps). Attendez qu’il se termine ou annulez-le sur {device}, puis cliquez de nouveau sur « Appairer ». Il se peut aussi que les deux machines soient sur des comptes différents sans être reliées par une organisation ; reliez-les d’abord sur teams.navide.dev.",
+        "failed-remote-pairing-refused": "{device} a refusé cet appairage, qui a donc pris fin. En général, {device} a déjà un appairage en cours (par exemple, les deux côtés ont cliqué sur « Appairer » en même temps). Attendez qu’il se termine ou annulez-le sur {device}, puis cliquez de nouveau sur « Appairer ». Il se peut aussi que les deux machines soient sur des comptes différents sans être reliées par une organisation ; reliez-les d’abord sur teams.navide.dev.",
         "failed-remote-other": "{device} a refusé cet appairage ({reason}), qui a donc pris fin. Cliquez sur « Appairer » pour réessayer.",
         "busy": "Un appairage avec {device} est toujours en cours et se termine de lui-même dans environ {minutes} min. Pour recommencer maintenant, cliquez sur « Annuler la demande » dans la section Appairage ci-dessus, puis de nouveau sur « Appairer ».",
         "trust-unavailable-start": "Cette machine ne peut pas lire son registre de confiance pour l’instant ; l’appairage ne peut donc pas aboutir. Traitez d’abord la carte « Navide Cloud est arrêté » ci-dessous (par exemple, cliquez sur « Recommencer »), puis cliquez sur « Appairer »."
@@ -7321,7 +7321,7 @@
         "any-device": "N’importe quel appareil",
         "any": "n’importe lequel",
         "org-note": "Cette règle s’applique aussi aux machines appairées via une organisation",
-        "grant-note": "Autorisée via une organisation ; elle prend fin si les organisations sont dissociées"
+        "grant-note": "Autorisée via une organisation ; elle prend fin si les organisations sont dissociées"
       },
       "account": {
         "tab-login": "Se connecter",
@@ -7449,7 +7449,7 @@
         "rebuild-cancel": "Laisser arrêté",
         "rebuild-done": "Le registre de confiance a été effacé. Appairez de nouveau vos appareils quand vous serez prêt.",
         "locked-retrying": "Cela peut être temporaire – un trousseau verrouillé ou une boîte de dialogue d’autorisation fermée produisent le même résultat vu d’ici. De nouvelles tentatives sont en cours ; si la situation se rétablit, rien n’est perdu.",
-        "approve-trust-unavailable": "Cette machine ne peut pas lire son registre de confiance pour l’instant ; aucune règle n’a donc été écrite. Traitez d’abord la carte « Navide Cloud est arrêté » ci-dessous (par exemple, cliquez sur « Recommencer »), puis autorisez à nouveau la demande.",
+        "approve-trust-unavailable": "Cette machine ne peut pas lire son registre de confiance pour l’instant ; aucune règle n’a donc été écrite. Traitez d’abord la carte « Navide Cloud est arrêté » ci-dessous (par exemple, cliquez sur « Recommencer »), puis autorisez à nouveau la demande.",
         "state-revoked": "Lien d’organisation révoqué"
       },
       "link": {

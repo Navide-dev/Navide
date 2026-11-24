@@ -1559,7 +1559,7 @@ onUnmounted(() => {
                    anyone compares digits. Everything else on the card is the
                    same as pairing one of your own machines. -->
               <template v-if="row.org">
-                <span class="dev-tag org-tag" data-org-tag>
+                <span class="dev-tag org-tag" data-org-tag v-truncate>
                   {{ t(row.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: row.org.orgName }) }}
                 </span>
                 <dl class="org-facts" data-org-facts>
@@ -1576,7 +1576,7 @@ onUnmounted(() => {
                      has gone, and the other machine has not answered. They are
                      different waits and the second one is the one worth
                      mentioning to somebody standing at the other machine. -->
-                <span class="dev-tag pair-step">
+                <span class="dev-tag pair-step" v-truncate>
                   {{ t(row.role === 'initiator' ? 'settings.p2p.pair.step-waiting-them'
                                                 : 'settings.p2p.pair.step-sent') }}
                 </span>
@@ -1622,7 +1622,7 @@ onUnmounted(() => {
                      person reading two screens is out of its reach.
                      See device_pairing.complete. -->
                 <template v-if="row.state === 'awaiting-remote'">
-                  <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
+                  <span class="dev-tag pair-step" v-truncate>{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
                   <p class="req-what">{{ t('settings.p2p.pair.waiting-remote') }}</p>
                   <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
                   <div class="req-acts">
@@ -1640,7 +1640,7 @@ onUnmounted(() => {
                      which exchange this is, not who it is waiting on, so this
                      is the only thing on the card that answers "and now what". -->
                 <template v-else>
-                <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-your-turn') }}</span>
+                <span class="dev-tag pair-step" v-truncate>{{ t('settings.p2p.pair.step-your-turn') }}</span>
                 <p class="req-what">{{ t('settings.p2p.pair.your-turn') }}</p>
                 <div class="req-acts">
                   <button class="btn small" :disabled="!!pending || !linkReady" @click="answerPairing(row, true)" :title="linkWaitReason || undefined">
@@ -1677,7 +1677,7 @@ onUnmounted(() => {
             <p class="hint">{{ t('settings.p2p.trust.pending-body') }}</p>
             <div v-for="row in trustPending" :key="row.deviceId" class="req pending-card">
               <div class="req-head">
-                <span class="dev-tag">{{ t('settings.p2p.trust.kind-device') }}</span>
+                <span class="dev-tag" v-truncate>{{ t('settings.p2p.trust.kind-device') }}</span>
                 <!-- The name, at the same weight as the device list uses, so
                      the two surfaces name the same machine the same way. The id
                      is a tooltip: it is what the logs show, and it is not the
@@ -1738,13 +1738,13 @@ onUnmounted(() => {
           <div v-if="accessRequests.length" class="card net-card">
             <div v-for="req in accessRequests" :key="req.key" class="req">
               <div class="req-head">
-                <span class="dev-tag">{{ t('settings.p2p.trust.kind-access') }}</span>
+                <span class="dev-tag" v-truncate>{{ t('settings.p2p.trust.kind-access') }}</span>
                 <span class="dev-name" v-truncate>{{ req.deviceName || req.deviceId }}</span>
                 <span v-if="req.attempts > 1" class="dev-count">
                   {{ t('settings.p2p.trust.attempts', { count: req.attempts }) }}
                 </span>
               </div>
-              <span v-if="req.org" class="dev-tag org-tag" data-org-tag>
+              <span v-if="req.org" class="dev-tag org-tag" data-org-tag v-truncate>
                 {{ t(req.org.sameOrg ? 'settings.cloud.org.same-org-tag' : 'settings.cloud.org.from-org', { org: req.org.orgName }) }}
               </span>
               <p class="req-what">
@@ -1868,7 +1868,7 @@ onUnmounted(() => {
                        prose further down: the refusal is in force while this is
                        on screen, which is the part that decides how urgent it
                        is. -->
-                  <span class="dev-tag ts-blocked">
+                  <span class="dev-tag ts-blocked" v-truncate>
                     {{ t('settings.p2p.trust.key-changed-refusing') }}
                   </span>
                 </div>
@@ -1960,7 +1960,7 @@ onUnmounted(() => {
                   <span class="dev-name" v-truncate>
                     {{ t('settings.p2p.trust.first-seen', { device: n.deviceId }) }}
                   </span>
-                  <span v-if="n.own" class="dev-tag">
+                  <span v-if="n.own" class="dev-tag" v-truncate>
                     {{ t('settings.p2p.trust.first-seen-own') }}
                   </span>
                 </div>
@@ -2244,7 +2244,7 @@ onUnmounted(() => {
                        while a two-line sentence about being offline sat beside
                        it. -->
                   <span class="dev-name" v-truncate="device.deviceName || device.deviceId">{{ deviceLabel(device) }}</span>
-                  <span v-if="device.isLocal" class="dev-tag">
+                  <span v-if="device.isLocal" class="dev-tag" v-truncate>
                     {{ t('settings.p2p.network.this-device') }}
                   </span>
                   <!-- Where the machine is, or what it is running. Beside the
@@ -2264,6 +2264,7 @@ onUnmounted(() => {
                   <span
                     v-if="!device.isLocal && device.trustState"
                     class="dev-tag"
+                    v-truncate
                     :class="'ts-' + device.trustState"
                   >
                     {{ t('settings.p2p.trust.state-' + device.trustState) }}
