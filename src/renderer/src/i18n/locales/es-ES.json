@@ -11866,6 +11866,29 @@
       "sent": "Se han creado {count} invitaciones. Da a cada tester su código; los códigos solo se muestran esta vez.",
       "copy": "Copiar",
       "done": "Hecho"
+    },
+    "manage": {
+      "plugin": "Complemento de Navide (espacio_de_nombres.nombre)",
+      "load": "Mostrar compilaciones y códigos de prueba",
+      "builds": "Compilaciones de prueba",
+      "noBuilds": "Este complemento de Navide no tiene compilaciones de prueba.",
+      "promote": "Enviar a revisión",
+      "promoteVersion": "Enviar {version} a revisión",
+      "promoteConfirm": "¿Enviar {plugin} {version} a la revisión del Navide Marketplace? Se revisa el mismo paquete; los testers no tienen que reinstalarlo cuando se apruebe.",
+      "promoted": "{plugin} {version} se envió a la revisión del Navide Marketplace.",
+      "codes": "Códigos de prueba públicos",
+      "codesHint": "Un código permite unirse hasta el número de testers que indiques. El primer código de cada complemento de Navide se abre tras una revisión ligera.",
+      "testers": "{count} de {max} testers",
+      "revoke": "Revocar",
+      "revokeConfirm": "¿Revocar el código de prueba #{code}? Nadie más podrá unirse con él; los testers que ya se unieron conservan el acceso.",
+      "maxTesters": "Testers para un código nuevo",
+      "create": "Crear código",
+      "created": "Código de prueba, solo se muestra ahora:",
+      "state": {
+        "revoked": "Revocado",
+        "expires": "Caduca el {date}",
+        "promotion": "Revisión: {status}"
+      }
     }
   },
   "marketplace-developer": {

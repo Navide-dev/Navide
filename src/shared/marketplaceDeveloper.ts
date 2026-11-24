@@ -117,6 +117,13 @@ export function trustedDocUrl(value: unknown): string | null {
   if (url.hostname === 'navide.dev' || url.hostname.endsWith('.navide.dev')) return url.toString()
   return null
 }
+/** One call of the developer page's Testplace manager (plugins:testplaceManage). */
+export type TestplaceManageRequest =
+  | { action: 'versions' | 'codes' }
+  | { action: 'promote'; version: string }
+  | { action: 'code-create'; maxTesters: number }
+  | { action: 'code-revoke'; codeId: string | number }
+
 /** The shared version of the public plugin packages in the newest
  * `plugin-packages-<version>` GitHub Release; equal to packages/plugin-sdk's version. */
 export const PLUGIN_PACKAGES_VERSION = '1.0.1'
