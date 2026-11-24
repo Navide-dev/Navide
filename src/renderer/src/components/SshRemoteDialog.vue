@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// ＋ menu → SSH Remote…: host, user, port and a private key path, plus the
-// recent connections. Connect sends the target to `remote_ssh.connect`, which
-// checks the host once; on success the app opens a terminal pane there. A
+// ＋ menu → SSH Remote…: host, user, port and a private key path, the remote
+// folder and what to open there (a terminal or a CLI), plus the recent
+// connections. Connect sends the target to `remote_ssh.connect`, which checks
+// the host once; on success the app opens the pane there. A
 // failure is explained in plain terms; after a key or host-key refusal the
 // user may open the pane anyway, where ssh itself asks for the passphrase or
 // the fingerprint.
@@ -9,9 +10,15 @@
 // The key is a path only: nothing here reads, copies or uploads it.
 import { computed, ref, watch } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { AGENT_SPECS } from '@navide/plugin-shell'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import {
+  SSH_DEFAULT_DIR,
   SSH_DEFAULT_PORT,
+  SSH_MCP_CLIS,
+  SSH_REMOTE_CLIS,
+  SSH_RESUMABLE_CLIS,
+  SSH_TERMINAL,
   loadSshRemoteRecent,
   rememberSshRemoteRecent,
   sshFailureReason,
@@ -39,6 +46,8 @@ const host = ref('')
 const user = ref('')
 const port = ref<number | string>(SSH_DEFAULT_PORT)
 const keyPath = ref('')
+const remoteDir = ref(SSH_DEFAULT_DIR)
+const cli = ref<string>(SSH_TERMINAL)
 const recent = ref<SshRemoteTarget[]>([])
 const busy = ref(false)
 const error = ref('')
@@ -46,11 +55,21 @@ const error = ref('')
 const reason = ref<SshFailureReason | null>(null)
 const canForce = computed(() => reason.value === 'auth' || reason.value === 'host-key')
 
+/** The CLIs the host can run, labelled as everywhere else in the app. */
+const cliOptions = SSH_REMOTE_CLIS.map((key) => ({
+  key,
+  label: AGENT_SPECS.find((s) => s.agentKey === key)?.label ?? key,
+}))
+const cliLabel = computed(() => cliOptions.find((o) => o.key === cli.value)?.label ?? cli.value)
+const isCli = computed(() => cli.value !== SSH_TERMINAL)
+
 function fill(t: SshRemoteTarget): void {
   host.value = t.host
   user.value = t.user
   port.value = t.port
   keyPath.value = t.keyPath
+  remoteDir.value = t.dir || SSH_DEFAULT_DIR
+  cli.value = t.cli || SSH_TERMINAL
 }
 
 function reset(): void {
@@ -59,6 +78,8 @@ function reset(): void {
   user.value = ''
   port.value = SSH_DEFAULT_PORT
   keyPath.value = ''
+  remoteDir.value = SSH_DEFAULT_DIR
+  cli.value = SSH_TERMINAL
   error.value = ''
   reason.value = null
 }
@@ -74,7 +95,14 @@ const target = computed<SshRemoteTarget | null>(() => {
   const name = host.value.trim()
   const p = Number(port.value)
   if (!name || !Number.isInteger(p) || p < 1 || p > 65535) return null
-  return { host: name, user: user.value.trim(), port: p, keyPath: keyPath.value.trim() }
+  return {
+    host: name,
+    user: user.value.trim(),
+    port: p,
+    keyPath: keyPath.value.trim(),
+    dir: remoteDir.value.trim() || SSH_DEFAULT_DIR,
+    cli: cli.value,
+  }
 })
 
 async function connect(force = false): Promise<void> {
@@ -84,8 +112,10 @@ async function connect(force = false): Promise<void> {
   error.value = ''
   reason.value = null
   try {
+    // The check needs the connection only; the folder and CLI are the pane's.
+    const connection = { host: t.host, user: t.user, port: t.port, keyPath: t.keyPath }
     const reply = await props.backend.send(
-      'remote_ssh.connect', { target: { ...t }, ...(force ? { force: true } : {}) }, CONNECT_TIMEOUT_MS)
+      'remote_ssh.connect', { target: connection, ...(force ? { force: true } : {}) }, CONNECT_TIMEOUT_MS)
     if (reply.ok) {
       rememberSshRemoteRecent(t)
       emit('connected', t)
@@ -138,8 +168,25 @@ async function connect(force = false): Promise<void> {
             <input v-model="keyPath" type="text" spellcheck="false" autocomplete="off" :placeholder="$t('sshRemote.key-placeholder')" data-testid="ssh-key" />
             <span class="muted">{{ $t('sshRemote.key-hint') }}</span>
           </label>
+          <label class="field wide">
+            <span class="lb">{{ $t('sshRemote.dir-label') }}</span>
+            <input v-model="remoteDir" type="text" spellcheck="false" autocomplete="off" :placeholder="$t('sshRemote.dir-placeholder')" data-testid="ssh-dir" />
+          </label>
+          <label class="field wide">
+            <span class="lb">{{ $t('sshRemote.run-label') }}</span>
+            <select v-model="cli" data-testid="ssh-cli">
+              <option :value="SSH_TERMINAL">{{ $t('sshRemote.run-terminal') }}</option>
+              <option v-for="o in cliOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
+            </select>
+          </label>
           <button type="submit" hidden />
         </form>
+
+        <div v-if="isCli" class="cli-notes" data-testid="ssh-cli-notes">
+          <p class="note">{{ $t('sshRemote.accounts-note', { cli: cliLabel }) }}</p>
+          <p class="note" data-testid="ssh-tools-note">{{ SSH_MCP_CLIS.includes(cli) ? $t('sshRemote.tools-note', { cli: cliLabel }) : $t('sshRemote.no-tools-note', { cli: cliLabel }) }}</p>
+          <p class="note">{{ SSH_RESUMABLE_CLIS.includes(cli) ? $t('sshRemote.resume-note') : $t('sshRemote.fresh-note', { cli: cliLabel }) }}</p>
+        </div>
 
         <div class="field">
           <span class="lb">{{ $t('sshRemote.recent-label') }}</span>
@@ -201,7 +248,8 @@ h2 { margin: 0; font-size: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: 0; }
 .field.wide { grid-column: 1 / -1; }
 .lb { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-input {
+input,
+select {
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--border-default);
@@ -217,6 +265,7 @@ input {
 .recent-row:hover { background: var(--bg-subtle); }
 .muted { color: var(--text-secondary); font-size: 12px; margin: 0; }
 .note { color: var(--text-secondary); font-size: 11px; margin: 0 0 6px; }
+.cli-notes { margin-bottom: 6px; }
 .reason-text { margin: 0 0 6px; }
 .err { color: var(--danger-fg, #cf222e); font-size: 12px; margin: 0 0 10px; white-space: pre-wrap; word-break: break-word; }
 button {

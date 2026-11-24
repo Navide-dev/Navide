@@ -4690,7 +4690,7 @@
             "role": "Trên cùng là danh sách thả xuống <strong>Chọn vai trò…</strong> — chọn một vai trò có sẵn.",
             "cliList": "Bên dưới, danh sách chia thành hai khối có tiêu đề. <strong>{cli}</strong> gồm các CLI lập trình, CLI nào chưa cài sẽ được đánh dấu. <strong>{agents}</strong> liệt kê các agent thường trực của bạn (OpenClaw, Hermes Agent) theo tên: chọn agent đang mở sẽ chuyển sang nó, chọn agent đã đóng sẽ tiếp tục cuộc trò chuyện cũ. Còn có mục <em>Mới …</em> hỏi tên trước, và các agent ACP cũng nằm ở khối này. Một ghi chú dưới danh sách cho biết các agent đám mây như Grok Bot và dots được cung cấp dưới dạng plugin Navide.",
             "terminal": "Dưới cùng là <strong>Terminal</strong> (một terminal thường, không gắn agent) và <strong>Khởi chạy thủ công…</strong>.",
-            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Kết nối sẽ kiểm tra máy chủ rồi mở một pane terminal chạy shell trên máy đó; nếu mất kết nối, pane sẽ tự kết nối lại."
+            "sshRemote": "Khi bật <strong>Cài đặt → Chung → Tính năng thử nghiệm → Pane container từ xa</strong>, <strong>SSH Remote…</strong> sẽ xuất hiện bên dưới <strong>Terminal</strong>. Bạn nhập máy chủ, người dùng, cổng (mặc định 22) và đường dẫn khóa riêng, và các kết nối gần đây chỉ lưu trên máy này. Chỉ lưu đường dẫn khóa; khóa không bao giờ bị đọc hay sao chép, và chuyển tiếp SSH agent vẫn tắt. Kết nối sẽ kiểm tra máy chủ rồi mở một pane terminal chạy shell trên máy đó; nếu mất kết nối, pane sẽ tự kết nối lại. Cũng có thể mở Claude, Codex hoặc CLI khác trong một thư mục từ xa, dùng đăng nhập riêng trên máy chủ đó (không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức); các ô SSH được khôi phục sau khi khởi động lại."
           },
           "p2": "<em>Khởi chạy thủ công…</em> mở hộp thoại đầy đủ, nơi bạn có thể chọn agent và vai trò, quyết định có thêm vào khu vực chính hay không, có mở terminal bên cạnh hay không, và dán id session để tiếp tục ngay một cuộc trò chuyện trước.",
           "table": {
@@ -12688,7 +12688,22 @@
     "reconnecting": "Đang kết nối lại…",
     "retry-in": "Tự động kết nối lại sau {seconds} giây",
     "reconnect": "Kết nối lại",
-    "close-pane": "Đóng pane"
+    "close-pane": "Đóng pane",
+    "dir-label": "Thư mục từ xa",
+    "dir-placeholder": "~ (thư mục nhà) hoặc một đường dẫn trên máy chủ",
+    "run-label": "Mở",
+    "run-terminal": "Terminal (shell đăng nhập)",
+    "tools-note": "{cli} có các công cụ của Navide trên máy chủ (nhắn tin cho các ô khác, kế hoạch). Để làm vậy, Navide gửi cho ô này token công cụ riêng của nó qua kết nối SSH, được nhập khi đã tắt hiển thị và không bao giờ nằm trên dòng lệnh. Token chỉ dành cho ô này và hết hiệu lực khi ô đóng. Đây không phải thông tin đăng nhập tài khoản: không khóa hay thông tin đăng nhập nào rời khỏi máy tính này.",
+    "no-tools-note": "{cli} chạy trên máy chủ mà không có công cụ của Navide: tin nhắn từ các ô khác vẫn đến dưới dạng văn bản nhập vào, nhưng nó không tự gọi Navide được.",
+    "accounts-note": "Hãy tự đăng nhập {cli} trên máy chủ từ xa. Ô này không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức.",
+    "resume-note": "Sau khi kết nối lại hoặc khởi động lại Navide, cuộc trò chuyện của chính ô này được tiếp tục, không bao giờ là một cuộc khác trong cùng thư mục.",
+    "fresh-note": "Sau khi kết nối lại hoặc khởi động lại Navide, {cli} bắt đầu một cuộc trò chuyện mới.",
+    "accounts-chip": "Đăng nhập trên máy chủ",
+    "accounts-chip-title": "Đã đăng nhập trên {host}. Ô này không tham gia chuyển tài khoản hay tự động chuyển khi hết hạn mức.",
+    "no-tools-chip": "Không có công cụ Navide",
+    "no-tools-chip-title": "{cli} chạy trên {host} mà không có công cụ của Navide.",
+    "resume-missed": "Không thể tiếp tục cuộc trò chuyện trước, nên đã bắt đầu một cuộc mới.",
+    "dismiss": "Đóng"
   },
   "shippedLog": {
     "menu": {

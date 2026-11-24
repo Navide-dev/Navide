@@ -4690,7 +4690,7 @@
             "role": "最上面是 <strong>选择角色…</strong> 下拉——选一个默认角色。",
             "cliList": "下面的列表分成两个带标题的区块。<strong>{cli}</strong> 是写代码用的 CLI，未安装的会标示出来。<strong>{agents}</strong> 按名字列出你的常驻 Agent（OpenClaw、Hermes Agent）：已打开的点击后切换过去，已关闭的点击后接续原来的对话；另有一个<em>新建 …</em>，会先请你起名字。ACP Agent 也列在这一区。列表下方有一行提示：Grok Bot、dots 这类云端 Agent 以 Navide 插件的形式提供。",
             "terminal": "最下面是 <strong>Terminal</strong>（开一般终端，不挂 agent）与 <strong>启动 Agent…</strong>。",
-            "sshRemote": "在 <strong>设置 → 一般 → 实验功能 → 远程容器分格</strong> 打开后，<strong>终端</strong> 下方会多出 <strong>SSH Remote…</strong>：填写主机、用户、端口（默认 22）与私钥路径，最近连接只存在这台电脑。只记住私钥的路径，不会读取或复制私钥，SSH agent 转发保持关闭。点击“连接”会检查主机，然后打开一个在那台主机上运行 shell 的终端分格；连接中断时会自动重新连接。"
+            "sshRemote": "在 <strong>设置 → 一般 → 实验功能 → 远程容器分格</strong> 打开后，<strong>终端</strong> 下方会多出 <strong>SSH Remote…</strong>：填写主机、用户、端口（默认 22）与私钥路径，最近连接只存在这台电脑。只记住私钥的路径，不会读取或复制私钥，SSH agent 转发保持关闭。点击“连接”会检查主机，然后打开一个在那台主机上运行 shell 的终端分格；连接中断时会自动重新连接。也可以在远程文件夹打开 Claude、Codex 或其他 CLI，使用它在那台主机上自己的登录（不参与账号切换与额度自动切换）；Navide 重启后会还原 SSH 窗格。"
           },
           "p2": "<em>启动 Agent…</em> 开的是完整对话框，可以指定 agent 与角色、决定要不要加进舞台、要不要同时开终端，也可以贴一个 session id 直接接续旧对话。",
           "table": {
@@ -12688,7 +12688,22 @@
     "reconnecting": "正在重新连接…",
     "retry-in": "{seconds} 秒后自动重新连接",
     "reconnect": "重新连接",
-    "close-pane": "关闭分格"
+    "close-pane": "关闭分格",
+    "dir-label": "远程文件夹",
+    "dir-placeholder": "~（主目录）或主机上的路径",
+    "run-label": "打开",
+    "run-terminal": "终端（登录 shell）",
+    "tools-note": "{cli} 在远程主机上可以使用 Navide 的工具（给其他窗格发消息、计划）。为此，Navide 会通过 SSH 连接把这个窗格专属的工具 token 发过去：在关闭回显的状态下输入，不会出现在命令行上。这个 token 只发给这个窗格，窗格关闭即失效。它不是账号凭据：任何密钥或登录信息都不会离开这台电脑。",
+    "no-tools-note": "{cli} 在远程主机上运行时没有 Navide 的工具：其他窗格的消息仍会以输入文字的方式送达，但它无法主动调用 Navide。",
+    "accounts-note": "请自行在远程主机上登录 {cli}。这个窗格不参与账号切换，也不参与额度自动切换。",
+    "resume-note": "断线重连或 Navide 重启后，会接续这个窗格自己的对话，不会接到同一文件夹里的其他对话。",
+    "fresh-note": "断线重连或 Navide 重启后，{cli} 会开始新的对话。",
+    "accounts-chip": "远程自行登录",
+    "accounts-chip-title": "已在 {host} 上登录。这个窗格不参与账号切换，也不参与额度自动切换。",
+    "no-tools-chip": "没有 Navide 工具",
+    "no-tools-chip-title": "{cli} 在 {host} 上运行，没有 Navide 的工具。",
+    "resume-missed": "无法接续上一段对话，已开始新的对话。",
+    "dismiss": "关闭"
   },
   "shippedLog": {
     "menu": {

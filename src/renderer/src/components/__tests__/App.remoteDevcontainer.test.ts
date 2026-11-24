@@ -45,7 +45,8 @@ describe('App – remote container panes', () => {
   })
 
   it('reads the screen guards of the CLI the container runs', () => {
-    expect(functionBody('paneScreenAgentKey')).toContain('return pane?.remote?.cli ?? pane?.agentKey')
+    // A container pane's CLI first, then an SSH pane's (not its terminal), then the key.
+    expect(functionBody('paneScreenAgentKey')).toContain("return pane?.remote?.cli ?? (sshCli && sshCli !== SSH_TERMINAL ? sshCli : undefined) ?? pane?.agentKey")
     const poll = functionBody('pollAwaitingPanes')
     expect(poll).toContain('hasAwaitingPattern(screenKey)')
     expect(poll).toContain('matchAwaitingInput(screenKey, screen)')
@@ -77,7 +78,7 @@ describe('App – remote container panes', () => {
   })
 
   it('rebuild and reconnect respawn against the same container', () => {
-    expect(functionBody('rebuildPaneViaResume')).toMatch(/if \(pane\.remote\) \{\s*await rebuildPaneClean\(paneId\)/)
+    expect(functionBody('rebuildPaneViaResume')).toMatch(/if \(pane\.remote \|\| pane\.sshRemote\) \{\s*await rebuildPaneClean\(paneId\)/)
     const clean = functionBody('rebuildPaneClean')
     expect(clean).toContain('remote: pane.remote,')
     expect(clean).toContain('remote: snap.remote,')
@@ -87,9 +88,9 @@ describe('App – remote container panes', () => {
   })
 
   it('account switching and quota failover leave remote panes alone', () => {
-    expect(functionBody('onQuotaSwitchAccount')).toMatch(/if \(panes\.value\.find\(\(p\) => p\.id === paneId\)\?\.remote\) return/)
+    expect(functionBody('onQuotaSwitchAccount')).toContain('if (quotaPane?.remote || quotaPane?.sshRemote) return')
     expect(functionBody('toggleAccountPin')).toContain('if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT || pane.remote) return')
-    expect(functionBody('moveFixedAccountPane')).toContain('if (pane?.remote) return')
+    expect(functionBody('moveFixedAccountPane')).toContain('if (pane?.remote || pane?.sshRemote) return')
     expect(functionBody('agentPaneAccountSwitch')).toContain("return { status: 'refused', code: 'REMOTE_PANE' }")
     const reports = appSource.split('void quotaFailover.report({').length - 1
     expect(reports).toBe(3)

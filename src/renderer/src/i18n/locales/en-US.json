@@ -4690,7 +4690,7 @@
             "role": "At the top is the <strong>Select role…</strong> dropdown — pick a preset role.",
             "cliList": "Below it the list is split into two headed blocks. <strong>{cli}</strong> holds the coding CLIs, with the ones that are not installed marked as such. <strong>{agents}</strong> lists your standing agents (OpenClaw, Hermes Agent) by name — picking an open one switches to it, picking a closed one resumes it — plus a <em>New …</em> entry that asks for a name first; ACP agents are listed there too. A note under the list points out that cloud agents such as Grok Bot and dots come as Navide plugins.",
             "terminal": "At the bottom are <strong>Terminal</strong> (a plain terminal with no agent attached) and <strong>Manual spawn…</strong>.",
-            "sshRemote": "With <strong>Settings → General → Experimental features → Remote container panes</strong> on, <strong>SSH Remote…</strong> appears below <strong>Terminal</strong>. It takes a host, user, port (22 by default) and a private key path, and keeps recent connections on this computer. Only the key's path is saved; the key is never read or copied, and SSH agent forwarding stays off. Connect checks the host and opens a terminal pane whose shell runs there; if the connection drops, the pane reconnects on its own."
+            "sshRemote": "With <strong>Settings → General → Experimental features → Remote container panes</strong> on, <strong>SSH Remote…</strong> appears below <strong>Terminal</strong>. It takes a host, user, port (22 by default) and a private key path, and keeps recent connections on this computer. Only the key's path is saved; the key is never read or copied, and SSH agent forwarding stays off. Connect checks the host and opens a terminal pane whose shell runs there; if the connection drops, the pane reconnects on its own. It can also open Claude, Codex or another CLI in a remote folder, using its own sign-in on that host (no account switching or quota failover), and SSH panes are restored after a restart."
           },
           "p2": "<em>Manual spawn…</em> opens the full dialog, where you can choose the agent and role, decide whether to add it to the stage, whether to open a terminal alongside it, and paste a session id to resume an earlier conversation directly.",
           "table": {
@@ -12688,7 +12688,22 @@
     "reconnecting": "Reconnecting…",
     "retry-in": "Reconnecting automatically in {seconds}s",
     "reconnect": "Reconnect",
-    "close-pane": "Close pane"
+    "close-pane": "Close pane",
+    "dir-label": "Remote folder",
+    "dir-placeholder": "~ (home) or a path on the host",
+    "run-label": "Open",
+    "run-terminal": "Terminal (login shell)",
+    "tools-note": "{cli} gets Navide's tools on the host (messages to other panes, plans). For that, Navide sends this pane its own tool token over the SSH connection, typed in with echo off and never put on a command line. The token is made for this pane only and stops working when the pane closes. It is not an account credential: no key or sign-in leaves this computer.",
+    "no-tools-note": "{cli} runs on the host without Navide's tools: messages from other panes still arrive as typed text, but it cannot call Navide itself.",
+    "accounts-note": "Sign in to {cli} on the remote host yourself. This pane does not take part in account switching or automatic quota failover.",
+    "resume-note": "A reconnect or a Navide restart resumes this pane's own conversation, never another one in the same folder.",
+    "fresh-note": "{cli} starts a new conversation after a reconnect or a Navide restart.",
+    "accounts-chip": "Own sign-in",
+    "accounts-chip-title": "Signed in on {host}. This pane does not take part in account switching or automatic quota failover.",
+    "no-tools-chip": "No Navide tools",
+    "no-tools-chip-title": "{cli} runs on {host} without Navide's tools.",
+    "resume-missed": "Couldn't continue the previous conversation, so a new one started.",
+    "dismiss": "Dismiss"
   },
   "shippedLog": {
     "menu": {
