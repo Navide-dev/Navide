@@ -515,6 +515,7 @@ const sshNow = ref(Date.now())
 let sshTick: ReturnType<typeof setInterval> | null = null
 watch(sshDown, (down) => {
   if (sshTick) clearInterval(sshTick)
+  sshNow.value = Date.now()
   sshTick = down ? setInterval(() => { sshNow.value = Date.now() }, 1000) : null
 }, { immediate: true })
 onBeforeUnmount(() => { if (sshTick) clearInterval(sshTick) })
