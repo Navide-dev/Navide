@@ -207,6 +207,11 @@ describe('a switch always loads the workspace it entered', () => {
     // ControlPane must keep going through the guard, or the pair of checks a
     // single switch makes both run and the second aborts the first's restore.
     expect(appSource).not.toContain('onWorkspaceCheck(path, { force: true })\n    // ControlPane')
-    expect(occurrences(appSource, '{ force: true }')).toBe(1)
+    // The only forced checks are the switch entry itself and the two retries of
+    // a check that failed moments ago (on connect, and after the retry delay),
+    // which the repeat guard would otherwise drop as that check's twin.
+    expect(occurrences(appSource, '{ force: true }')).toBe(3)
+    expect(occurrences(appSource, 'void onWorkspaceCheck(path, { force: true })')).toBe(1)
+    expect(occurrences(appSource, 'void onWorkspaceCheck(p, { force: true })')).toBe(1)
   })
 })
