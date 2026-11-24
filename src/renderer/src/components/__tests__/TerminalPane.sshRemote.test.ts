@@ -102,6 +102,17 @@ describe('TerminalPane – SSH Remote terminal pane', () => {
     expect(wrapper.get('[data-testid="ssh-retry-in"]').text()).toBe('sshRemote.retry-in:{"seconds":2}')
   })
 
+  it('the first countdown shows the retry delay even when the clock moves between the two watchers', async () => {
+    const sshReconnect = vi.fn(async () => 'unreachable')
+    wrapper = mountPane({ sshRemote, sshReconnect, sshExitCode: 255 })
+    let t = Date.now()
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => (t += 5))
+    mockTerminal.displayStatus.value = 'exited'
+    await nextTick()
+    expect(wrapper.get('[data-testid="ssh-retry-in"]').text()).toBe('sshRemote.retry-in:{"seconds":2}')
+    now.mockRestore()
+  })
+
   it('a shell the user exited offers Reconnect without trying on its own', async () => {
     const sshReconnect = vi.fn(async () => null)
     wrapper = mountPane({ sshRemote, sshReconnect, sshExitCode: 0 })
