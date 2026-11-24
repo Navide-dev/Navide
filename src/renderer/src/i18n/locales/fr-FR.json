@@ -4756,7 +4756,7 @@
               "behavior": "Le pane actif remplit la scène, les autres se replient en fenêtres flottantes dépliables."
             },
             "persona": {
-              "behavior": "Chaque volet est une personne à son bureau : taper = en cours, main levée = attend votre réponse, café ou somnole = inactif, écran qui fume = erreur. Chaque onglet est une salle ; avec beaucoup de volets, ouvrez la vue de l'immeuble. Un clic affiche l'état, un double-clic donne le focus à ce volet."
+              "behavior": "Chaque volet est une personne à son bureau : taper = en cours, main levée = attend votre réponse, café ou somnole = inactif, écran qui fume = erreur. Chaque onglet est une salle ; avec beaucoup de volets, ouvrez la vue de l'immeuble. Un clic affiche l'état, un double-clic donne le focus à ce volet."
             }
           },
           "p2": "Il existe aussi un comportement que vous ne sélectionnez pas, le <strong>double focus</strong> : quand exactement deux panes tournent, ils se partagent automatiquement l’écran à gauche et à droite, et le séparateur entre eux peut être déplacé.",
@@ -8286,7 +8286,7 @@
     "all-stages-finished": "Les {count} étapes se sont terminées avec succès",
     "region-switching": "Passage de {title} à la version {version}…",
     "region-unavailable": "{title} indisponible",
-    "view-mode-persona": "Persona — chaque volet est une personne dans un bureau ; sa posture montre ce qu'il fait"
+    "view-mode-persona": "Persona — chaque volet est une personne dans un bureau ; sa posture montre ce qu'il fait"
   },
   "layout": {
     "expand": "Développer le panneau",

@@ -53,6 +53,7 @@
     "pane.plans.format-markdown",
     "pane.terminal.loop-badge-estimate",
     "paneStatus.error",
+    "persona.waited-minutes",
     "plans.share.chat-target",
     "plugin-switch.source.marketplace",
     "pluginActivity.kind.shell",
@@ -444,7 +445,8 @@
     "label.terminal",
     "sshRemote.menu-entry",
     "sshRemote.dialog-title",
-    "sshRemote.port-label"
+    "sshRemote.port-label",
+    "persona.waited-minutes"
   ],
   "de-DE": [
     "account.title",
@@ -692,6 +694,7 @@
     "msg.push-badge",
     "pane.plans.doc-badge",
     "pane.terminal.loop-badge-estimate",
+    "persona.waited-minutes",
     "pipelineEditor.inspector.status",
     "plans.share.chat-target",
     "plugin-request.workspace",
