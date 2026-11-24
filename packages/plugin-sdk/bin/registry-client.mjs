@@ -236,8 +236,9 @@ export function resolveToken(registry, token) {
 
 /** GET `<registry><path>` with the publisher token. Returns { status, body }:
  *  the parsed JSON, or null when the response is not JSON. */
-export async function getJson(registry, path, token) {
+export async function getJson(registry, path, token, method = 'GET') {
   const response = await fetch(`${registry}${path}`, {
+    method,
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
   })
   const text = await response.text()

@@ -243,10 +243,9 @@ Python SDK modules), `tests/integration/plansBuildScripts.test.ts`,
 
 1. Create each repository under `Navide-dev` (names and visibility are the
    user's call) and grant push access.
-2. Publish `@navide/plugin-*` 1.0.0 to npm (see
-   [Plugin development v2](plugin-development-v2.md#publishing-the-public-packages-to-npm)),
-   so the moved plugins install them from the registry.
-3. Publish `navide-plugin-sdk` to PyPI (see
-   [Plugin development v2](plugin-development-v2.md#publishing-the-python-plugin-sdk-to-pypi)),
-   so the moved Plans backend installs it from PyPI.
+2. Publish `@navide/plugin-*` 1.0.0 so the moved plugins can install them.
+3. Publish `navide-plugin-sdk` so the moved Plans backend can install it.
+   (Steps 2 and 3 were done as the `plugin-packages-1.0.0` GitHub Release
+   instead of npm and PyPI; the packages are distributed only that way, see
+   [Distributing the public packages](plugin-development-v2.md#distributing-the-public-packages).)
 4. Approve each plugin's Marketplace publications, as today.

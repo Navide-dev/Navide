@@ -1,5 +1,13 @@
 # Plugin development guide
 
+> **Building a new plugin? Start at [Build for Navide](build-for-navide.md).**
+> It takes a plugin from `navide-plugin init` to a reviewed Marketplace
+> listing outside this repository, with the SDK installed from the
+> `plugin-packages` GitHub Release. This page is the legacy Manifest v1
+> reference: its quick starts build inside a Navide checkout
+> (`src/renderer/plugins/`, `pnpm dev`), which only Navide's own maintainers
+> need.
+
 > **Current runtime (manifest v1 and v2).** This guide documents the manifest
 > v1 runtime. v1 and v2 coexist today: the three bundled packages
 > (`navide.git`, `navide.plans`, `navide.mini-ide`) ship as Manifest v2
@@ -37,12 +45,12 @@ Worth knowing before you invest time:
   namespace means a change to the host, not something a plugin can declare on
   its own.
 
-**If you want to build a plugin, please get in touch first** — open a thread in
+You do not need to ask before building or publishing a Manifest v2 plugin.
+To request a capability that does not exist yet, or to talk a design through
+first, open a thread in
 [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)
-(use **Ideas**). Tell us what surface you want to extend and which capabilities
-it needs. That is also the route for requesting a new capability namespace. We
-would rather shape the API around a real plugin than have you build against
-something that is about to move.
+(use **Ideas**) and say what surface you want to extend and which capabilities
+it needs.
 
 ## Three trust domains
 

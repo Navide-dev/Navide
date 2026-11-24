@@ -2507,10 +2507,9 @@ export function registerPluginIpc(
       if (
         !Array.isArray(labels) ||
         labels.length < 1 ||
-        labels.length > 100 ||
         labels.some((label) => typeof label !== 'string' || !label.trim() || label.length > 120)
       ) {
-        throw new Error('invitees must be 1-100 non-empty labels of up to 120 characters')
+        throw new Error('invitees must be one or more non-empty labels of up to 120 characters')
       }
       const dot = args.id.indexOf('.')
       const res = await developerRegistryFetch(

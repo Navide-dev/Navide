@@ -190,7 +190,7 @@ The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant
 
 ## Build for Navide
 
-Make your own Navide plugin and list it on the [Navide Marketplace](https://marketplace.navide.dev/). `navide-plugin init --template vue` gives you a buildable plugin in five minutes (Navide 0.2.47 or later), Developer Mode loads it without publishing, and one real-name application at [developers.navide.dev](https://developers.navide.dev/developer) lets you publish after review.
+Make your own Navide plugin and list it on the [Navide Marketplace](https://marketplace.navide.dev/). `navide-plugin init --template vue` gives you a buildable plugin in five minutes (Navide 0.2.39 or later), Developer Mode loads it without publishing, and one real-name application at [developers.navide.dev](https://developers.navide.dev/developer) lets you publish after review.
 Start with [Build for Navide](docs/en-US/build-for-navide.md), the one page for the whole flow; ask in [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions).
 
 ## Documentation and deeper reading

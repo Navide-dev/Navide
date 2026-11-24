@@ -361,10 +361,11 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const packageJson = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8'))
     expect(packageJson.scripts.check).toBe('node scripts/check.mjs')
     expect(packageJson.dependencies).toMatchObject({ '@navide/plugin-sdk': expect.any(String), vue: expect.any(String) })
-    // The public packages are not on npm: the scaffold installs the pinned GitHub Release tarballs (string check only, no download).
-    const release = 'https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0'
-    expect(packageJson.dependencies['@navide/plugin-contracts']).toBe(`${release}/navide-plugin-contracts-1.0.0.tgz`)
-    expect(packageJson.dependencies['@navide/plugin-sdk']).toBe(`${release}/navide-plugin-sdk-1.0.0.tgz`)
+    // The public packages are not on npm: the scaffold installs the GitHub Release tarballs of the SDK's own version (string check only, no download).
+    const sdkVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+    const release = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${sdkVersion}`
+    expect(packageJson.dependencies['@navide/plugin-contracts']).toBe(`${release}/navide-plugin-contracts-${sdkVersion}.tgz`)
+    expect(packageJson.dependencies['@navide/plugin-sdk']).toBe(`${release}/navide-plugin-sdk-${sdkVersion}.tgz`)
 
     // The backend speaks Backend Wire v1 as written: health, the declared method, an unknown method.
     const python = ['python3', 'python'].find((candidate) => spawnSync(candidate, ['--version'], { stdio: 'ignore' }).status === 0)

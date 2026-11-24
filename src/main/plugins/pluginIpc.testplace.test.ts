@@ -183,6 +183,24 @@ describe('Testplace join, list and leave', () => {
   })
 })
 
+describe('Testplace invites (the developer form)', () => {
+  it('sends more than 100 invitees in one request: the Registry has no cap on testers', async () => {
+    register()
+    const labels = Array.from({ length: 150 }, (_, i) => `t${i}@example.com`)
+    registry.fetch = vi.fn(async () => ({ status: 200, body: { invites: labels.map((label, id) => ({ id, label, join_token: `tpi_${id}` })) } }))
+    const result = (await call('plugins:testplaceInvite', { id: ID, labels })) as { ok: boolean }
+    expect(result.ok).toBe(true)
+    expect(registry.fetch).toHaveBeenCalledWith('/api/testplace/acme/beta/invites', { method: 'POST', json: { labels } }, 'account')
+  })
+
+  it('still refuses an empty list and a blank or overlong label', async () => {
+    register()
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: [] })).rejects.toThrow(/one or more non-empty labels/)
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: ['  '] })).rejects.toThrow(/one or more non-empty labels/)
+    await expect(call('plugins:testplaceInvite', { id: ID, labels: ['x'.repeat(121)] })).rejects.toThrow(/one or more non-empty labels/)
+  })
+})
+
 describe('installing a Testplace build', () => {
   it("fetches with the user's account and runs the same verified install", async () => {
     register()

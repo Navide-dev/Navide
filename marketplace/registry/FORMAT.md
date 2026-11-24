@@ -88,10 +88,10 @@ Unknown fields are refused at every level, and so is an explicit `null`.
 | `marketplace` | object | yes | Listing metadata, below. |
 | `contributes` | object | one of | `{ "views": [...], "commands"?: [...] }`, 1-16 views, 1-32 commands. Commands follow `docs/en-US/plugin-development-v2.md`, "Commands". |
 | `backend` | object | one of | The native backend, below. |
-| `extensionPack` | string[] | one of | An [Extension Pack](#extension-packs): 1-20 member ids. |
+| `extensionPack` | string[] | one of | A [Navide Plugin Pack](#navide-plugin-packs): 1-20 member ids. |
 
 A manifest declares `contributes`, `backend` or both, or else it is an
-Extension Pack and declares neither.
+Navide Plugin Pack and declares neither.
 
 ### `permissions`
 
@@ -169,7 +169,7 @@ Every artifact is published for one target, the `target` query parameter of
   target, so each target is packaged on a machine of that platform and
   architecture (the first-party CI matrix does this).
 
-## Extension packs
+## Navide Plugin Packs
 
 A manifest with `extensionPack` lists 1-20 unique member ids installed
 together:

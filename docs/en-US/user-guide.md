@@ -327,7 +327,7 @@ These credentials **never leave this machine**: account credentials and keys sta
 
 Anyone can make a Navide plugin and list it on the Navide Marketplace. **Settings → Navide Marketplace → Developer** walks you through the steps in the app; [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md) is the guide, with every command.
 
-1. **Create it from the template.** `navide-plugin init acme-hello --id acme.hello` writes a plugin with no build step; `--template vue` writes a Vue view, a small backend and an agent tool. The developer packages are not on npm yet: the guide shows the one-line `npx` command that runs them from the GitHub Release `plugin-packages-1.0.0`.
+1. **Create it from the template.** `navide-plugin init acme-hello --id acme.hello` writes a plugin with no build step; `--template vue` writes a Vue view, a small backend and an agent tool. The developer packages are distributed only as GitHub Release files, not through npm: the guide shows the one-line `npx` command that runs them from the newest `plugin-packages` release.
 2. **Load it without publishing.** Turn on [Developer Mode](#developer-mode) and choose **Load from Folder…**. A loaded folder reloads by itself when you save.
 3. **Validate and package it.** `navide-plugin validate` and `navide-plugin package` run the checks the Navide Marketplace runs before review and write a `.vsix` file. An agent in a pane can run the same checks with `plugins_validate_package` and `plugins_package`; neither installs anything.
 4. **Apply as a developer, once.** Sign in on the Developer page and fill in the real-name application; a person reviews it.

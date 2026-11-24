@@ -316,7 +316,7 @@ Claude Code、Codex、Grok、Kimi、Pi、Droid、MiniMax Code 的新帳號登入
 
 任何人都可以自己做 Navide 外掛，並上架到 Navide 市集。**設定 → Navide 市集 → 開發者**會在 App 裡一步步帶你做；完整指令在 [Build for Navide](https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md)（英文）。
 
-1. **用範本建立。** `navide-plugin init acme-hello --id acme.hello` 會建立一個不用建置的外掛；加上 `--template vue` 則會建立 Vue 畫面、小型後端和一個 agent 工具。開發套件還沒上 npm，指南裡有一行 `npx` 指令，直接從 GitHub Release `plugin-packages-1.0.0` 執行。
+1. **用範本建立。** `navide-plugin init acme-hello --id acme.hello` 會建立一個不用建置的外掛；加上 `--template vue` 則會建立 Vue 畫面、小型後端和一個 agent 工具。開發套件只以 GitHub Release 檔案發佈，不上 npm；指南裡有一行 `npx` 指令，直接從最新的 `plugin-packages` Release 執行。
 2. **不上架就能載入試用。** 開啟[開發者模式](#開發者模式)，選 **從資料夾載入…**。載入的資料夾在你儲存後會自動重新載入。
 3. **驗證並打包。** `navide-plugin validate` 和 `navide-plugin package` 跑的是 Navide 市集審核前的同一套檢查，並產生 `.vsix` 檔。分格裡的 agent 也能用 `plugins_validate_package` 和 `plugins_package` 跑同樣的檢查，兩者都不會安裝任何東西。
 4. **申請開發者（一次就好）。** 在開發者頁登入，實名填寫申請，由專人審核。
