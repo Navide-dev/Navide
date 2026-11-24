@@ -406,6 +406,32 @@ def default_seams() -> Seams:
 
         return await asyncio.to_thread(read)
 
+    async def pane_card(pane_id: str) -> dict[str, Any]:
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.pane.getStatus", args={"paneId": pane.pane_id},
+        )
+        ui = reply.get("result") if reply.get("ok") and isinstance(reply.get("result"), dict) else {}
+        recorded = await asyncio.to_thread(pane_model, pane.pane_id)
+        login = login_panes.is_login_pane(pane.pane_id)
+        card: dict[str, Any] = {
+            "agent": pane.agent_key or "",
+            "agent_label": str(ui.get("agentLabel") or ""),
+            "model": str(ui.get("model") or recorded.get("model") or ""),
+            "effort": str(ui.get("effort") or recorded.get("effort") or ""),
+            "status": str(ui.get("status") or ""),
+        }
+        if not login and card["status"] == "awaiting":
+            card["prompt"] = str(ui.get("awaitingPrompt") or "")
+        last = mcp._activity_summary(pane.pane_id)  # leaves a sign-in pane's text out itself
+        if last is not None:
+            card["last"] = last
+        card.update(await asyncio.to_thread(_card_account, pane.pane_id, pane.agent_key or ""))
+        return card
+
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, cli_health=cli_health, resolve_pane=resolve_pane, broadcast=broadcast,
@@ -416,8 +442,46 @@ def default_seams() -> Seams:
         wake_target=wake_target, windows_open=windows_open, pane_live=pane_live, wake=wake, wake_fresh=wake_fresh,
         turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane, pane_model=pane_model, set_model=set_model,
-        account_menu=account_menu, switch_account=switch_account,
+        account_menu=account_menu, switch_account=switch_account, pane_card=pane_card,
     )
+
+
+def _card_account(pane_id: str, agent_key: str) -> dict[str, Any]:
+    """{account?: {name, email?}, quota?} for /status's pane card: the account the pane
+    runs on now (cli_get_status's `account`), named as the store names it, and the
+    cached quota of that same login. Blocking (the store, the vault, the usage cache)."""
+    from .. import app
+    from ..mcp_server import pane_accounts
+    from ..usage_service import service
+    from .status_card import headline_window
+
+    out: dict[str, Any] = {}
+    try:
+        payload = service.payload()
+    except Exception:  # noqa: BLE001 - the card still answers without quota
+        payload = {}
+    snapshot = (payload.get("providers") or {}).get(agent_key)
+    account = pane_accounts.pane_status_account(pane_id, agent_key)
+    if account is not None:
+        doc = app.cli_profiles_store.list()
+        profile_id = str(account["profile_id"])
+        if profile_id == pane_accounts.DEFAULT_ACCOUNT_ID:
+            name = str((doc.get("defaultNames") or {}).get(agent_key) or "")
+        else:
+            row = next((p for p in doc["profiles"] if p.get("id") == profile_id), None)
+            name = str((row or {}).get("name") or "")
+        live = account["runs_on"] == "live"
+        try:
+            email = app.credential_vault.identity(agent_key, None if live else profile_id).get("email")
+        except Exception:  # noqa: BLE001 - display-only
+            email = None
+        out["account"] = {"name": name, "email": str(email or "")}
+        if not live:
+            snapshot = ((payload.get("accounts") or {}).get(agent_key) or {}).get(profile_id)
+    quota = headline_window(snapshot)
+    if quota is not None:
+        out["quota"] = quota
+    return out
 
 
 def _switch_answer(answer: dict[str, Any]) -> dict[str, Any]:
