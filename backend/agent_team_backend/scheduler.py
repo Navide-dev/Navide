@@ -340,6 +340,9 @@ def _normalize_policy(raw: Any, previous: dict[str, Any] | None) -> dict[str, An
         policy["catch_up"] = raw["catch_up"]
     if raw.get("max_runs_per_day") is not None:
         policy["max_runs_per_day"] = _int(raw["max_runs_per_day"], "policy.max_runs_per_day", 1, 1440)
+    elif "max_runs_per_day" in raw:
+        # null: the job drops its own count and follows the user's setting.
+        policy.pop("max_runs_per_day", None)
     if raw.get("timeout_s") is not None:
         policy["timeout_s"] = _int(raw["timeout_s"], "policy.timeout_s", 60, 86400)
     return policy

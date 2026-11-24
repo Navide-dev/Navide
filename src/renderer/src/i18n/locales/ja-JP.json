@@ -1238,6 +1238,10 @@
         "general-account-follow-switch": {
           "title": "Claude アカウントの切り替え時に、固定したペインも一緒に切り替える",
           "summary": "切り替え後や利用枠を使い切ったときに、別アカウントのフォルダーで動くペインをアカウントを替えて会話を再開させます"
+        },
+        "general-scheduler-runs": {
+          "title": "スケジュールの 1 日の実行回数",
+          "summary": "スケジュールジョブと agent のジョブを 1 日に何回実行するか"
         }
       },
       "no-results": "一致する設定はありません"
@@ -7200,7 +7204,8 @@
       "settings-management": "設定の管理",
       "experimental": "実験的な機能",
       "theme": "テーマ",
-      "other": "その他"
+      "other": "その他",
+      "scheduler": "スケジュール"
     },
     "p2p": {
       "title": "接続",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "メッセージは受信先のペインがアイドルになるまで待機し、その後入力されるため、届くまでに時間がかかります。",
       "all-off-rewake": "Claude Code の再呼び出し機能だけが、アイドル状態のエージェントを起こせます。オフにすると、エージェントが自力でアイドル状態に戻るまで待つ必要があります。",
       "all-off-restart": "実行中のペインは、再起動するまで起動時のチャネルを保持します。"
+    },
+    "scheduler": {
+      "hint": "スケジュールジョブを 1 日に何回実行するか。既定値は Navide がこれまで使ってきた値です。",
+      "per-job": "ジョブごとの 1 日の実行回数",
+      "per-job-hint": "1 日の回数を個別に設定していないジョブに使われます。",
+      "agent-job": "agent のジョブ 1 つあたりの 1 日の実行回数",
+      "agent-job-hint": "agent が作成したジョブ 1 つが 1 日に実行される最大回数です。",
+      "agent-total": "agent のジョブ全体の 1 日の実行回数",
+      "agent-total-hint": "agent が作成したすべてのジョブの合計です。対象 CLI のクォータが尽きている回は引き続きスキップされます。",
+      "no-cap": "無制限",
+      "save-failed": "スケジュールの設定を保存できませんでした"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "削除",
       "remove-confirm": "このスケジュールジョブを削除しますか？",
       "cancel": "キャンセル",
-      "save": "保存"
+      "save": "保存",
+      "max-runs-follow": "設定：{n}",
+      "max-runs-follow-none": "設定：無制限"
     },
     "owner": {
       "user": "あなたが作成",

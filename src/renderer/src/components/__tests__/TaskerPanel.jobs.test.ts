@@ -492,6 +492,22 @@ describe('TaskerPanel — Navide jobs', () => {
     expect(sent.enabled).toBe(false)
   })
 
+  it('daily runs: an empty field follows Settings → Scheduler, shown as the placeholder', async () => {
+    wire.jobs = [job('d', { policy: { catch_up: 'once' } })]
+    wire.overrides.set('scheduler.settings.get', { ok: true, settings: { max_runs_per_day: 48 } })
+    wire.roster = [{ pane_id: PANE_A, name: '週報', workspace_path: WS, workspace_label: 'proj', agent_key: 'claude' }]
+    wrapper = await mountSection()
+    await row(wrapper, 'd').get('.sj-name').trigger('click')
+    await flushPromises()
+    const field = editorOf(wrapper).get('[data-field="max-runs"]').element as HTMLInputElement
+    expect(field.value).toBe('')
+    expect(field.placeholder).toContain('48')
+    await editorOf(wrapper).get('[data-test="save"]').trigger('click')
+    await flushPromises()
+    const sent = callsOf('scheduler.upsert')[0].payload.job as { policy: Record<string, unknown> }
+    expect(sent.policy.max_runs_per_day).toBeNull()
+  })
+
   it('creates a once job from a date and time, and refuses one in the past', async () => {
     wire.roster = [{ pane_id: PANE_A, name: '週報', workspace_path: WS, workspace_label: 'proj', agent_key: 'claude' }]
     wrapper = await mountSection()

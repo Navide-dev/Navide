@@ -32,7 +32,8 @@ export interface JobAction {
 
 export interface JobPolicy {
   catch_up?: 'once' | 'skip'
-  max_runs_per_day?: number
+  /** Absent: the job follows Settings → Scheduler. null clears it on an update. */
+  max_runs_per_day?: number | null
   timeout_s?: number
 }
 
@@ -85,11 +86,12 @@ export interface JobOwner {
   expires_at?: number | null
 }
 
-/** The agent limits `scheduler.list` reports, and how much of them is in use. */
+/** The agent limits `scheduler.list` reports, and how much of them is in use.
+ *  agent_runs_per_day is the user's setting; null = no cap. */
 export interface SchedulerLimits {
   agent_enabled_total: number
   agent_enabled: number
-  agent_runs_per_day: number
+  agent_runs_per_day: number | null
   agent_runs_today: number
 }
 

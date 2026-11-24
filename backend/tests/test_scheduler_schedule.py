@@ -315,3 +315,11 @@ def test_once_passed_moment_survives_a_resave_but_not_a_reenable() -> None:
         {"id": job["id"], "enabled": True, "schedule": {"kind": "once", "in_ms": 60_000}}, ran, later
     )
     assert rearmed["enabled"] is True and rearmed["state"]["next_run_at"] == later + 60_000
+
+
+def test_a_null_daily_count_follows_the_setting_again() -> None:
+    job = normalize_job(_job(policy={"max_runs_per_day": 3}), None, 1_000)
+    merged = normalize_job({"policy": {"max_runs_per_day": None}}, job, 2_000)
+    assert "max_runs_per_day" not in merged["policy"]
+    # Left out, it keeps the stored value.
+    assert normalize_job({"policy": {"catch_up": "skip"}}, job, 2_000)["policy"]["max_runs_per_day"] == 3

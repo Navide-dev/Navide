@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Mọi biểu tượng nút trong giao diện — tên gọi, vị trí và tác dụng khi nhấn."
+        },
+        "general-scheduler-runs": {
+          "title": "Số lần chạy mỗi ngày của lịch",
+          "summary": "Số lần mỗi ngày các tác vụ theo lịch và tác vụ agent được chạy"
         }
       },
       "no-results": "Không có cài đặt phù hợp"
@@ -7200,7 +7204,8 @@
       "settings-management": "Quản lý cài đặt",
       "experimental": "Tính năng thử nghiệm",
       "theme": "Chủ đề",
-      "other": "Khác"
+      "other": "Khác",
+      "scheduler": "Lịch chạy"
     },
     "p2p": {
       "title": "Kết nối",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "Giờ tin nhắn sẽ chờ pane nhận rảnh rồi mới được gõ vào, nên tới chậm hơn.",
       "all-off-rewake": "Đánh thức lại của Claude Code là cách duy nhất để đánh thức agent đang rảnh; khi tắt, chỉ còn cách chờ agent tự trở về trạng thái rảnh.",
       "all-off-restart": "Pane đang chạy giữ kênh mà nó khởi động cùng cho đến khi được khởi động lại."
+    },
+    "scheduler": {
+      "hint": "Số lần mỗi ngày các tác vụ theo lịch được chạy. Giá trị mặc định là giá trị Navide vẫn luôn dùng.",
+      "per-job": "Số lần chạy mỗi ngày cho mỗi tác vụ",
+      "per-job-hint": "Áp dụng cho tác vụ không tự đặt số lần mỗi ngày.",
+      "agent-job": "Số lần chạy mỗi ngày cho mỗi tác vụ của agent",
+      "agent-job-hint": "Số lần tối đa một tác vụ do agent tạo được chạy trong một ngày.",
+      "agent-total": "Tổng số lần chạy mỗi ngày của các tác vụ agent",
+      "agent-total-hint": "Cộng dồn mọi tác vụ do agent tạo. Lần chạy mà CLI đích đã hết hạn mức vẫn bị bỏ qua.",
+      "no-cap": "Không đặt mức trần",
+      "save-failed": "Không lưu được cài đặt lịch chạy"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "Xóa",
       "remove-confirm": "Xóa tác vụ theo lịch này?",
       "cancel": "Hủy",
-      "save": "Lưu"
+      "save": "Lưu",
+      "max-runs-follow": "Cài đặt: {n}",
+      "max-runs-follow-none": "Cài đặt: không đặt mức trần"
     },
     "owner": {
       "user": "do bạn tạo",

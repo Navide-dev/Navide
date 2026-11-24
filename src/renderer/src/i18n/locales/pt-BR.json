@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Todos os ícones de botão da interface: como se chamam, onde ficam e o que fazem ao serem pressionados."
+        },
+        "general-scheduler-runs": {
+          "title": "Execuções diárias do agendador",
+          "summary": "Quantas vezes por dia as tarefas agendadas e as de agents são executadas"
         }
       },
       "no-results": "Nenhuma configuração correspondente"
@@ -7200,7 +7204,8 @@
       "settings-management": "Gerenciamento de configurações",
       "experimental": "Recursos experimentais",
       "theme": "Tema",
-      "other": "Outros"
+      "other": "Outros",
+      "scheduler": "Agendador"
     },
     "p2p": {
       "title": "Conexão",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "Agora uma mensagem espera o pane de destino ficar ocioso e então é digitada nele, então leva mais tempo para chegar.",
       "all-off-rewake": "O despertar do Claude Code é a única forma de despertar um agent ocioso; com ele desativado, só resta esperar o agent voltar a ficar ocioso por conta própria.",
       "all-off-restart": "Um pane já em execução mantém o canal com que iniciou até ser reiniciado."
+    },
+    "scheduler": {
+      "hint": "Quantas vezes por dia as tarefas agendadas são executadas. Os padrões são os que o Navide sempre usou.",
+      "per-job": "Execuções por dia por tarefa",
+      "per-job-hint": "Para tarefas que não definem a própria contagem diária.",
+      "agent-job": "Execuções por dia por tarefa de agent",
+      "agent-job-hint": "O máximo de vezes por dia que uma tarefa criada por um agent é executada.",
+      "agent-total": "Execuções por dia somando as tarefas de agents",
+      "agent-total-hint": "Todas as tarefas criadas por agents, somadas. Uma execução cujo CLI de destino está sem cota continua sendo pulada.",
+      "no-cap": "Sem teto",
+      "save-failed": "Não foi possível salvar a configuração do agendador"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "Excluir",
       "remove-confirm": "Excluir esta tarefa agendada?",
       "cancel": "Cancelar",
-      "save": "Salvar"
+      "save": "Salvar",
+      "max-runs-follow": "Configurações: {n}",
+      "max-runs-follow-none": "Configurações: sem teto"
     },
     "owner": {
       "user": "criada por você",

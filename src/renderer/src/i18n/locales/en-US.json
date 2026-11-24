@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Every button icon in the interface — what it is called, where it lives and what pressing it does."
+        },
+        "general-scheduler-runs": {
+          "title": "Scheduler daily runs",
+          "summary": "How many times scheduled jobs and agent jobs run each day"
         }
       },
       "no-results": "No matching settings"
@@ -7200,7 +7204,8 @@
       "settings-management": "Settings management",
       "experimental": "Experimental features",
       "theme": "Theme",
-      "other": "Other"
+      "other": "Other",
+      "scheduler": "Scheduler"
     },
     "p2p": {
       "title": "Connection",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "A message now waits for the receiving pane to go idle and is then typed into it, so it takes longer to land.",
       "all-off-rewake": "Claude Code's rewake is the only way to wake an idle agent; with it off, there is nothing to do but wait for the agent to come back to idle on its own.",
       "all-off-restart": "A pane already running keeps the channel it started with until it is restarted."
+    },
+    "scheduler": {
+      "hint": "How many times scheduled jobs run each day. The defaults are what Navide has always used.",
+      "per-job": "Runs a day per job",
+      "per-job-hint": "For jobs that don't set their own daily count.",
+      "agent-job": "Runs a day per agent job",
+      "agent-job-hint": "The most one job created by an agent runs in a day.",
+      "agent-total": "Runs a day across agent jobs",
+      "agent-total-hint": "All jobs created by agents, added together. A run whose target CLI is out of quota is still skipped.",
+      "no-cap": "No cap",
+      "save-failed": "Couldn't save the scheduler setting"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "Delete",
       "remove-confirm": "Delete this scheduled job?",
       "cancel": "Cancel",
-      "save": "Save"
+      "save": "Save",
+      "max-runs-follow": "Settings: {n}",
+      "max-runs-follow-none": "Settings: no cap"
     },
     "owner": {
       "user": "by you",

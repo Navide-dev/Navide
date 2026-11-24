@@ -184,7 +184,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
         key: 'enabled',
         text: t('scheduler.limit.enabled-full', { n: agentEnabled.value, max: lim.agent_enabled_total }),
       })
-    if (lim.agent_runs_today >= lim.agent_runs_per_day)
+    if (lim.agent_runs_per_day !== null && lim.agent_runs_today >= lim.agent_runs_per_day)
       out.push({
         key: 'runs',
         text: t('scheduler.limit.runs-full', { runs: lim.agent_runs_today, max: lim.agent_runs_per_day }),
@@ -200,7 +200,7 @@ export function useSchedulerJobs(backend: ReturnType<typeof useBackend>) {
       n: agentEnabled.value,
       max: lim.agent_enabled_total,
       runs: lim.agent_runs_today,
-      runsMax: lim.agent_runs_per_day,
+      runsMax: lim.agent_runs_per_day ?? '∞',
     })
   })
 

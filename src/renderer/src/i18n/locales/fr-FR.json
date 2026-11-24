@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Chaque icône de bouton de l’interface – son nom, son emplacement et l’effet d’un clic."
+        },
+        "general-scheduler-runs": {
+          "title": "Exécutions quotidiennes du planificateur",
+          "summary": "Combien de fois par jour s’exécutent les tâches planifiées et celles des agents"
         }
       },
       "no-results": "Aucun paramètre correspondant"
@@ -7200,7 +7204,8 @@
       "settings-management": "Gestion des paramètres",
       "experimental": "Fonctions expérimentales",
       "theme": "Thème",
-      "other": "Autres"
+      "other": "Autres",
+      "scheduler": "Planificateur"
     },
     "p2p": {
       "title": "Connexion",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "Un message attend désormais que le pane destinataire soit inactif, puis y est tapé ; il met donc plus de temps à arriver.",
       "all-off-rewake": "Le réveil (rewake) de Claude Code est le seul moyen de réveiller un agent inactif ; s’il est désactivé, il ne reste qu’à attendre que l’agent redevienne inactif de lui-même.",
       "all-off-restart": "Un pane déjà en cours garde le canal avec lequel il a démarré jusqu’à son redémarrage."
+    },
+    "scheduler": {
+      "hint": "Combien de fois par jour les tâches planifiées s’exécutent. Les valeurs par défaut sont celles que Navide a toujours utilisées.",
+      "per-job": "Exécutions par jour et par tâche",
+      "per-job-hint": "Pour les tâches qui ne fixent pas leur propre nombre quotidien.",
+      "agent-job": "Exécutions par jour par tâche d’agent",
+      "agent-job-hint": "Le nombre maximal d’exécutions par jour d’une tâche créée par un agent.",
+      "agent-total": "Exécutions par jour pour l’ensemble des tâches d’agents",
+      "agent-total-hint": "Toutes les tâches créées par des agents, additionnées. Une exécution dont la CLI cible n’a plus de quota reste ignorée.",
+      "no-cap": "Sans plafond",
+      "save-failed": "Impossible d’enregistrer le réglage du planificateur"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "Supprimer",
       "remove-confirm": "Supprimer cette tâche planifiée ?",
       "cancel": "Annuler",
-      "save": "Enregistrer"
+      "save": "Enregistrer",
+      "max-runs-follow": "Réglages : {n}",
+      "max-runs-follow-none": "Réglages : sans plafond"
     },
     "owner": {
       "user": "créée par vous",

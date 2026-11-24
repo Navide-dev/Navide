@@ -10398,8 +10398,8 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         state.last_error_code and the detail in last_error. A pane caller's
         default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
-        defaults "once" and 1800; with no max_runs_per_day the job follows the
-        user's setting.
+        defaults "once" and 1800; with no max_runs_per_day (or null, on an
+        update) the job follows the user's setting.
       state — owned by Navide (next_run_at, running_at, last_status, last_error,
         consecutive_errors, backoff_until, ...); anything sent there is ignored.
     """

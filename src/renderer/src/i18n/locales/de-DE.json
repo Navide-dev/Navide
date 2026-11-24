@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "Jedes Schaltflächensymbol der Oberfläche – wie es heißt, wo es sich befindet und was ein Klick darauf bewirkt."
+        },
+        "general-scheduler-runs": {
+          "title": "Tägliche Ausführungen im Zeitplan",
+          "summary": "Wie oft geplante Aufträge und Agent-Aufträge pro Tag laufen"
         }
       },
       "no-results": "Keine passenden Einstellungen"
@@ -7200,7 +7204,8 @@
       "settings-management": "Einstellungsverwaltung",
       "experimental": "Experimentelle Funktionen",
       "theme": "Design",
-      "other": "Sonstiges"
+      "other": "Sonstiges",
+      "scheduler": "Zeitplan"
     },
     "p2p": {
       "title": "Verbindung",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "Eine Nachricht wartet jetzt, bis der empfangende Bereich im Leerlauf ist, und wird dann eingetippt; sie braucht also länger, bis sie ankommt.",
       "all-off-rewake": "Das Rewake von Claude Code ist die einzige Möglichkeit, einen Agent im Leerlauf zu wecken; ist es aus, bleibt nur zu warten, bis der Agent von selbst wieder in den Leerlauf wechselt.",
       "all-off-restart": "Ein bereits laufender Bereich behält den Kanal, mit dem er gestartet wurde, bis er neu gestartet wird."
+    },
+    "scheduler": {
+      "hint": "Wie oft geplante Aufträge pro Tag laufen. Die Standardwerte sind die, die Navide schon immer verwendet hat.",
+      "per-job": "Ausführungen pro Tag je Auftrag",
+      "per-job-hint": "Für Aufträge ohne eigene Tagesanzahl.",
+      "agent-job": "Ausführungen pro Tag je Agent-Auftrag",
+      "agent-job-hint": "Wie oft ein einzelner von einem Agenten erstellter Auftrag höchstens pro Tag läuft.",
+      "agent-total": "Ausführungen pro Tag über alle Agent-Aufträge",
+      "agent-total-hint": "Alle von Agenten erstellten Aufträge zusammen. Ein Lauf, dessen Ziel-CLI kein Kontingent mehr hat, wird weiterhin übersprungen.",
+      "no-cap": "Ohne Obergrenze",
+      "save-failed": "Die Zeitplan-Einstellung konnte nicht gespeichert werden"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "Löschen",
       "remove-confirm": "Diesen geplanten Auftrag löschen?",
       "cancel": "Abbrechen",
-      "save": "Speichern"
+      "save": "Speichern",
+      "max-runs-follow": "Einstellung: {n}",
+      "max-runs-follow-none": "Einstellung: ohne Obergrenze"
     },
     "owner": {
       "user": "von dir",

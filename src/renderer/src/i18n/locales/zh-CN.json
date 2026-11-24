@@ -1238,6 +1238,10 @@
         },
         "help-icons": {
           "summary": "界面上每一颗按钮图标——它叫什么名字、出现在哪里、按下去会发生什么事。"
+        },
+        "general-scheduler-runs": {
+          "title": "调度每日次数",
+          "summary": "调度工作与 agent 调度工作每天运行几次"
         }
       },
       "no-results": "找不到相符设置"
@@ -7200,7 +7204,8 @@
       "settings-management": "设置管理",
       "experimental": "实验功能",
       "theme": "主题",
-      "other": "其他"
+      "other": "其他",
+      "scheduler": "调度"
     },
     "p2p": {
       "title": "连接",
@@ -7943,6 +7948,17 @@
       "all-off-delivery": "消息会排队等收件的分格回到闲置，再用打字的方式注入，因此延迟变大。",
       "all-off-rewake": "Claude Code 的 rewake 是唤醒闲置 agent 的唯一手段，关闭后只能等它自己回到闲置。",
       "all-off-restart": "已经开着的分格会保留原本的通道，直到重新启动。"
+    },
+    "scheduler": {
+      "hint": "调度工作每天运行几次。默认值与 Navide 一直以来的做法相同。",
+      "per-job": "每个调度工作每天最多几次",
+      "per-job-hint": "调度工作没有自己设置每日次数时，按这个值。",
+      "agent-job": "agent 创建的单个调度工作每天最多几次",
+      "agent-job-hint": "由 agent 创建的任一调度工作，一天最多运行的次数。",
+      "agent-total": "agent 创建的所有调度工作每天合计最多几次",
+      "agent-total-hint": "所有由 agent 创建的调度工作合计。目标 CLI 额度用完时，那一次仍会跳过。",
+      "no-cap": "不限",
+      "save-failed": "调度设置未能保存"
     }
   },
   "label": {
@@ -9597,7 +9613,9 @@
       "remove": "删除",
       "remove-confirm": "确定删除这个调度工作？",
       "cancel": "取消",
-      "save": "保存"
+      "save": "保存",
+      "max-runs-follow": "设置：{n}",
+      "max-runs-follow-none": "设置：不限"
     },
     "owner": {
       "user": "由你创建",

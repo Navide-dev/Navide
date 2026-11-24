@@ -193,7 +193,7 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.48 scheduler settings (previous pin 1285ae18…): the
 #: scheduler_list and scheduler_upsert descriptions say the daily run counts
 #: are the user's settings. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "56a9466a7f44f8e82a7eabb6827049565bc8ac6d61f648ce3a06d12a32ed1d41"
+MAIN_TOOLS_LIST_SHA256 = "8c6d897fde58d98cab6a40f110d5028e15ae5898d1c51cc45363291636db7165"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -470,7 +470,7 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: Re-pinned with MAIN for 0.2.46 terminal delivery (previous pin e94a55fb…).
 #: Re-pinned with MAIN for 0.2.47 MCP reconnect (previous pin f5f52db5…).
 #: Re-pinned with MAIN for 0.2.48 scheduler settings (previous pin 2b8d853f…).
-ACP_ON_TOOLS_LIST_SHA256 = "e23a264dc25a3487bb86f566ef3ea97414db36c1dd30aca0f1b897cf52e85fc8"
+ACP_ON_TOOLS_LIST_SHA256 = "300c146375968200488c3939b2cdae9a2f605dbbeebd016dd42befe1ea3e428d"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
