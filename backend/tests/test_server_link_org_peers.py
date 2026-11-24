@@ -562,7 +562,10 @@ async def test_a_knock_left_under_a_personal_pairing_cannot_become_an_unscoped_r
         # They unpair: the knock made under that pairing goes with it.
         await conn.push({"type": "messages.pending", "payload": _frame(
             ORG_PEER, device_pairing.PAIR_REVOKED, "pair-revoked-k")})
-        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id) is None)
+        # The pin goes in a worker thread and the knock right after it, so
+        # wait for both rather than reading the knocks between the two steps.
+        await _until(lambda: trust_store.pin_for(ORG_PEER.device_id) is None
+                     and not link.access_requests())
         assert link.access_requests() == []
 
         # Paired again, through the grant; a knock now remembers it.
