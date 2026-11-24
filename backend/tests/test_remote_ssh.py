@@ -353,18 +353,21 @@ def test_a_terminal_pane_starts_in_the_remote_folder():
     assert argv[-1] == "cd ~/'my proj' && exec $SHELL -l"
 
 
+_NONCE = "0123456789abcdef" * 2
+
+
 def _cli_spec(**extra: Any) -> dict[str, Any]:
     return remote_ssh.parse_spec({**_SPEC, "dir": "/srv/app", "cli": "claude", **extra})
 
 
 def test_a_claude_pane_gets_the_tunnel_and_never_the_token_on_the_command_line():
     token = "tok" + "-" + "secret"
-    argv = remote_ssh.cli_pane_argv(_cli_spec(sessionId="0f0e"), pane_id="p1", local_port=1234, remote_port=45000)
+    argv = remote_ssh.cli_pane_argv(_cli_spec(sessionId="0f0e"), pane_id="p1", local_port=1234, remote_port=45000, nonce=_NONCE)
     assert argv[argv.index("-R") + 1] == "127.0.0.1:45000:127.0.0.1:1234"
     assert "ExitOnForwardFailure=yes" in argv and "ControlPath=none" in argv and "ForwardAgent=no" in argv
     assert argv[argv.index("--") + 1] == "dev@build-box"
     assert token not in " ".join(argv)
-    script = remote_ssh.cli_script(_cli_spec(sessionId="0f0e"), pane_id="p1", remote_port=45000)
+    script = remote_ssh.cli_script(_cli_spec(sessionId="0f0e"), pane_id="p1", remote_port=45000, nonce=_NONCE)
     assert "read -r NAVIDE_MCP_TOKEN" in script and "stty -echo" in script
     assert "cd /srv/app ||" in script
     assert "--resume 0f0e" in script and "--session-id 0f0e" in script
@@ -373,16 +376,16 @@ def test_a_claude_pane_gets_the_tunnel_and_never_the_token_on_the_command_line()
 
 def test_a_cli_without_navide_tools_gets_no_tunnel_and_no_token():
     spec = _cli_spec(cli="opencode")
-    argv = remote_ssh.cli_pane_argv(spec, pane_id="p1", local_port=1234, remote_port=45000)
+    argv = remote_ssh.cli_pane_argv(spec, pane_id="p1", local_port=1234, remote_port=45000, nonce=_NONCE)
     assert "-R" not in argv
-    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=None)
+    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=None, nonce=_NONCE)
     assert "NAVIDE_MCP_TOKEN" not in script and script.endswith("exec opencode")
 
 
 def test_codex_resumes_its_own_id_and_otherwise_reports_the_one_it_chose():
-    resumed = remote_ssh.cli_script(_cli_spec(cli="codex", sessionId="abc-1", resume=True), pane_id="p1", remote_port=45000)
+    resumed = remote_ssh.cli_script(_cli_spec(cli="codex", sessionId="abc-1", resume=True), pane_id="p1", remote_port=45000, nonce=_NONCE)
     assert "resume abc-1" in resumed and "navide-resume-miss" in resumed
-    fresh = remote_ssh.cli_script(_cli_spec(cli="codex"), pane_id="p1", remote_port=45000)
+    fresh = remote_ssh.cli_script(_cli_spec(cli="codex"), pane_id="p1", remote_port=45000, nonce=_NONCE)
     assert " resume " not in fresh and "navide-resume-miss" not in fresh
     assert "navide-session;" in fresh and "rollout-" in fresh
 
@@ -396,7 +399,7 @@ def test_every_script_is_valid_sh(cli, resume):
     if not shutil.which("sh"):
         pytest.skip("no sh")
     spec = _cli_spec(cli=cli, sessionId="abc-1", resume=resume, dir="~/a b")
-    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=45000 if cli != "opencode" else None)
+    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=45000 if cli != "opencode" else None, nonce=_NONCE)
     # On stdin: `sh -n` only parses, but the guard against starting a real
     # CLI reads the argv and would see a CLI name in it.
     assert subprocess.run(["sh", "-n"], input=script.encode()).returncode == 0
@@ -405,15 +408,35 @@ def test_every_script_is_valid_sh(cli, resume):
 def test_the_watcher_reads_a_split_session_report_and_a_resume_miss():
     found: list[str] = []
     missed: list[bool] = []
-    watcher = remote_ssh.SessionWatcher(found.append, lambda: missed.append(True))
-    watcher.feed(b"hello " + remote_ssh.RESUME_MISSED[:6])
-    watcher.feed(remote_ssh.RESUME_MISSED[6:] + b" more " + remote_ssh.SESSION_REPORT[:5])
-    watcher.feed(remote_ssh.SESSION_REPORT[5:] + b"5973b6c0-94b8-487b-a530-2aeb6098ae0e")
+    watcher = remote_ssh.SessionWatcher(_NONCE, found.append, lambda: missed.append(True))
+    miss = remote_ssh.RESUME_MISSED + _NONCE.encode() + b"\x07"
+    report = remote_ssh.SESSION_REPORT + _NONCE.encode() + b";"
+    watcher.feed(b"hello " + miss[:6])
+    watcher.feed(miss[6:] + b" more " + report[:5])
+    watcher.feed(report[5:] + b"5973b6c0-94b8-487b-a530-2aeb6098ae0e")
     watcher.feed(b"\x07 tail")
     assert missed == [True]
     assert found == ["5973b6c0-94b8-487b-a530-2aeb6098ae0e"]
-    watcher.feed(remote_ssh.SESSION_REPORT + b"other\x07")
+    watcher.feed(report + b"other\x07")
     assert found == ["5973b6c0-94b8-487b-a530-2aeb6098ae0e"]
+
+
+def test_output_without_the_launch_nonce_cannot_pass_for_a_report():
+    found: list[str] = []
+    missed: list[bool] = []
+    watcher = remote_ssh.SessionWatcher(_NONCE, found.append, lambda: missed.append(True))
+    other = ("f" * 32).encode()
+    watcher.feed(remote_ssh.SESSION_REPORT + other + b";attacker-id\x07")
+    watcher.feed(remote_ssh.SESSION_REPORT + b"attacker-id\x07")
+    watcher.feed(remote_ssh.RESUME_MISSED + other + b"\x07")
+    assert found == [] and missed == []
+
+
+def test_a_claude_pane_never_takes_a_session_id_from_the_host():
+    found: list[str] = []
+    watcher = remote_ssh.SessionWatcher(_NONCE, None, lambda: None)
+    watcher.feed(remote_ssh.SESSION_REPORT + _NONCE.encode() + b";other\x07")
+    assert watcher.session_id == "" and found == []
 
 
 def test_a_cli_pane_is_a_remote_agent_pane_with_the_token_feeder(monkeypatch):

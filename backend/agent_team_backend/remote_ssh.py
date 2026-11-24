@@ -88,10 +88,19 @@ CLI_COMMANDS: dict[str, tuple[str, ...]] = {
 MCP_CLIS = ("claude", "codex")
 
 # OSC sequences the remote side prints for the pane's output tap: the session
-# id it found, and that a requested resume found nothing to resume. Unknown to
-# a terminal, so nothing is drawn.
+# id it found (``<prefix><nonce>;<id>BEL``), and that a requested resume found
+# nothing to resume (``<prefix><nonce>BEL``). Unknown to a terminal, so nothing
+# is drawn. The nonce is new for every launch, so text the CLI prints (a file
+# it shows, a page it fetched) cannot pass for either.
 SESSION_REPORT = b"\x1b]7737;navide-session;"
-RESUME_MISSED = b"\x1b]7737;navide-resume-miss\x07"
+RESUME_MISSED = b"\x1b]7737;navide-resume-miss;"
+_NONCE_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def new_nonce() -> str:
+    import secrets
+
+    return secrets.token_hex(16)
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,63}$")
 
@@ -212,11 +221,13 @@ def _osc(text: str) -> str:
     return f"\\033]7737;{text}\\007"
 
 
-def _session_script(cli: str, argv: list[str], session_id: str, resume: bool) -> str:
+def _session_script(cli: str, argv: list[str], session_id: str, resume: bool, nonce: str) -> str:
     """The lines that start ``argv`` resuming ``session_id`` when asked to and
     the CLI still has it, else fresh; a resume that cannot happen prints
     :data:`RESUME_MISSED`."""
-    missed = f"printf '{_osc('navide-resume-miss')}'; " if resume else ""
+    if not _NONCE_RE.match(nonce):
+        raise SshTargetError("invalid nonce")
+    missed = f"printf '{_osc('navide-resume-miss;' + nonce)}'; " if resume else ""
     cmd = shlex.join(argv)
     if cli == "claude":
         sid = shlex.quote(session_id)
@@ -241,7 +252,7 @@ def _session_script(cli: str, argv: list[str], session_id: str, resume: bool) ->
         # from the rollout file its own process (or the native binary the npm
         # launcher starts) holds open — that pane's, and no other's. It ends
         # with the CLI; a host with neither /proc nor lsof reports nothing.
-        report = _osc("navide-session;%s")
+        report = _osc(f"navide-session;{nonce};%s")
         watcher = (
             "p=$$; ( while kill -0 $p 2>/dev/null; do "
             "f=$( { for q in $p $(pgrep -P $p 2>/dev/null); do "
@@ -257,7 +268,7 @@ def _session_script(cli: str, argv: list[str], session_id: str, resume: bool) ->
     return f"{missed}exec {cmd}"
 
 
-def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None) -> str:
+def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None, nonce: str) -> str:
     """The /bin/sh script an SSH CLI pane runs on the host."""
     from . import remote_devcontainer as rd_mod
     from .mcp_server import wiring
@@ -278,7 +289,7 @@ def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None
         f"cd {_cd_target(spec['dir'])} || "
         f"{{ printf 'Navide: cannot open the remote folder %s\\r\\n' {folder}; exit 1; }}; "
     )
-    parts.append(_session_script(cli, argv, str(spec.get("sessionId") or ""), bool(spec.get("resume"))))
+    parts.append(_session_script(cli, argv, str(spec.get("sessionId") or ""), bool(spec.get("resume")), nonce))
     return "".join(parts)
 
 
@@ -288,6 +299,7 @@ def cli_pane_argv(
     pane_id: str,
     local_port: int | None,
     remote_port: int,
+    nonce: str,
 ) -> list[str]:
     """The argv of an SSH CLI pane. The script runs under the user's own
     login shell (interactive, as a local pane's command does) so the CLI is
@@ -305,7 +317,7 @@ def cli_pane_argv(
             "-o", "ExitOnForwardFailure=yes",
             "-R", f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",
         ]
-    script = cli_script(spec, pane_id=pane_id, remote_port=port)
+    script = cli_script(spec, pane_id=pane_id, remote_port=port, nonce=nonce)
     inner = "exec /bin/sh -c " + shlex.quote(script)
     return [
         "ssh", "-tt",
@@ -321,36 +333,47 @@ def cli_pane_argv(
 
 
 class SessionWatcher:
-    """Reads :data:`SESSION_REPORT` and :data:`RESUME_MISSED` out of an SSH
-    CLI pane's output. Fed every chunk; holds a short tail so a sequence split
-    across two reads is still seen."""
+    """Reads this launch's :data:`SESSION_REPORT` and :data:`RESUME_MISSED`
+    out of an SSH CLI pane's output, each at most once and only with the
+    launch's nonce. ``on_session`` is None for a CLI whose id was chosen
+    here (claude): nothing on the host may replace it. Fed every chunk; holds
+    a short tail so a sequence split across two reads is still seen."""
 
-    _TAIL = len(SESSION_REPORT) + 80
-
-    def __init__(self, on_session: Callable[[str], Any], on_missed: Callable[[], Any]) -> None:
+    def __init__(
+        self,
+        nonce: str,
+        on_session: Callable[[str], Any] | None,
+        on_missed: Callable[[], Any],
+    ) -> None:
+        self._session_prefix = SESSION_REPORT + nonce.encode("ascii") + b";"
+        self._missed_seq = RESUME_MISSED + nonce.encode("ascii") + b"\x07"
+        self._tail_len = len(self._session_prefix) + 80
         self._on_session = on_session
         self._on_missed = on_missed
         self._tail = b""
         self.session_id = ""
         self.missed = False
 
+    def _done(self) -> bool:
+        return self.missed and (self._on_session is None or bool(self.session_id))
+
     def feed(self, chunk: bytes) -> None:
-        if self.session_id and self.missed:
+        if self._done():
             return
         data = self._tail + chunk
-        if not self.missed and RESUME_MISSED in data:
+        if not self.missed and self._missed_seq in data:
             self.missed = True
             self._on_missed()
-        start = data.find(SESSION_REPORT)
-        if not self.session_id and start >= 0:
+        start = data.find(self._session_prefix) if self._on_session is not None and not self.session_id else -1
+        if start >= 0:
             end = data.find(b"\x07", start)
             if end >= 0:
-                value = data[start + len(SESSION_REPORT):end].decode("ascii", "replace")
+                value = data[start + len(self._session_prefix):end].decode("ascii", "replace")
                 if _SESSION_ID_RE.match(value):
                     self.session_id = value
                     self._on_session(value)
                 data = data[end + 1:]
-        self._tail = data[-self._TAIL:]
+        self._tail = data[-self._tail_len:]
 
 
 def _trust_row(target: Mapping[str, Any]) -> dict[str, Any]:

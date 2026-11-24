@@ -350,12 +350,13 @@ async def create_ssh_pane(
         agent_key = "terminal" if spec["cli"] == remote_ssh.TERMINAL else rd.AGENT_KEY
         if str(payload.get("agent_key") or "") != agent_key:
             raise remote_ssh.SshTargetError(f"an SSH Remote pane running {spec['cli']} has agent_key {agent_key!r}")
+        nonce = remote_ssh.new_nonce()
         if agent_key == "terminal":
             argv = remote_ssh.shell_argv(spec)
         else:
             argv = remote_ssh.cli_pane_argv(
                 spec, pane_id=pane_id, local_port=wiring.backend_port(),
-                remote_port=rd.pick_remote_port(),
+                remote_port=rd.pick_remote_port(), nonce=nonce,
             )
     except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
@@ -413,7 +414,11 @@ async def create_ssh_pane(
             term.metadata[remote_ssh.METADATA_KEY]["sessionId"] = session_id
             _tell("remote_ssh.session", {"session_id": session_id})
 
-        watcher = remote_ssh.SessionWatcher(_found, lambda: _tell("remote_ssh.resume_missed", {}))
+        # Only codex reports the id it chose; claude's was chosen here.
+        watcher = remote_ssh.SessionWatcher(
+            nonce, _found if spec["cli"] == "codex" else None,
+            lambda: _tell("remote_ssh.resume_missed", {}),
+        )
         term.output_taps.append(watcher.feed)
     response_payload = {
         "terminal_session_id": term.id,
