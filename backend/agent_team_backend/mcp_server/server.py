@@ -10271,7 +10271,9 @@ async def scheduler_list(ctx: Context) -> dict[str, Any]:
     or {kind: "external"}), and `owner_gone` is true when the creating pane is
     gone — such a job is the user's to change now. `limits` reports the agent
     limits (see scheduler_upsert, LIMITS) and how much of them is in use:
-    yours_enabled, agent_enabled, agent_runs_today.
+    yours_enabled, agent_enabled, agent_runs_today. The daily run counts in it
+    (max_runs_per_day, agent_max_runs_per_day, agent_runs_per_day) are the
+    user's current settings; null means the user set none.
 
     A pane sees a job aimed at another workspace as metadata only, marked
     `redacted: true`: its action keeps just kind and workspace (no text, pane
@@ -10308,8 +10310,10 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
     once on the next start (catch_up "once") or dropped (catch_up "skip").
 
     UNATTENDED RUNS SPEND QUOTA. Every run is a turn the target agent pays for,
-    with nobody watching. Each job is capped at max_runs_per_day (default 24),
-    a run whose target CLI is marked out of quota is skipped, and failures back
+    with nobody watching. Each job runs at most max_runs_per_day times a day
+    (its own policy value, else the user's setting — 24 unless changed; see
+    scheduler_list limits), a run whose target CLI is marked out of quota is
+    skipped, and failures back
     off 30s → 1m → 5m → 15m → 60m. Pick the slowest schedule that does the job.
 
     Skips are not errors: "no_window" (no Navide window open), "busy" (this
@@ -10335,9 +10339,13 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
 
     LIMITS on agents' jobs (the user's own jobs have none): at most 10 enabled
     jobs of yours and 100 enabled agent jobs in all; every_ms at least 300000
-    (5 minutes) and max_runs_per_day at most 288; 300 runs a day across all
-    agent jobs (your run_now included) — past that a slot is skipped as
-    "budget_global". A periodic job of yours disables itself 7 days after you
+    (5 minutes); and two daily run counts the user sets in Settings →
+    Scheduler, 288 and 300 unless changed, either of which may be off
+    (scheduler_list `limits` has the current values, null when off): runs a
+    day for one job (agent_max_runs_per_day — also the most max_runs_per_day
+    may be), and runs a day across all agent jobs (agent_runs_per_day, your
+    run_now included) — past that a slot is skipped as "budget_global". A
+    periodic job of yours disables itself 7 days after you
     last saved or enabled it (skip reason "expired"; the user can keep it), so
     save or re-enable it to keep it going. A finished once job of yours is
     deleted 30 days after it ran. A limit answers {ok: false, code:
@@ -10390,7 +10398,8 @@ async def scheduler_upsert(job: dict[str, Any], ctx: Context) -> dict[str, Any]:
         state.last_error_code and the detail in last_error. A pane caller's
         default workspace is its own.
       policy — optional {catch_up: "once" | "skip", max_runs_per_day, timeout_s};
-        defaults {"once", 24, 1800}.
+        defaults "once" and 1800; with no max_runs_per_day the job follows the
+        user's setting.
       state — owned by Navide (next_run_at, running_at, last_status, last_error,
         consecutive_errors, backoff_until, ...); anything sent there is ignored.
     """

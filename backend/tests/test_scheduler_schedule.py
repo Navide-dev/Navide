@@ -178,7 +178,8 @@ def test_changed_schedule_rearms_from_now() -> None:
 def test_new_job_defaults() -> None:
     job = normalize_job(_job(), None, 1_000)
     assert job["enabled"] is True
-    assert job["policy"] == {"catch_up": "once", "max_runs_per_day": 24, "timeout_s": 1800}
+    # No max_runs_per_day: the job follows the user's setting.
+    assert job["policy"] == {"catch_up": "once", "timeout_s": 1800}
     assert job["state"]["consecutive_errors"] == 0 and job["state"]["running_at"] is None
     assert len(job["id"]) == 36
 

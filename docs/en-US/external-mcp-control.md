@@ -859,8 +859,12 @@ messages), so a job created here appears there at once — every mutation
 broadcasts `scheduler.changed`. A job fires **only while Navide is running**; a
 slot missed while the app was closed runs once on the next start
 (`catch_up: "once"`, the default) or is dropped (`"skip"`). Unattended runs
-spend quota: each job is capped at `max_runs_per_day` (default 24) and failures
-back off 30s → 1m → 5m → 15m → 60m.
+spend quota: each job runs at most `max_runs_per_day` times a day (its own
+policy value, else the user's setting: 24 unless changed) and failures
+back off 30s → 1m → 5m → 15m → 60m. The user sets that daily count, and the
+two agent run counts below (288 and 300), in Settings → Scheduler, where each
+can also be turned off; `scheduler_list`'s `limits` reports the current values
+(`null` when off).
 
 | Tool | Parameters | What it does |
 |---|---|---|

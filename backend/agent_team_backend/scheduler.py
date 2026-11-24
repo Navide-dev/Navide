@@ -21,7 +21,8 @@ system owner. A system job is not an agent's: no agent limits, no expiry.
 Jobs an agent owns are also limited (the user's own jobs are not): at most
 AGENT_ENABLED_PER_OWNER enabled per owner and AGENT_ENABLED_TOTAL enabled in
 all, no interval under AGENT_MIN_EVERY_MS, AGENT_RUNS_PER_DAY_TOTAL runs a day
-between them (an agent's run_now included), a periodic job disables itself
+between them (an agent's run_now included; the run counts are the user's
+to change in Settings → Scheduler), a periodic job disables itself
 AGENT_EXPIRE_MS after it was last saved or enabled unless the user keeps it,
 and a finished once job is deleted AGENT_ONCE_KEEP_MS after it ran.
 
@@ -83,7 +84,9 @@ MAX_EVERY_MS = 7 * 24 * 3600 * 1000
 #: away) and no further ahead than MAX_ONCE_AHEAD_MS.
 ONCE_PAST_GRACE_MS = 60_000
 MAX_ONCE_AHEAD_MS = 10 * 365 * 24 * 3600 * 1000
-DEFAULT_POLICY: dict[str, Any] = {"catch_up": "once", "max_runs_per_day": 24, "timeout_s": 1800}
+#: A job with no max_runs_per_day of its own follows the user's setting
+#: (see DEFAULT_SETTINGS), so the default is not written into its policy.
+DEFAULT_POLICY: dict[str, Any] = {"catch_up": "once", "timeout_s": 1800}
 _MAX_NAME = 200
 _MAX_TEXT = 64 * 1024
 _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
@@ -112,6 +115,17 @@ AGENT_MAX_RUNS_PER_DAY = 288
 AGENT_RUNS_PER_DAY_TOTAL = 300
 AGENT_EXPIRE_MS = 7 * 24 * 3600 * 1000
 AGENT_ONCE_KEEP_MS = 30 * 24 * 3600 * 1000
+
+#: The run counts the user sets in Settings → Scheduler; None means "no cap".
+#: max_runs_per_day is any job's daily runs unless its policy names its own,
+#: agent_max_runs_per_day the most one agent job may run (or name) a day, and
+#: agent_runs_per_day all agent jobs' runs a day together.
+DEFAULT_SETTINGS: dict[str, int | None] = {
+    "max_runs_per_day": 24,
+    "agent_max_runs_per_day": AGENT_MAX_RUNS_PER_DAY,
+    "agent_runs_per_day": AGENT_RUNS_PER_DAY_TOTAL,
+}
+_SETTINGS_MAX = {"max_runs_per_day": 1440, "agent_max_runs_per_day": 1440, "agent_runs_per_day": 100_000}
 
 
 #: The actor behind a change made in a Navide window.
@@ -526,7 +540,24 @@ def _limit(limit: str, bound: int, used: int, error: str) -> dict[str, Any]:
     return {"ok": False, "code": LIMIT, "limit": limit, "max": bound, "used": used, "error": error}
 
 
-def _agent_definition_limit(job: dict[str, Any]) -> dict[str, Any] | None:
+def normalize_settings(raw: Any, previous: dict[str, Any] | None = None) -> dict[str, int | None]:
+    """Validate ``raw`` key by key over ``previous`` (defaults when None). A
+    key set to None turns that cap off; a key left out keeps its value."""
+    if not isinstance(raw, dict):
+        raise JobInvalid("settings must be an object")
+    settings = {**DEFAULT_SETTINGS, **(previous or {})}
+    for key, bound in _SETTINGS_MAX.items():
+        if key in raw:
+            settings[key] = None if raw[key] is None else _int(raw[key], key, 1, bound)
+    return {key: settings[key] for key in DEFAULT_SETTINGS}
+
+
+def _lowest(*caps: int | None) -> int | None:
+    present = [cap for cap in caps if cap is not None]
+    return min(present) if present else None
+
+
+def _agent_definition_limit(job: dict[str, Any], cap: int | None) -> dict[str, Any] | None:
     schedule = job["schedule"]
     if schedule["kind"] == "every" and schedule["every_ms"] < AGENT_MIN_EVERY_MS:
         return _limit(
@@ -534,11 +565,11 @@ def _agent_definition_limit(job: dict[str, Any]) -> dict[str, Any] | None:
             "an agent's job may run at most every 5 minutes (every_ms >= 300000); "
             "to watch a pane, use cli_wait_idle instead",
         )
-    runs = int(job["policy"].get("max_runs_per_day", DEFAULT_POLICY["max_runs_per_day"]))
-    if runs > AGENT_MAX_RUNS_PER_DAY:
+    runs = job["policy"].get("max_runs_per_day")
+    if runs is not None and cap is not None and int(runs) > cap:
         return _limit(
-            "max_runs_per_day", AGENT_MAX_RUNS_PER_DAY, runs,
-            f"an agent's job may run at most {AGENT_MAX_RUNS_PER_DAY} times a day",
+            "max_runs_per_day", cap, int(runs),
+            f"an agent's job may run at most {cap} times a day (the user's setting)",
         )
     return None
 
@@ -875,6 +906,7 @@ class SchedulerService:
         self._catch_up_pending: set[str] = set()
         self._runs: dict[str, tuple[asyncio.Task, bool]] = {}
         self._ticking = False
+        self._settings: dict[str, int | None] | None = None
 
     def now_ms(self) -> int:
         return int(self.clock() * 1000)
@@ -1072,16 +1104,38 @@ class SchedulerService:
         await self._resolve_queued(job)
         if self.bridge.still_queued(job["state"].get("last_msg_key")):
             return SKIP_BUSY
-        cap = int(job["policy"].get("max_runs_per_day", DEFAULT_POLICY["max_runs_per_day"]))
-        used = await self.store.count_dispatched_since(job["id"], _day_start_ms(job["schedule"], now))
-        if used >= cap or await self.bridge.budget_limited(job["action"]):
+        settings = await self.settings()
+        cap = job["policy"].get("max_runs_per_day", settings["max_runs_per_day"])
+        if is_agent(job.get("owner")):
+            cap = _lowest(cap, settings["agent_max_runs_per_day"])
+        if cap is not None:
+            used = await self.store.count_dispatched_since(job["id"], _day_start_ms(job["schedule"], now))
+            if used >= int(cap):
+                return SKIP_BUDGET
+        if await self.bridge.budget_limited(job["action"]):
             return SKIP_BUDGET
         if is_agent(job.get("owner")) and await self._agent_runs_spent(now):
             return SKIP_BUDGET_GLOBAL
         return None
 
     async def _agent_runs_spent(self, now: int) -> bool:
-        return await self.store.usage(_usage_day(now)) >= AGENT_RUNS_PER_DAY_TOTAL
+        total = (await self.settings())["agent_runs_per_day"]
+        return total is not None and await self.store.usage(_usage_day(now)) >= total
+
+    async def settings(self) -> dict[str, int | None]:
+        """The user's run caps (Settings → Scheduler), read once and cached."""
+        if self._settings is None:
+            self._settings = normalize_settings(await self.store.get_settings())
+        return dict(self._settings)
+
+    async def set_settings(self, raw: Any) -> dict[str, Any]:
+        """Change the user's run caps. Raises :class:`JobInvalid` for a bad value."""
+        settings = normalize_settings(raw, await self.settings())
+        await self.store.set_settings(settings, self.now_ms())
+        self._settings = settings
+        self.wake()
+        await self._changed()
+        return {"ok": True, "settings": dict(settings)}
 
     async def _agent_enable_limit(
         self, actor: dict[str, Any], job_id: str | None
@@ -1273,13 +1327,15 @@ class SchedulerService:
     async def list(self) -> dict[str, Any]:
         jobs = [view(job) for job in await self.store.list_jobs()]
         now = self.now_ms()
+        settings = await self.settings()
         limits = {
+            "max_runs_per_day": settings["max_runs_per_day"],
             "agent_enabled_per_owner": AGENT_ENABLED_PER_OWNER,
             "agent_enabled_total": AGENT_ENABLED_TOTAL,
             "agent_enabled": sum(1 for j in jobs if j["enabled"] and is_agent(j["owner"])),
             "agent_min_every_ms": AGENT_MIN_EVERY_MS,
-            "agent_max_runs_per_day": AGENT_MAX_RUNS_PER_DAY,
-            "agent_runs_per_day": AGENT_RUNS_PER_DAY_TOTAL,
+            "agent_max_runs_per_day": settings["agent_max_runs_per_day"],
+            "agent_runs_per_day": settings["agent_runs_per_day"],
             "agent_runs_today": await self.store.usage(_usage_day(now)),
             "agent_expire_ms": AGENT_EXPIRE_MS,
             "agent_once_keep_ms": AGENT_ONCE_KEEP_MS,
@@ -1328,7 +1384,7 @@ class SchedulerService:
             job["updated_by"] = owner_of(actor)
             enabling = job["enabled"] and (existing is None or not existing["enabled"])
             if is_agent(actor):
-                refusal = _agent_definition_limit(job)
+                refusal = _agent_definition_limit(job, (await self.settings())["agent_max_runs_per_day"])
                 if refusal is None and enabling:
                     refusal = await self._agent_enable_limit(actor, job["id"])
                 if refusal is not None:
@@ -1444,9 +1500,10 @@ class SchedulerService:
             if is_agent(actor):
                 now = self.now_ms()
                 used = await self.store.usage(_usage_day(now))
-                if used >= AGENT_RUNS_PER_DAY_TOTAL:
+                total = (await self.settings())["agent_runs_per_day"]
+                if total is not None and used >= total:
                     return _limit(
-                        "agent_runs_per_day", AGENT_RUNS_PER_DAY_TOTAL, used,
+                        "agent_runs_per_day", total, used,
                         "agents' jobs have used up today's runs; try again tomorrow, "
                         "or ask the user to run it",
                     )
