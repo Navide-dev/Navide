@@ -12798,7 +12798,6 @@
     "error-tz": "Unknown time zone"
   },
   "persona": {
-    "rooms-label": "Rooms",
     "people": "{n} people",
     "running": "{n} running",
     "awaiting-count": "{n} waiting for your answer",

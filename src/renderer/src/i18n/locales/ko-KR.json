@@ -12798,7 +12798,6 @@
     "error-tz": "알 수 없는 시간대"
   },
   "persona": {
-    "rooms-label": "방",
     "people": "{n}명",
     "running": "{n} 실행 중",
     "awaiting-count": "{n}명 답변 대기",

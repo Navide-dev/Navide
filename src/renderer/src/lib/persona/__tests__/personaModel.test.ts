@@ -135,6 +135,16 @@ describe('buildPersonaRooms', () => {
     expect(build(300)).toBe(300)
   })
 
+  it('carries the login-expired and Guard flags through', () => {
+    const rooms = buildPersonaRooms({
+      tabs: [{ key: 'a', label: 'A', paneIds: ['p1', 'p2'] }], stagePaneIds: [], fallbackLabel: '',
+      statusOf: () => 'idle',
+      factsOf: (id) => ({ ...facts(id), loginExpired: id === 'p1', guarded: id === 'p2' }),
+      clock: new Map(), now: 0,
+    })
+    expect(rooms[0].people.map((p) => [p.loginExpired, p.guarded])).toEqual([[true, false], [false, true]])
+  })
+
   it('prefers a status start time the pane knows itself', () => {
     const rooms = buildPersonaRooms({
       tabs: [{ key: 'a', label: 'A', paneIds: ['p1'] }], stagePaneIds: [], fallbackLabel: '',

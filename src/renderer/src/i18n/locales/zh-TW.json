@@ -12798,7 +12798,6 @@
     "error-tz": "不認得的時區"
   },
   "persona": {
-    "rooms-label": "房間",
     "people": "{n} 人",
     "running": "{n} 執行中",
     "awaiting-count": "{n} 人等你回答",

@@ -118,7 +118,17 @@ export function drawStation(
   look: PersonaLook,
   pose: PersonaPose,
   pal: PersonaPalette,
-  opts: { frame?: number; selected?: boolean; walk?: number; lamp?: number; quota?: QuotaStage } = {},
+  opts: {
+    frame?: number
+    selected?: boolean
+    walk?: number
+    lamp?: number
+    quota?: QuotaStage
+    /** Login expired: a key on the desk, the header badge's colour. */
+    loginExpired?: boolean
+    /** Marked by Guard: a shield on the desk, the header badge's colour. */
+    guarded?: boolean
+  } = {},
 ): void {
   const p = plotter(ctx, S)
   const f = opts.frame ?? 0
@@ -180,6 +190,17 @@ export function drawStation(
   p(x + 36, y + 19, 3, 4, '#30363d'); p(x + 35, y + 15, 5, 4, withAlpha(ink, lampOn)); p(x + 34, y + 14, 7, 1, withAlpha(ink, 0.4 * lampOn))
   // keyboard
   p(x + 15, y + 22, 9, 1, '#d9dce6')
+  // desk props for the pane header's attention badges
+  if (opts.loginExpired) {
+    const c = pal.attention
+    p(x + 1, y + 20, 3, 3, c); p(x + 2, y + 21, 1, 1, '#2a2a33')
+    p(x + 4, y + 21, 5, 1, c); p(x + 7, y + 22, 1, 1, c); p(x + 9, y + 22, 1, 1, c)
+  }
+  if (opts.guarded) {
+    const c = pal.attention, gx = opts.loginExpired ? x + 10 : x + 2
+    p(gx, y + 17, 5, 4, c); p(gx + 1, y + 21, 3, 1, c); p(gx + 2, y + 22, 1, 1, c)
+    p(gx + 2, y + 18, 1, 3, '#ffffff'); p(gx + 1, y + 19, 3, 1, '#ffffff')
+  }
   if (walking) {
     const off = Math.round((opts.walk ?? 0) * 14)
     drawStanding(p, x - 2 - off, y + 9, look, f)

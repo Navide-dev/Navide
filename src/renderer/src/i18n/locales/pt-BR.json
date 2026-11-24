@@ -12798,7 +12798,6 @@
     "error-tz": "Fuso horário desconhecido"
   },
   "persona": {
-    "rooms-label": "Salas",
     "people": "{n} pessoas",
     "running": "{n} em execução",
     "awaiting-count": "{n} aguardando sua resposta",
