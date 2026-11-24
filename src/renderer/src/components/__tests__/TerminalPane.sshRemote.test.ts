@@ -93,6 +93,15 @@ describe('TerminalPane – SSH Remote terminal pane', () => {
     expect(wrapper.get('[data-testid="ssh-banner-reason"]').text()).toContain('sshRemote.reason-unreachable')
   })
 
+  it('the first countdown ignores how long the pane was open before the link dropped', async () => {
+    const sshReconnect = vi.fn(async () => 'unreachable')
+    wrapper = mountPane({ sshRemote, sshReconnect, sshExitCode: 255 })
+    await vi.advanceTimersByTimeAsync(22_000)
+    mockTerminal.displayStatus.value = 'exited'
+    await nextTick()
+    expect(wrapper.get('[data-testid="ssh-retry-in"]').text()).toBe('sshRemote.retry-in:{"seconds":2}')
+  })
+
   it('a shell the user exited offers Reconnect without trying on its own', async () => {
     const sshReconnect = vi.fn(async () => null)
     wrapper = mountPane({ sshRemote, sshReconnect, sshExitCode: 0 })
