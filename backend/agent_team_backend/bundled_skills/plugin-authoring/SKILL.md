@@ -22,16 +22,16 @@ memory.
 ## 1. Start from the smallest thing that works
 
 The SDK packages are distributed only as GitHub Release files, never on npm;
-run the CLI from the newest release, `plugin-packages-1.0.1` (a bare `npx navide-plugin` or `npm install
+run the CLI from the newest release, `plugin-packages-1.0.2` (a bare `npx navide-plugin` or `npm install
 @navide/plugin-sdk` fails with 404):
 
 ```text
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz navide-plugin init acme-hello --id acme.hello              # no build step
-npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz navide-plugin init acme-hello --id acme.hello              # no build step
+npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz navide-plugin init acme-hello --id acme.hello --template vue  # Vue + backend + agent tool
 ```
 
-In a `--template vue` project, run `npm install $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz`
+In a `--template vue` project, run `npm install $R/navide-plugin-contracts-1.0.2.tgz $R/navide-plugin-sdk-1.0.2.tgz`
 before `npm install`, so `package.json` names the tarballs. The default
 template's `package.json` already names them: `npm install` in its folder
 installs the CLI, then `npm run check` (validate and scan) and

@@ -45,31 +45,31 @@ form.
 The public packages (`@navide/plugin-contracts`, `@navide/plugin-sdk`,
 `@navide/plugin-ui`) are distributed only as GitHub Release files, not through
 npm or PyPI. Install them from the newest
-[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
+[`plugin-packages-1.0.2`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.2)
 release, the same files Navide's own plugins build against (every
 `plugin-packages-*` release is listed on the
 [Releases page](https://github.com/Navide-dev/Navide/releases?q=plugin-packages)):
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz \
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz \
   navide-plugin init acme-hello --id acme.hello --template vue
 cd acme-hello
-npm install $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
+npm install $R/navide-plugin-contracts-1.0.2.tgz $R/navide-plugin-sdk-1.0.2.tgz
 npm install
 npm run build        # writes dist/package, then npm run check validates it
 ```
 
 The first `npm install` writes the two tarball addresses into `package.json`
-(a template from SDK 1.0.1 or earlier names the 1.0.0 files; from the next
-release on, the template names the release it came from). After that
+(a template from SDK 1.0.1 or earlier names the 1.0.0 files; from 1.0.2 on,
+the template names the release it came from). After that
 `npx navide-plugin` and the `package.json` scripts use the local copy. The
 release's SHA-256 sums, to compare with `shasum -a 256` on a downloaded file:
 
 ```text
-385f8184be75fde978686e0768c1a04a56241551d077276359fd2531f4910147  navide-plugin-contracts-1.0.1.tgz
-81e702467a3d0f3b334c9206c9c2c5c5442f752977edaef3d45de12a99d31dd8  navide-plugin-sdk-1.0.1.tgz
-a6fea9aacec705a089622318898b318f33f58c4ec2c4e41a87121cb36970e861  navide-plugin-ui-1.0.1.tgz
+4beea478ec24dd87be491ba9ed84e0375a27007f49e61df4dcc4a2cebde047f0  navide-plugin-contracts-1.0.2.tgz
+c60737218c99614e7e1403e8dbe27bdc19f34f2e5d314d0b7def7d2374d1c818  navide-plugin-sdk-1.0.2.tgz
+37e39c4e6a4cc69564a14bc2c99a5eaa2892fe1bf5b420dfd5359d1bdc797720  navide-plugin-ui-1.0.2.tgz
 ```
 
 A Python backend needs no package: the `vue` template's backend uses only the
@@ -223,8 +223,8 @@ process of [§4](#4-publishing-is-the-business-process).
    files with the CLI straight from the release:
 
    ```bash
-   R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-   npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz \
+   R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+   npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz \
      navide-plugin init acme-hello --id acme.hello
    cd acme-hello
    ```

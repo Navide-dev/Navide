@@ -1,6 +1,6 @@
 {
   "name": "@navide/plugin-sdk",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Framework-neutral activation and capability-call SDK for Navide plugins.",
   "license": "MIT",
   "keywords": ["navide", "plugin", "sdk", "cli"],

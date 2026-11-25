@@ -126,7 +126,7 @@ export type TestplaceManageRequest =
 
 /** The shared version of the public plugin packages in the newest
  * `plugin-packages-<version>` GitHub Release; equal to packages/plugin-sdk's version. */
-export const PLUGIN_PACKAGES_VERSION = '1.0.1'
+export const PLUGIN_PACKAGES_VERSION = '1.0.2'
 /** The GitHub Release the public plugin packages are installed from; they are
  * not on npm (docs/en-US/build-for-navide.md, "Five minutes to a running plugin"). */
 export const PLUGIN_PACKAGES_RELEASE_URL = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${PLUGIN_PACKAGES_VERSION}`
