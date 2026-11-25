@@ -8260,6 +8260,7 @@
     "mcp-restarting": "Đang khởi động lại MCP…",
     "mcp-restart-done": "Đã khởi động lại MCP; không khung nào bị ngắt",
     "mcp-restart-failed": "Khởi động lại MCP thất bại: {reason}",
+    "mcp-restart-unsupported": "Trên Windows chưa hỗ trợ chỉ khởi động lại MCP. Hãy dùng “Khởi động lại toàn bộ backend” bên dưới.",
     "mcp-full-restart": "Khởi động lại toàn bộ backend…",
     "mcp-full-restart-confirm": "Khởi động lại backend sẽ ngắt các khung ở mọi cửa sổ: CLI và terminal sẽ kết thúc rồi mở lại với cuộc trò chuyện trước, lượt đang chạy sẽ bị cắt. Các khung trong cửa sổ này: {panes}",
     "mcp-full-restart-none": "cửa sổ này không có khung nào",

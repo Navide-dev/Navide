@@ -21,7 +21,8 @@ function harness(initial: McpHealthSnapshot | null = null) {
     checkMcpHealth: vi.fn(async () => snap('ok')),
     onMcpHealthChanged: (cb: (s: McpHealthSnapshot) => void) => { push = cb },
   }
-  const mcp = useMcpHealth({ send: send as never, api, setTimer: (fn) => { timers.push(fn) } })
+  // The soft restart itself; Windows' refusal is McpRestartButton.test.ts.
+  const mcp = useMcpHealth({ send: send as never, api, setTimer: (fn) => { timers.push(fn) }, restartSupported: true })
   return { mcp, sends, api, push: (s: McpHealthSnapshot) => push(s), timers }
 }
 

@@ -8260,6 +8260,7 @@
     "mcp-restarting": "Reiniciando MCP…",
     "mcp-restart-done": "MCP reiniciado; ningún panel se interrumpió",
     "mcp-restart-failed": "No se pudo reiniciar MCP: {reason}",
+    "mcp-restart-unsupported": "En Windows todavía no se puede reiniciar solo MCP. Use «Reiniciar todo el backend» más abajo.",
     "mcp-full-restart": "Reiniciar todo el backend…",
     "mcp-full-restart-confirm": "Reiniciar el backend interrumpe los paneles de todas las ventanas: sus CLI y terminales se cierran y se reabren con su conversación anterior, y cualquier turno en curso se corta. Paneles de esta ventana: {panes}",
     "mcp-full-restart-none": "esta ventana no tiene paneles",

@@ -19,6 +19,7 @@ export const FRONTEND_ONLY = ['src/renderer/', 'src/preload/', 'e2e/']
 // Inside FRONTEND_ONLY, but read by backend tests or backend code.
 export const FRONTEND_SHARED = [
   'src/renderer/plugins/',
+  'src/renderer/src/App.vue',
   'src/renderer/src/platform/plugin-shell/',
   'src/renderer/src/components/AccountModal.vue',
   'src/renderer/src/components/CliAgentsHelp.vue',
@@ -28,6 +29,7 @@ export const FRONTEND_SHARED = [
   'src/renderer/src/lib/__tests__/fixtures/n8n-forged-signals.json',
   'src/renderer/src/lib/__tests__/fixtures/n8n-native-flow-signals.json',
   'src/renderer/src/lib/builtinPipelineText.json',
+  'src/renderer/src/lib/cliCoordination.ts',
   'src/renderer/src/lib/helpCliFacts.ts',
   'src/renderer/src/lib/liveModelSwitch.ts',
   'src/renderer/src/lib/promptSkillSeed.ts',

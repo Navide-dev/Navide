@@ -9,8 +9,13 @@
 // The two recoveries the user can press: restartMcp (the same soft restart)
 // and, past that, the whole backend, which ends every pane's PTY: the window
 // confirms that one first, naming the panes it interrupts.
+//
+// Windows cannot restart MCP on its own (backend own_loop.py): there the first
+// one is off (restartSupported false) and the backend answers
+// UNSUPPORTED_REASON if asked anyway.
 
 import { ref, type Ref } from 'vue'
+import { isWindows } from '../../../shared/osplat'
 import type { WsResponse } from '../../../shared/wsClient'
 
 /** What main's probe says (src/main/mcp-health.ts; preload's McpHealthSnapshot). */
@@ -29,6 +34,9 @@ export const SOFT_RESTART_TIMEOUT_MS = 40_000
 /** How long after a soft restart the probe is asked again. */
 export const RECHECK_AFTER_MS = 2_000
 
+/** own_loop.restart's reason on Windows. */
+export const UNSUPPORTED_REASON = 'unsupported-platform'
+
 export interface SoftRestartResult {
   ok: boolean
   reason?: string
@@ -42,14 +50,18 @@ export interface McpHealthDeps {
     onMcpHealthChanged?: (cb: (snapshot: McpHealthSnapshot) => void) => void
   }
   setTimer?: (fn: () => void, ms: number) => unknown
+  /** Whether MCP alone can be restarted here; default: not on Windows. */
+  restartSupported?: boolean
 }
 
 export function useMcpHealth(deps: McpHealthDeps): {
   health: Ref<McpHealthSnapshot>
   restarting: Ref<boolean>
+  restartSupported: boolean
   restartMcp: () => Promise<SoftRestartResult>
   recheck: () => Promise<void>
 } {
+  const restartSupported = deps.restartSupported ?? !isWindows()
   const api = deps.api ?? window.agentTeam
   const setTimer = deps.setTimer ?? ((fn: () => void, ms: number) => window.setTimeout(fn, ms))
   const health = ref<McpHealthSnapshot>({ state: 'unknown', consecutiveFailures: 0, lastError: '', checkedAt: 0 })
@@ -86,6 +98,7 @@ export function useMcpHealth(deps: McpHealthDeps): {
   }
 
   async function restartMcp(): Promise<SoftRestartResult> {
+    if (!restartSupported) return { ok: false, reason: UNSUPPORTED_REASON }
     if (restarting.value) return { ok: false, reason: 'busy' }
     restarting.value = true
     try {
@@ -103,5 +116,5 @@ export function useMcpHealth(deps: McpHealthDeps): {
   api?.onMcpHealthChanged?.(apply)
   void api?.getMcpHealth?.().then((snapshot) => { if (snapshot) apply(snapshot) })
 
-  return { health, restarting, restartMcp, recheck }
+  return { health, restarting, restartSupported, restartMcp, recheck }
 }

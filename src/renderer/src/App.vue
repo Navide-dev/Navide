@@ -83,6 +83,7 @@ import { usePreviewLog } from './preview/usePreviewLog'
 import NotificationHost from './components/NotificationHost.vue'
 import BackendResourceNotices from './components/BackendResourceNotices.vue'
 import DeveloperModeReminder from './components/DeveloperModeReminder.vue'
+import McpRestartButton from './components/McpRestartButton.vue'
 import Welcome from './components/Welcome.vue'
 import { agentUsesBracketedPaste } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -499,7 +500,7 @@ import {
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
-import { useMcpHealth } from './composables/useMcpHealth'
+import { UNSUPPORTED_REASON as MCP_RESTART_UNSUPPORTED, useMcpHealth } from './composables/useMcpHealth'
 import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
@@ -26547,7 +26548,9 @@ async function onRestartMcp(): Promise<void> {
   const out = await mcpHealth.restartMcp()
   mcpRestartNote.value = out.ok
     ? i18n.global.t('label.mcp-restart-done')
-    : i18n.global.t('label.mcp-restart-failed', { reason: out.reason ?? '' })
+    : out.reason === MCP_RESTART_UNSUPPORTED
+      ? i18n.global.t('label.mcp-restart-unsupported')
+      : i18n.global.t('label.mcp-restart-failed', { reason: out.reason ?? '' })
 }
 async function onConfirmFullRestart(): Promise<void> {
   mcpConfirmFullRestart.value = false
@@ -28468,10 +28471,13 @@ function paneIsCommander(p: ActivePane): boolean {
         </div>
       </div>
       <div v-if="backend.status.value === 'connected'" class="bp-mcp-actions">
-        <button class="bp-btn bp-mcp-restart" :disabled="mcpHealth.restarting.value || backendBusy" @click="onRestartMcp">
-          {{ mcpHealth.restarting.value ? $t('label.mcp-restarting') : $t('label.mcp-restart') }}
-        </button>
-        <div v-if="mcpRestartNote" class="bp-mcp-note">{{ mcpRestartNote }}</div>
+        <McpRestartButton
+          :supported="mcpHealth.restartSupported"
+          :restarting="mcpHealth.restarting.value"
+          :busy="backendBusy"
+          :note="mcpRestartNote"
+          @restart="onRestartMcp"
+        />
         <template v-if="mcpHealth.health.value.state === 'down'">
           <button
             v-if="!mcpConfirmFullRestart"
@@ -29091,7 +29097,8 @@ function paneIsCommander(p: ActivePane): boolean {
 .bp-mcp .sb-dot { display: inline-block; vertical-align: middle; }
 .bp-mcp-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .bp-mcp-confirm { display: flex; flex-direction: column; gap: 6px; }
-.bp-mcp-note { font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: normal; }
+.bp-mcp-first { display: contents; }
+.bp-mcp-note, .bp-mcp-first :deep(.bp-mcp-note) { font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: normal; }
 .sb-backend:not(.sb-connected) .sb-dot { background: var(--danger-fg); }
 .sb-pipeline.sb-running { color: var(--accent-fg); }
 .sb-pipeline.sb-completed { color: var(--success-fg); }
@@ -29181,7 +29188,7 @@ function paneIsCommander(p: ActivePane): boolean {
   display: flex;
   gap: 8px;
 }
-.bp-btn {
+.bp-btn, .bp-mcp-first :deep(.bp-btn) {
   flex: 1;
   height: 28px;
   border-radius: 5px;
@@ -29192,8 +29199,8 @@ function paneIsCommander(p: ActivePane): boolean {
   font-size: var(--font-xs);
   transition: background 0.12s, opacity 0.12s;
 }
-.bp-btn:hover:not(:disabled) { background: var(--bg-active, var(--bg-hover)); }
-.bp-btn:disabled { opacity: 0.45; cursor: default; }
+.bp-btn:hover:not(:disabled), .bp-mcp-first :deep(.bp-btn:hover:not(:disabled)) { background: var(--bg-active, var(--bg-hover)); }
+.bp-btn:disabled, .bp-mcp-first :deep(.bp-btn:disabled) { opacity: 0.45; cursor: default; }
 .bp-restart { border-color: var(--accent-focus); color: var(--accent-fg); }
 .bp-stop { border-color: var(--danger-fg); color: var(--danger-fg); }
 .resize-handle {
