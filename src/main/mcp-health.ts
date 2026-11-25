@@ -125,7 +125,7 @@ export interface McpHealthMonitorDeps {
 }
 
 /** The schedule and the verdict. Every PROBE_INTERVAL_MS while healthy,
- *  RETRY_INTERVAL_MS while failing; onChange fires when the state or the
+ *  RETRY_INTERVAL_MS while failing or before a first verdict; onChange fires when the state or the
  *  failure count moves. */
 export function createMcpHealthMonitor(deps: McpHealthMonitorDeps) {
   const now = deps.now ?? Date.now
@@ -145,7 +145,11 @@ export function createMcpHealthMonitor(deps: McpHealthMonitorDeps) {
   function schedule(): void {
     if (!running) return
     if (timer) clearTimeout(timer)
-    const delay = snap.consecutiveFailures > 0 ? RETRY_INTERVAL_MS : PROBE_INTERVAL_MS
+    // No verdict yet (just started, or reset() for a new backend) counts as
+    // "check soon", like a failure: the long interval is for a backend
+    // already seen healthy. reset() used to reschedule at the long interval and
+    // so pushed the first probe 5 minutes out (0.2.49 VM).
+    const delay = snap.consecutiveFailures > 0 || snap.state === 'unknown' ? RETRY_INTERVAL_MS : PROBE_INTERVAL_MS
     timer = setTimeout(() => { void checkNow() }, delay)
   }
 
