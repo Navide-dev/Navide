@@ -115,6 +115,30 @@ describe('createMcpHealthMonitor', () => {
     monitor.stop()
   })
 
+  it('probes a newly started backend within the first-probe delay, not the healthy interval', async () => {
+    // VM 0.2.49: start() armed the 30 s first probe, then the backend came up,
+    // its broadcast reset() the monitor and rescheduled it 5 minutes out — the
+    // light read "Checking MCP" for 5 min 17 s after launch.
+    const { monitor, probe, changes } = harness([{ kind: 'ok' }])
+    monitor.start()
+    monitor.reset()
+    await vi.advanceTimersByTimeAsync(RETRY_INTERVAL_MS)
+    expect(probe).toHaveBeenCalledTimes(1)
+    expect(changes).toEqual(['ok:0'])
+    monitor.stop()
+  })
+
+  it('probes again soon after a backend restart even when the old one was healthy', async () => {
+    const { monitor, probe } = harness([{ kind: 'ok' }, { kind: 'ok' }])
+    monitor.start(1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(probe).toHaveBeenCalledTimes(1)
+    monitor.reset()
+    await vi.advanceTimersByTimeAsync(RETRY_INTERVAL_MS)
+    expect(probe).toHaveBeenCalledTimes(2)
+    monitor.stop()
+  })
+
   it('counts nothing for a skipped probe', async () => {
     const { monitor, changes } = harness([{ kind: 'skipped' }, { kind: 'skipped' }])
     await monitor.checkNow()
