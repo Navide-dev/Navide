@@ -60,4 +60,20 @@ describe('App – SSH Remote panes', () => {
     expect(functionBody('moveFixedAccountPane')).toContain('if (pane?.remote || pane?.sshRemote) return')
     expect(functionBody('agentPaneAccountSwitch')).toContain("if (switchPane?.remote || switchPane?.sshRemote) return { status: 'refused', code: 'REMOTE_PANE' }")
   })
+
+  it('records the name the pane opened under, so a restart shows it again', () => {
+    // manual_pane.spawn carries no name: without this the placeholder fell
+    // back to the agent label ("Terminal", "remote") after a restart.
+    const record = functionBody('recordSshPane')
+    expect(record).toContain("'project.set_pane_auto_name'")
+    expect(record).toContain('auto_name: pane.autoName,')
+  })
+
+  it('a restore never opens an SSH pane by itself', () => {
+    // Scope, interrupted-at-launch and fresh batches all skip it; the user
+    // opens it, as with a local terminal pane.
+    const advance = appSource.slice(appSource.indexOf('async function advanceRestoreSession('))
+    expect(advance.slice(0, advance.indexOf('\n}'))).toContain('.filter((id) => !restoreOpensOnlyOnRequest(id))')
+    expect(functionBody('restoreOpensOnlyOnRequest')).toContain('opensOnlyOnRequest(pane.deferredRestore.saved)')
+  })
 })
