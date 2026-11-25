@@ -29,7 +29,7 @@ services:
       REGISTRY_ADMIN_TOKEN_FILE: /run/secrets/navide-registry-admin-token
       # Navide Cloud sign-in (Phase 2). Leave these four unset to keep
       # self-service publishing off.
-      REGISTRY_AUTH_URL: https://forum.navide.dev/navide-auth
+      REGISTRY_AUTH_URL: https://developers.navide.dev/navide-auth
       REGISTRY_AUTH_RETURN_URL: https://server.navide.dev/registry/auth/callback
       REGISTRY_AUTH_SECRET_FILE: /run/secrets/navide-registry-auth-secret
       REGISTRY_SESSION_SECRET_FILE: /run/secrets/navide-registry-session-secret

@@ -18,7 +18,7 @@ from registry.config import VERIFIER_ACCEPTING, Settings
 from registry.models import DeveloperQualification
 from tests.fixtures import build_package, valid_manifest
 
-AUTH_URL = "https://forum.example.test/navide-auth"
+AUTH_URL = "https://auth.example.test/navide-auth"
 AUTH_SECRET = "registry-client-secret-for-tests-0123456789"
 SESSION_SECRET = "registry-session-secret-for-tests-9876543210"
 RETURN_URL = "https://testserver/auth/callback"

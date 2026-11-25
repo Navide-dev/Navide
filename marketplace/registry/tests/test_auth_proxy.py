@@ -261,7 +261,7 @@ def test_storefront_and_single_host_keep_the_marketplace_name(direct, tmp_path) 
     [
         {"auth_upstream": "http://127.0.0.1:18790/navide-auth"},
         {"auth_upstream": "ftp://127.0.0.1"},
-        {"auth_upstream": "http://127.0.0.1:18790", "auth_url": "https://forum.example.test/other"},
+        {"auth_upstream": "http://127.0.0.1:18790", "auth_url": "https://auth.example.test/other"},
     ],
 )
 def test_invalid_upstream_settings_are_refused(tmp_path, overrides) -> None:

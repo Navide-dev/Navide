@@ -98,7 +98,7 @@ class Settings:
     root_path: str = ""
     """Public path prefix when served behind a reverse proxy (e.g. "/registry")."""
     auth_url: str | None = None
-    """navide-auth base URL, e.g. https://forum.navide.dev/navide-auth; None
+    """navide-auth base URL, e.g. https://developers.navide.dev/navide-auth; None
     disables Navide Cloud sign-in (and with it self-service publishing)."""
     auth_secret: str | None = None
     """This registry's own navide-auth client secret (never Discourse's)."""

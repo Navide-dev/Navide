@@ -456,7 +456,7 @@ settings below are set; without them the registry behaves exactly as before
 (admin-created publishers only).
 
 - **Sign in** (`/publish`, `/login`, `/auth/callback`): the registry is the
-  `registry` client of navide-auth (forum.navide.dev/navide-auth). It signs the
+  `registry` client of navide-auth (developers.navide.dev/navide-auth). It signs the
   request with its own client secret, checks the returned signature, `client`,
   nonce (bound to a 10-minute login-state cookie), freshness and
   `email_verified`, then sets its own HttpOnly, Secure, SameSite=Lax session
@@ -613,7 +613,7 @@ approved by default.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://forum.navide.dev/navide-auth`. |
+| `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://developers.navide.dev/navide-auth`. |
 | `REGISTRY_AUTH_SECRET` / `_FILE` | _(unset)_ | This registry's navide-auth client secret (≥ 32 chars; equals navide-auth's `REGISTRY_CONNECT_SECRET`, never the Discourse secret). |
 | `REGISTRY_AUTH_UPSTREAM` | _(unset)_ | navide-auth's address as this container reaches it, e.g. `http://172.17.0.1:18790`. Set, the storefront and the console serve the sign-in page on their own host (needs host routing, and `REGISTRY_AUTH_URL` ending in `/navide-auth`). Unset, the browser goes to `REGISTRY_AUTH_URL`. |
 | `REGISTRY_AUTH_RETURN_URL` | _(unset)_ | Exact callback, e.g. `https://server.navide.dev/registry/auth/callback`; must be in navide-auth's `REGISTRY_RETURN_URLS`. |
