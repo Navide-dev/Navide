@@ -167,8 +167,9 @@ def release_pane_token(pane_id: str) -> None:
     aliased id is a pane on screen whose CLI may be re-attached under a new id
     (it keeps presenting this one), and a live PTY is a CLI that holds it —
     the same-id AI dock respawn, or a close that reached the registry before
-    the process was gone. Revoked, the id gets a fresh token when it is next
-    spawned, so a CLI that has exited cannot be impersonated with its old
+    the process was gone. So is the id of an SSH pane's CLI in a tmux session
+    while that session is held (remote_ssh.hold_identity). Revoked, the id
+    gets a fresh token when it is next spawned, so a CLI that has exited cannot be impersonated with its old
     token under a reused id.
 
     Not covered: a CLI whose PTY is still running when its id is closed and
@@ -179,12 +180,15 @@ def release_pane_token(pane_id: str) -> None:
     The check and the revoke hold the lock that minting takes, so a same-id
     respawn's wiring cannot be handed the token this call is about to drop.
     """
-    from agent_team_backend import agent_messaging
+    from agent_team_backend import agent_messaging, remote_ssh
 
     with _PANE_TOKENS_LOCK:
         if pane_id not in _PANE_TOKENS:
             return
-        if agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id):
+        # An SSH pane's CLI in a tmux session keeps its token while its pane
+        # is rebuilt under a new id (remote_ssh.tool_identity).
+        if (agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id)
+                or remote_ssh.holds_identity(pane_id)):
             return
         token = _PANE_TOKENS.pop(pane_id, None)
         pane_home.forget_grok_workspace(pane_id)

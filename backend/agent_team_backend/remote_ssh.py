@@ -119,6 +119,45 @@ _TMUX_SESSION_RE = re.compile(r"^navide-[0-9a-f]{16,32}$")
 # Navide's own tmux server socket on the host, apart from the user's.
 TMUX_SOCKET = "navide"
 
+# A CLI in a tmux session outlives the pane: every reconnect, rebuild and
+# restore makes a new pane id, while the CLI keeps the tool URL and token it
+# was started with. So such a CLI is wired under an id of its session's
+# (tool_identity) and a tunnel port of its session's (tmux_port), both the
+# same on every launch. The id is an alias of whichever pane shows the
+# session now, and its token stays minted while the session is held here
+# (until the pane is closed or Navide quits). Memory only: a Navide restart
+# mints a new token, which the running CLI does not have.
+_HELD_IDENTITIES: set[str] = set()
+
+
+def tool_identity(spec: Mapping[str, Any]) -> str:
+    """The id a tmux pane's CLI presents to Navide's tools, "" without tmux."""
+    name = str(spec.get("tmuxSession") or "")
+    return f"ssh-{name}" if _TMUX_SESSION_RE.match(name) else ""
+
+
+def tmux_port(spec: Mapping[str, Any]) -> int:
+    """The host-side tunnel port of a tmux pane: fixed by its session name."""
+    import hashlib
+
+    low, high = rd.REMOTE_PORT_RANGE
+    digest = hashlib.sha256(str(spec["tmuxSession"]).encode("ascii")).digest()
+    return low + int.from_bytes(digest[:4], "big") % (high - low + 1)
+
+
+def hold_identity(identity: str) -> None:
+    _HELD_IDENTITIES.add(identity)
+
+
+def release_identity(identity: str) -> None:
+    _HELD_IDENTITIES.discard(identity)
+
+
+def holds_identity(identity: str) -> bool:
+    """Whether a tmux pane's CLI may still present ``identity`` (its token is
+    kept across the pane being rebuilt under a new id)."""
+    return identity in _HELD_IDENTITIES
+
 # A user name ssh accepts without quoting; a leading "-" would be an option.
 _USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
 # A host name, IPv4 address or ssh config alias. No "@": the user is its own field.
@@ -305,13 +344,17 @@ def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None
     from .mcp_server import wiring
 
     cli = spec["cli"]
-    token = ""
+    token = tmux_token = ""
     if cli in MCP_CLIS:
         if remote_port is None:
             raise SshTargetError("a CLI with Navide tools needs a tunnel port")
         env = wiring.TOKEN_ENV
         request = rd_mod.TOKEN_REQUEST.decode("ascii").replace("\x1b", "\\033").replace("\x07", "\\007")
         token = f"stty -echo; printf '{request}'; IFS= read -r {env}; stty echo; export {env}; "
+        # In tmux the token goes to the session only: a variable of this
+        # shell's, never exported, so the tmux server this shell may start
+        # does not keep it in its global environment for every session.
+        tmux_token = f"unset navide_k; stty -echo; printf '{request}'; IFS= read -r navide_k; stty echo; "
         argv = rd_mod.cli_argv(cli, rd_mod.mcp_url({"mode": "host"}, remote_port, pane_id))
     else:
         argv = list(CLI_COMMANDS[cli])
@@ -321,7 +364,7 @@ def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None
     if not spec.get("tmuxSession"):
         return plain
     inner = _session_script(cli, argv, session_id, resume, nonce, out='"$o"')
-    return tmux_script(spec, inner, token=token, fallback=plain)
+    return tmux_script(spec, inner, token=tmux_token, fallback=plain)
 
 
 def _cd_script(spec: Mapping[str, Any]) -> str:
@@ -341,34 +384,42 @@ def tmux_script(spec: Mapping[str, Any], inner: str, *, token: str, fallback: st
     session starts ``inner`` in the remote folder, and this attaches to it.
     ``inner`` gets three lines through a fifo, never through a command line
     or a file: this connection's terminal (``$o``, where reports go, since
-    tmux swallows them), the login shell's PATH and the token. On a host
+    tmux swallows them), the login shell's PATH and the token, which this
+    shell holds unexported and no tmux command is run with. On a host
     without tmux, ``fallback`` (the plain launch) runs instead."""
     from .mcp_server import wiring
 
     name = str(spec["tmuxSession"])
     if not _TMUX_SESSION_RE.match(name):
         raise SshTargetError("invalid tmux session")
-    tm = f"tmux -L {TMUX_SOCKET}"
     env = wiring.TOKEN_ENV
+    # Never with a token in its environment, whatever the login shell set:
+    # the server copies the environment of the client that starts it.
+    tm = f"env -u {env} -u navide_k tmux -L {TMUX_SOCKET}"
     head = (
-        't=$1; { IFS= read -r o; IFS= read -r p; IFS= read -r k; } < "$t/k"; rm -rf "$t"; '
+        't=$1; unset navide_k; { IFS= read -r o; IFS= read -r p; IFS= read -r navide_k; } < "$t/k"; rm -rf "$t"; '
         'PATH=$p; export PATH; '
     )
     if token:
-        head += f"{env}=$k; export {env}; "
-    head += "k=; "
+        head += f"{env}=$navide_k; export {env}; "
+    head += "unset navide_k; "
     # The session's own server: no status line, no prefix key (Ctrl-B is
-    # the CLI's), no Esc delay, and output that reaches the pane's scrollback.
+    # the CLI's), no Esc delay, the size of the newest client, and output
+    # that reaches the pane's scrollback.
     options = "".join(
         f"{tm} {opt} 2>/dev/null; " for opt in (
             "set-option -g status off", "set-option -g prefix None", "set-option -g prefix2 None",
-            "set-option -s escape-time 0", "set-option -sa terminal-overrides ',*:smcup@:rmcup@'",
+            "set-option -s escape-time 0", "set-option -g window-size latest",
+            "set-option -sa terminal-overrides ',*:smcup@:rmcup@'",
         )
     )
     start = shlex.quote("exec /bin/sh -c " + shlex.quote(head + inner) + " sh ")
+    # attach -d: a connection that dropped may still hold the session; the
+    # new one takes it over.
+    attach = f"exec {tm} attach-session -d -t ={name}"
     return (
         "if command -v tmux >/dev/null 2>&1; then "
-        f"if {tm} has-session -t ={name} 2>/dev/null; then exec {tm} attach-session -t ={name}; fi; "
+        f"if {tm} has-session -t ={name} 2>/dev/null; then {attach}; fi; "
         f"{token}{_cd_script(spec)}"
         "t=$(mktemp -d) && mkfifo \"$t/k\" || { printf 'Navide: cannot start tmux\\r\\n'; exit 1; }; "
         # Its own server starts with no user config and runs the command
@@ -378,8 +429,8 @@ def tmux_script(spec: Mapping[str, Any], inner: str, *, token: str, fallback: st
         "|| { rm -rf \"$t\"; printf 'Navide: cannot start tmux\\r\\n'; exit 1; }; "
         f"{options}"
         "o=$(tty 2>/dev/null) || o=/dev/null; "
-        f"printf '%s\\n' \"$o\" \"$PATH\" \"${{{env}:-}}\" > \"$t/k\"; "
-        f"exec {tm} attach-session -t ={name}; "
+        "printf '%s\\n' \"$o\" \"$PATH\" \"${navide_k:-}\" > \"$t/k\"; unset navide_k; "
+        f"{attach}; "
         f"fi; {fallback}"
     )
 
@@ -429,8 +480,10 @@ def cli_pane_argv(
         port = remote_port
         tunnel = [
             # A taken remote port fails the connection rather than leaving
-            # the pane without its tools.
-            "-o", "ExitOnForwardFailure=yes",
+            # the pane without its tools. Not for a tmux pane: its port is
+            # fixed, and a host still holding it for a dropped connection
+            # must not keep the pane from reattaching to work that runs.
+            *([] if spec.get("tmuxSession") else ["-o", "ExitOnForwardFailure=yes"]),
             "-R", f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",
         ]
     script = cli_script(spec, pane_id=pane_id, remote_port=port, nonce=nonce)

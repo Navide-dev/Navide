@@ -553,21 +553,26 @@ def fake_host(tmp_path):
     # The remote login shell: `-lc`/`-ilc CMD` runs CMD, `-l` is a shell.
     _write_exe(bin_dir / "loginsh", (
         'case "$1" in -*c) exec /bin/sh -c "$2";; esac\n'
-        'echo "LOGIN-SHELL $(pwd)" > "$FAKE_STATE/shell.out"\n'
+        '{ echo "LOGIN-SHELL $(pwd)"; env; } > "$FAKE_STATE/shell.out"\n'
     ))
     _write_exe(bin_dir / "tmux", (
         'printf "%s\\n" "$*" >> "$FAKE_STATE/tmux.log"\n'
         'while :; do case "$1" in -L|-f) shift 2;; *) break;; esac; done\n'
         'case "$1" in\n'
         '  has-session) [ -e "$FAKE_STATE/s-${3#=}" ];;\n'
+        # Like tmux: the server keeps the environment of the client that
+        # started it, and every session it opens runs in that environment.
         '  start-server)\n'
+        '    env > "$FAKE_STATE/start.env"\n'
+        '    [ -e "$FAKE_STATE/server.env" ] || export -p > "$FAKE_STATE/server.env"\n'
         '    while [ "$#" -gt 0 ] && [ "$1" != new-session ]; do shift; done\n'
         '    [ "$1" = new-session ] || exit 0; shift\n'
         '    while :; do case "$1" in -d) shift;; -s) n=$2; shift 2;; -c) c=$2; shift 2;; *) break;; esac; done\n'
         '    : > "$FAKE_STATE/s-$n"\n'
-        '    ( cd "$c" && /bin/sh -c "$1" > "$FAKE_STATE/inner.out" 2>&1; rm -f "$FAKE_STATE/s-$n" ) </dev/null &\n'
+        '    ( env -i /bin/sh -c \'. "$1"; cd "$2" && exec /bin/sh -c "$3"\' sh "$FAKE_STATE/server.env" "$c" "$1" \\\n'
+        '      > "$FAKE_STATE/inner.out" 2>&1; rm -f "$FAKE_STATE/s-$n" ) </dev/null &\n'
         '    ;;\n'
-        '  attach-session) echo "ATTACHED ${3#=}";;\n'
+        '  attach-session) for a; do n=$a; done; echo "ATTACHED ${n#=}";;\n'
         '  kill-session) rm -f "$FAKE_STATE/s-${3#=}";;\n'
         'esac\n'
     ))
@@ -626,8 +631,11 @@ def test_a_claude_pane_starts_in_its_own_tmux_session_with_the_token_off_the_com
     assert Path(_wait_for(state / "claude.pwd").strip()).resolve() == (fake_host["home"] / "proj").resolve()
     tmux_log = (state / "tmux.log").read_text(encoding="utf-8")
     assert f"-L navide -f /dev/null start-server" in tmux_log and f"new-session -d -s {_TMUX}" in tmux_log
-    # The token went through the fifo only: on no command line, in no file.
+    # The token went through the fifo only: on no command line, in no file,
+    # and not in the environment the tmux server keeps for every session.
     assert token not in tmux_log and token not in (state / "ssh.log").read_text(encoding="utf-8")
+    assert token not in (state / "start.env").read_text(encoding="utf-8")
+    assert token not in (state / "server.env").read_text(encoding="utf-8")
     assert not list(Path(fake_host["env"]["TMPDIR"]).glob("tmp*/k"))
 
 
@@ -666,8 +674,8 @@ def test_a_terminal_pane_runs_a_login_shell_in_its_session(fake_host):
     spec = remote_ssh.parse_spec({**_SPEC, "dir": "~/proj", "tmuxSession": _TMUX})
     out = _run_on_host(fake_host, remote_ssh.shell_argv(spec))
     assert f"ATTACHED {_TMUX}".encode() in out
-    shell = _wait_for(fake_host["state"] / "shell.out")
-    assert shell.startswith("LOGIN-SHELL ") and shell.strip().endswith("/proj")
+    shell = _wait_for(fake_host["state"] / "shell.out").splitlines()[0]
+    assert shell.startswith("LOGIN-SHELL ") and shell.endswith("/proj")
 
 
 def test_closing_the_pane_ends_its_session(fake_host):
@@ -729,3 +737,74 @@ def test_end_session_reaches_only_a_trusted_target(monkeypatch):
     assert send({**_SPEC, "host": "other-box", "tmuxSession": _TMUX})["error"]["code"] == "REMOTE_UNTRUSTED"
     assert send(dict(_SPEC))["error"]["code"] == "BAD_REQUEST"
     assert len(calls) == 1
+
+
+def test_a_terminal_pane_in_the_server_a_claude_pane_started_gets_no_token(fake_host):
+    from agent_team_backend.mcp_server import wiring
+
+    state = fake_host["state"]
+    token = "tok-" + os.urandom(6).hex()
+    _run_on_host(fake_host, _claude_argv(_tmux_claude()), (token + "\n").encode())
+    assert _wait_for(state / "claude.token") == token
+    # Even a login shell that exports the variable cannot hand it to tmux.
+    host = {**fake_host, "env": {**fake_host["env"], wiring.TOKEN_ENV: token, "navide_k": token}}
+    other = "navide-" + "fedcba9876543210"
+    spec = remote_ssh.parse_spec({**_SPEC, "dir": "~/proj", "tmuxSession": other})
+    _run_on_host(host, remote_ssh.shell_argv(spec))
+    shell = _wait_for(state / "shell.out")
+    assert shell.startswith("LOGIN-SHELL ")
+    assert token not in shell and wiring.TOKEN_ENV not in shell
+    assert token not in (state / "start.env").read_text(encoding="utf-8")
+
+
+def test_a_tmux_pane_keeps_its_tool_port_and_identity():
+    spec = _tmux_claude()
+    port = remote_ssh.tmux_port(spec)
+    low, high = rd.REMOTE_PORT_RANGE
+    assert low <= port <= high and port == remote_ssh.tmux_port(_tmux_claude(resume=True))
+    assert remote_ssh.tool_identity(spec) == f"ssh-{_TMUX}"
+    assert remote_ssh.tool_identity(_cli_spec()) == ""
+    argv = _claude_argv(spec)
+    # A host still holding the port for a dropped connection must not stop
+    # the reattach; without tmux the pane fails and retries on a new port.
+    assert "ExitOnForwardFailure=yes" not in argv
+    assert "ExitOnForwardFailure=yes" in _claude_argv(_cli_spec())
+
+
+def test_a_rebuilt_tmux_pane_keeps_its_cli_tools_until_it_is_closed(monkeypatch):
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import wiring
+
+    monkeypatch.setattr(wiring, "backend_port", lambda: 1234)
+    monkeypatch.setattr(wiring, "_PANE_TOKENS", {})
+    monkeypatch.setattr(agent_messaging, "_ALIASES", {})
+    monkeypatch.setattr(remote_ssh, "_HELD_IDENTITIES", set())
+    tool_id = f"ssh-{_TMUX}"
+    remote = {**_SPEC, "cli": "claude", "sessionId": "0f0e", "tmuxSession": _TMUX}
+    sess = _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": remote, "metadata": {"workspace_path": "/w"}})
+    command = sess.terminals.created[0]["command"]
+    assert f"pane%3D{tool_id}" in command[-1] or f"pane={tool_id}" in command[-1]
+    assert command[command.index("-R") + 1].startswith(f"127.0.0.1:{remote_ssh.tmux_port(remote)}:")
+    assert agent_messaging.resolve_alias(tool_id) == "p1"
+    token = wiring.bound_pane_token(tool_id)
+    assert token
+    # The pane is rebuilt under a new id: the old one is forgotten, which
+    # releases the tokens of every id that named it.
+    agent_messaging._forget_aliases_to("p1")
+    agent_messaging._release_caller_tokens(["p1", tool_id])
+    assert wiring.bound_pane_token(tool_id) == token
+    _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": {**remote, "resume": True},
+                                    "metadata": {"workspace_path": "/w"}, "pane_id": "p2"})
+    assert wiring.bound_pane_token(tool_id) == token
+    assert agent_messaging.resolve_alias(tool_id) == "p2"
+
+    async def run_end(argv: list[str]) -> tuple[int, str, str]:
+        return 255, "", "unreachable"
+
+    monkeypatch.setattr(remote_devcontainer_ws, "_run_ssh", run_end)
+    agent_messaging._forget_aliases_to("p2")
+    sock = _EndSock()
+    asyncio.run(remote_devcontainer_ws.remote_ssh_end_session(sock, "m", "remote_ssh.end_session", {"remote": remote}))
+    # Closed: the token goes even though the host could not be reached.
+    assert sock.sent[-1]["payload"] == {"ended": False}
+    assert wiring.bound_pane_token(tool_id) == "" and not remote_ssh.holds_identity(tool_id)

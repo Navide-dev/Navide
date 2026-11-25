@@ -351,8 +351,14 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   of Navide's own tmux server (`tmux -L navide`, started with `-f /dev/null`):
   a launch that finds the session attaches to it, so a reconnect, rebuild or
   restore returns to what kept running; otherwise the token is read as above
-  and handed, with the connection's terminal and the login PATH, to the new
-  session through a fifo, never a command line or a file. Without tmux the
+  into an unexported variable and handed, with the connection's terminal
+  and the login PATH, to the new session through a fifo, never a command
+  line, a file or the tmux server's environment (every tmux command runs
+  under `env -u`). Claude and Codex in tmux are wired under
+  `ssh-<tmuxSession>` and a tunnel port derived from the session name, so
+  the running CLI's URL stays valid across launches: each launch aliases
+  that id to the pane's current id, and its token is kept
+  (`remote_ssh.hold_identity`) until the pane is closed. Without tmux the
   pane starts as before. Closing the pane sends `remote_ssh.end_session`, one
   BatchMode ssh call that kills the session.
   SSH panes are recorded (`manual_pane.spawn` with the spec, the id through
