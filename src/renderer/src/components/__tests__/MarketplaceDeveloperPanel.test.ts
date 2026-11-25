@@ -119,7 +119,8 @@ describe('MarketplaceDeveloperPanel', () => {
       expect(command).toContain('navide-plugin init acme-hello --id acme.hello')
       // The scaffold's package.json installs the CLI; a bare navide-plugin is not on the PATH.
       expect(card.get('[data-testid="developer-entry-check"]').text()).toBe('cd acme-hello && npm install && npm run check && npm run package')
-      expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('npx navide-plugin publish')
+      // --no-install: run outside the plugin's folder, npx fails instead of looking the name up on npm.
+      expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('npx --no-install navide-plugin publish')
       expect(card.find('[data-testid="developer-entry-next"]').exists()).toBe(false)
       const openExternal = (window as unknown as { agentTeam: { openExternal: ReturnType<typeof vi.fn> } }).agentTeam.openExternal
       await card.get('[data-testid="developer-entry-guide"]').trigger('click')
