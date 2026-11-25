@@ -429,7 +429,7 @@ onMounted(() => {
           <button class="nv-btn nv-btn--ghost nv-btn--sm dev-entry-copy" data-testid="developer-entry-copy-check" @click="copyCommand(PLUGIN_CHECK_COMMAND)">{{ copiedCommand === PLUGIN_CHECK_COMMAND ? $t('marketplace-developer.entry.copied') : $t('marketplace-developer.entry.copy') }}</button>
         </li>
         <li>{{ $t('marketplace-developer.entry.step-apply') }}</li>
-        <li><i18n-t keypath="marketplace-developer.entry.step-publish" tag="span" scope="global"><template #command><code>npx navide-plugin publish</code></template></i18n-t></li>
+        <li><i18n-t keypath="marketplace-developer.entry.step-publish" tag="span" scope="global"><template #command><code>npx --no-install navide-plugin publish</code></template></i18n-t></li>
       </ol>
       <p v-else-if="entryStep" class="dev-muted" data-testid="developer-entry-next">{{ $t(`marketplace-developer.entry.next.${entryStep}`) }}</p>
       <div class="dev-actions">
