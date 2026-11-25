@@ -2,6 +2,16 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Kiro CLI (`kiro`) panes (0.2.49): a model and effort can now be chosen when opening one — in the new pane dialog, Settings and `cli_open_agent` — and Navide passes them as `--model` and `--effort` (`low`, `medium`, `high`, `xhigh`, `max`). Navide Guard now sees a Kiro pane's tool calls on macOS and Linux: a `PreToolUse` hook in the pane's own Kiro home asks Guard first, and a call a Guard rule matches is refused, with the reason handed to Kiro. Kiro cannot ask, so a rule that would ask elsewhere refuses here, as for Codex. Anything Navide cannot read — an unknown tool, a missing field, Navide not running — is let through. Your `~/.kiro` hooks are not written.
+
+### Known limitations
+
+- Kiro CLI panes (0.2.49): Guard and the model and effort flags were built from Kiro's documentation and tested against a stand-in, not a real `kiro-cli`. Kiro Guard is not verified on a real install and fails open for now: Kiro's tool names and their input fields are not documented, so a call Navide does not recognise is let through, and the hook only runs on macOS and Linux. Which model ids Kiro accepts, and what it does with an unknown one or a level the model lacks, is unverified. Kiro panes still do not resume a conversation and show no usage, sign-in or account switching.
+
 ## [0.2.48] — 2026-11-25
 
 ### Added

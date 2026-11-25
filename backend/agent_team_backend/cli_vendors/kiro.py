@@ -32,8 +32,14 @@ hook.
   command is ``kiro-cli diagnostic`` (there is no ``doctor``).
 * **Not wired.** Session resume (``--resume-id <ID>`` exists, but nothing can
   name the id of a session Navide started: sessions sit in an undocumented
-  SQLite file under the home), model and effort flags (documented, not checked
-  against an invalid value), Guard, usage, extensions inventory.
+  SQLite file under the home), usage, extensions inventory.
+* **Guard.** A ``PreToolUse`` hook beside the ``Stop`` one (kiro_hooks.py,
+  POSIX only) asks ``/hooks/kiro/pretooluse``; exit 2 blocks. Not verified on a
+  real install; fails open for now (guard_hooks).
+* **Model and effort.** ``--model <MODEL>`` and ``--effort <LEVEL>``
+  (low/medium/high/xhigh/max) on ``chat``, from the docs read 2026-11-25
+  (/docs/reference/cli-commands, /docs/models/effort). Not run against a real
+  install: what an unknown model id or an unsupported level does is unverified.
 """
 
 from __future__ import annotations
@@ -71,6 +77,9 @@ SPEC = VendorSpec(
     data_dirs=lambda ctx: (_home(ctx),),
     data_dir_env_vars=("KIRO_HOME",),
     supports_session_resume=False,
+    supports_model=True,
+    supports_effort=True,
+    known_efforts=("low", "medium", "high", "xhigh", "max"),
     mcp_wiring=McpWiring(
         config=McpServerConfig(
             section=("mcpServers",),
