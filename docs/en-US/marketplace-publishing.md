@@ -30,18 +30,18 @@ manifest rules the Registry enforces, see
 
 The packages are distributed only as GitHub Release files, not through npm or
 PyPI. Install them from the newest `plugin-packages-*` release,
-[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
+[`plugin-packages-1.0.2`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.2)
 (its notes list each file's SHA-256), the same files Navide's own plugins
 build against:
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-npm install --save-dev $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+npm install --save-dev $R/navide-plugin-contracts-1.0.2.tgz $R/navide-plugin-sdk-1.0.2.tgz
 npx navide-plugin
 ```
 
 Before a project exists, run the CLI straight from the release:
-`npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz navide-plugin init …`
+`npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz navide-plugin init …`
 (see [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)).
 The packages keep one shared 1.x version with a
 [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x);

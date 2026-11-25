@@ -1,6 +1,6 @@
 {
   "name": "@navide/plugin-ui",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Vue components, controllers, shared UI primitives, and tokens for Navide plugins.",
   "license": "MIT",
   "keywords": ["navide", "plugin", "ui", "vue"],
