@@ -104,6 +104,8 @@ def test_developer_landing_is_open_without_signing_in(client) -> None:
     assert 'aria-current="step"' not in html
     assert "What the application needs" in html
     assert "Do this before you sign in" in html
+    assert "A Navide Cloud account" in html
+    assert "forum" not in html.lower()
     # A block that one click selects whole; the site stays script-free.
     assert '<code class="cmd-block" title="Click to select the whole command">npx --yes' in html
     assert "<script" not in html
