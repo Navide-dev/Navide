@@ -117,6 +117,13 @@ export function wasLiveAtLastLaunch(saved: { last_live_launch?: string }, previo
     saved.last_live_launch === previousLaunchId
 }
 
+/** Whether a saved pane is left for the user to open after a restart, whatever
+ *  the restore scope, an interrupted turn or a fresh start would pick: an SSH
+ *  pane, because opening it connects to another machine. */
+export function opensOnlyOnRequest(saved: { remote?: object }): boolean {
+  return (saved.remote as { kind?: unknown } | undefined)?.kind === 'ssh'
+}
+
 export type RestoreDecision = 'resume' | 'fresh'
 export type RestoreSessionDecision = RestoreDecision | 'cancelled'
 export type RestoreSessionTrigger = 'cold' | 'tab' | 'layout' | 'grid-page'
