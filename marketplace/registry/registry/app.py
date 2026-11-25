@@ -19,7 +19,7 @@ from sqlalchemy import Engine
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from sqlmodel import Session
 
-from . import audit, cloud_auth, qualification
+from . import audit, cloud_auth, qualification, review_notify
 from .access_log import AccessLogMiddleware, RouteTemplateMiddleware
 from .auth import PublisherIdentity, get_publisher_identity
 from .config import TRUST_PROFILE_SELF_HOSTED_DEV, VERIFIER_ACCEPTING, Settings, load_settings
@@ -107,6 +107,8 @@ class RegistryState:
     trust_signer: RegistryTrustSigner
     txt_resolver: TxtResolver
     """DNS TXT lookup for publisher domain verification (injected in tests)."""
+    review_notifier: review_notify.ReviewNotifier | None = None
+    """Emails the admin about new pending reviews; None when not configured."""
     rating_limiter: SlidingWindowLimiter = field(
         default_factory=lambda: SlidingWindowLimiter(RATING_LIMIT_PER_HOUR, 3600)
     )
@@ -180,7 +182,10 @@ def _require_admin_token(
 
 
 def create_app(
-    settings: Settings | None = None, *, txt_resolver: TxtResolver | None = None
+    settings: Settings | None = None,
+    *,
+    txt_resolver: TxtResolver | None = None,
+    review_send: review_notify.Sender | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
     if settings.allow_open_admin and not _admin_token_configured(settings):
@@ -202,6 +207,7 @@ def create_app(
             extra_blocklist=lambda: db_blocklists(engine),
         ),
         txt_resolver=txt_resolver or doh_txt_resolver,
+        review_notifier=review_notify.from_settings(settings, review_send),
     )
 
     # root_path lets the registry sit under a reverse-proxy path prefix. Routing
@@ -937,6 +943,10 @@ def _register_routes(app: FastAPI) -> None:
         except VersionConflictError as exc:
             # The blob stays: in a same-target race its key may be the winner's.
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        if row.review_status == review.PENDING:
+            review_notify.notify(
+                request, review_notify.VERSION, f"{namespace}.{name}@{row.version} ({row.target})"
+            )
         if identity.authenticated:
             audit.record(
                 repo.session,
