@@ -5,6 +5,7 @@ import {
   normalizeAutoResumeOnReconnect,
   normalizeResumeBehavior,
   normalizeRestoreScope,
+  opensOnlyOnRequest,
   pendingRestorePaneIds,
   resolveWorkspaceRestoreSession,
   restoreScopeTargetIds,
@@ -313,5 +314,18 @@ describe('workspace restore session', () => {
       expect(explicitRestoreDecision(never)).toBe('fresh')
       expect(never.decision).toBeUndefined()
     })
+  })
+})
+
+describe('opensOnlyOnRequest', () => {
+  it('holds an SSH pane back from every automatic restore', () => {
+    // Opening it connects to another machine, so only the user starts it.
+    expect(opensOnlyOnRequest({ remote: { kind: 'ssh' } })).toBe(true)
+  })
+
+  it('leaves local and container panes to the restore scope', () => {
+    expect(opensOnlyOnRequest({})).toBe(false)
+    expect(opensOnlyOnRequest({ remote: { cli: 'claude' } })).toBe(false)
+    expect(opensOnlyOnRequest({ remote: undefined })).toBe(false)
   })
 })

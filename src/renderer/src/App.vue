@@ -320,6 +320,7 @@ import {
   interruptedRestoreTargetIds,
   normalizeAutoResumeOnReconnect,
   normalizeResumeInterruptedOnLaunch,
+  opensOnlyOnRequest,
   pendingRestorePaneIds,
   resolveWorkspaceRestoreSession,
   restoreScopeTargetIds,
@@ -15541,7 +15542,7 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     ? interruptedLaunchTargets(session.workspacePath)
     : []
   const interruptedKids = interrupted.length > 0 ? interruptedChildren(session.workspacePath) : []
-  const ids = [...new Set([...scopeIds, ...interrupted])]
+  const ids = [...new Set([...scopeIds, ...interrupted])].filter((id) => !restoreOpensOnlyOnRequest(id))
   // Queued until the batch is done: a wake checks these as well as the panes restoring now
   // (one that has finished is realized, which the wake checks anyway).
   for (const id of ids) scheduledRestoreIds.add(id)
@@ -15588,6 +15589,12 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     notifyRestore.toast(i18n.global.t('reconnect.auto-toast', { count: reconnected }), { type: 'success' })
   }
   if (interruptedKids.length > 0) notifyInterruptedParents(interruptedKids)
+}
+
+/** A placeholder no restore batch opens by itself (opensOnlyOnRequest). */
+function restoreOpensOnlyOnRequest(paneId: string): boolean {
+  const pane = panes.value.find((p) => p.id === paneId)
+  return !!pane?.deferredRestore && opensOnlyOnRequest(pane.deferredRestore.saved)
 }
 
 /** Realize one placeholder of a restore batch and hold the batch slot until the
@@ -25037,6 +25044,15 @@ async function recordSshPane(
     output_log_file: pane?.outputLogFile ?? '',
     remote: { kind: 'ssh', ...target },
   })
+  // The name it opened under (user@host) is only in memory until written
+  // here; without it a restart shows the agent label instead.
+  if (pane?.autoName && !pane.customName) {
+    await sendQuiet('project.set_pane_auto_name', {
+      workspace_path: workspacePath,
+      pane_id: paneId,
+      auto_name: pane.autoName,
+    })
+  }
 }
 
 // An SSH Codex pane found the id of the session it started: kept on the pane

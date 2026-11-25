@@ -21,6 +21,8 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Testplace: inviting more than 100 testers at once failed in the App, though Navide Marketplace sets no cap on testers. Any number can now be invited; each label must still be non-empty and at most 120 characters.
+- Telegram notices: account sign-in, plugin pause, Shipped Log digest and quota switch notices no longer go to every linked bot. The digest goes to the chats of its own workspace, account and plugin notices to the main Navide bot, and quota switch notices to the panes that were switched.
+- SSH Remote: after a restart an SSH pane kept the agent label instead of its user@host name, and could sometimes connect on its own. It now keeps its name and waits for you to open it.
 - Restore after a normal quit: on a cold start, the window's workspace check could be dropped as a duplicate, so reopening Navide after a normal quit sometimes brought back none of the panes and showed the Grid layout instead of the saved one (for example Persona). The retry is no longer dropped.
 - Dev web mode: the isolated backend's stand-in `ssh` was bypassed by the real one, because merging the login shell's `PATH` moved `/usr/bin` ahead of it. The isolated backend now keeps its own `PATH` order and only appends what the login shell adds.
 
