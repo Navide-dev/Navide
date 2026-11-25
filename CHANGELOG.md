@@ -21,6 +21,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Fixed
 
 - Testplace: inviting more than 100 testers at once failed in the App, though Navide Marketplace sets no cap on testers. Any number can now be invited; each label must still be non-empty and at most 120 characters.
+- Restore after a normal quit: on a cold start, the window's workspace check could be dropped as a duplicate, so reopening Navide after a normal quit sometimes brought back none of the panes and showed the Grid layout instead of the saved one (for example Persona). The retry is no longer dropped.
 - Dev web mode: the isolated backend's stand-in `ssh` was bypassed by the real one, because merging the login shell's `PATH` moved `/usr/bin` ahead of it. The isolated backend now keeps its own `PATH` order and only appends what the login shell adds.
 
 ### Known limitations
