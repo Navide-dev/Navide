@@ -11912,7 +11912,11 @@
         "publish": "下一步：上架一个版本，审核通过后就会出现在 Navide 市场。"
       },
       "guide": "打开 Build for Navide",
-      "console": "打开 developers.navide.dev"
+      "console": "打开 developers.navide.dev",
+      "template": "打开模板",
+      "copy": "复制",
+      "copied": "已复制",
+      "copy-failed": "无法复制，请自行选中命令再复制。"
     },
     "account": {
       "title": "开发者账号",

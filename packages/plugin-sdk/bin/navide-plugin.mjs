@@ -554,11 +554,11 @@ function initNextSteps(result, directory) {
     'Next:',
     vue
       ? `  1. Build:   cd ${directory} && npm install && npm run build && npm run build:backend`
-      : '  1. Build:   nothing to build; edit the files as they are',
+      : `  1. Install: cd ${directory} && npm install  (the navide-plugin CLI, from the plugin-packages GitHub Release)`,
     `  2. Load:    Navide → Settings → Navide Plugins → Developer Mode → Load from folder… → ${packageDir}`,
     vue
       ? '  3. Check:   npm run check  (navide-plugin validate and scan, the checks review runs)'
-      : `  3. Check:   navide-plugin validate ${packageDir} && navide-plugin scan ${packageDir}`,
+      : '  3. Check:   npm run check && npm run package  (navide-plugin validate, scan and package, the checks review runs)',
     `  4. Publish: apply once as a developer at ${DEVELOPERS_URL}`,
     `  5. Guide:   ${GUIDE_URL}`,
   ].join('\n')

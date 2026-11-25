@@ -11912,7 +11912,11 @@
         "publish": "Tiếp theo: phát hành một phiên bản; sau khi xét duyệt, nó sẽ xuất hiện trên Navide Marketplace."
       },
       "guide": "Mở Build for Navide",
-      "console": "Mở developers.navide.dev"
+      "console": "Mở developers.navide.dev",
+      "template": "Mở mẫu",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "copy-failed": "Không sao chép được. Hãy chọn lệnh và tự sao chép."
     },
     "account": {
       "title": "Tài khoản nhà phát triển",

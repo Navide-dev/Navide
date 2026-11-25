@@ -117,16 +117,42 @@ describe('MarketplaceDeveloperPanel', () => {
       const command = card.get('[data-testid="developer-entry-init"]').text()
       expect(command).toContain(`https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${PLUGIN_PACKAGES_VERSION}/navide-plugin-sdk-${PLUGIN_PACKAGES_VERSION}.tgz`)
       expect(command).toContain('navide-plugin init acme-hello --id acme.hello')
-      expect(card.get('[data-testid="developer-entry-check"]').text()).toBe('navide-plugin validate acme-hello && navide-plugin package acme-hello')
-      expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('navide-plugin publish')
+      // The scaffold's package.json installs the CLI; a bare navide-plugin is not on the PATH.
+      expect(card.get('[data-testid="developer-entry-check"]').text()).toBe('cd acme-hello && npm install && npm run check && npm run package')
+      expect(card.findAll('.dev-entry-steps li')[4].get('code').text()).toBe('npx navide-plugin publish')
       expect(card.find('[data-testid="developer-entry-next"]').exists()).toBe(false)
       const openExternal = (window as unknown as { agentTeam: { openExternal: ReturnType<typeof vi.fn> } }).agentTeam.openExternal
       await card.get('[data-testid="developer-entry-guide"]').trigger('click')
+      await card.get('[data-testid="developer-entry-template"]').trigger('click')
       await card.get('[data-testid="developer-entry-console"]').trigger('click')
       expect(openExternal.mock.calls).toEqual([
         ['https://github.com/Navide-dev/Navide/blob/main/docs/en-US/build-for-navide.md'],
+        ['https://github.com/Navide-dev/Navide/tree/main/examples/hello-plugin'],
         ['https://developers.navide.dev/developer'],
       ])
+    })
+
+    it('copies each command and says so on its button', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined)
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+      wrapper = await mountWith(false, null)
+      const copyInit = wrapper.get('[data-testid="developer-entry-copy-init"]')
+      const copyCheck = wrapper.get('[data-testid="developer-entry-copy-check"]')
+      await copyCheck.trigger('click')
+      await flushPromises()
+      expect(writeText).toHaveBeenCalledWith('cd acme-hello && npm install && npm run check && npm run package')
+      expect(copyCheck.text()).toBe(i18n.global.t('marketplace-developer.entry.copied'))
+      expect(copyInit.text()).toBe(i18n.global.t('marketplace-developer.entry.copy'))
+      await copyInit.trigger('click')
+      await flushPromises()
+      expect(writeText.mock.calls[1][0]).toContain('navide-plugin init acme-hello --id acme.hello')
+      expect(copyInit.text()).toBe(i18n.global.t('marketplace-developer.entry.copied'))
+      expect(copyCheck.text()).toBe(i18n.global.t('marketplace-developer.entry.copy'))
+
+      writeText.mockRejectedValueOnce(new Error('denied'))
+      await copyCheck.trigger('click')
+      await flushPromises()
+      expect(wrapper.text()).toContain(i18n.global.t('marketplace-developer.entry.copy-failed'))
     })
 
     it.each([

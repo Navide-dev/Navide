@@ -318,11 +318,22 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     const directory = root()
     const created = run(['init', 'hello', '--id', 'acme.hello-world'], directory)
     expect(created.status, created.stderr).toBe(0)
-    expect(created.stdout).toContain('navide-plugin validate hello && navide-plugin scan hello')
+    expect(created.stdout).toContain('cd hello && npm install')
+    expect(created.stdout).toContain('npm run check && npm run package')
     expect(created.stdout).toContain('https://developers.navide.dev/developer')
     expect(created.stdout).toContain('docs/en-US/build-for-navide.md')
     const manifest = JSON.parse(readFileSync(join(directory, 'hello', 'manifest.json'), 'utf8'))
     expect(manifest).toMatchObject({ schemaVersion: 2, id: 'acme.hello-world', publisher: 'acme', name: 'Hello World' })
+    // The CLI is not on npm: package.json installs it from the GitHub Release of the SDK's own version (string check only, no download).
+    const sdkVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+    const release = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${sdkVersion}`
+    const packageJson = JSON.parse(readFileSync(join(directory, 'hello', 'package.json'), 'utf8'))
+    expect(packageJson.devDependencies).toEqual({
+      '@navide/plugin-contracts': `${release}/navide-plugin-contracts-${sdkVersion}.tgz`,
+      '@navide/plugin-sdk': `${release}/navide-plugin-sdk-${sdkVersion}.tgz`,
+    })
+    expect(packageJson.scripts).toEqual({ check: 'navide-plugin validate . && navide-plugin scan .', package: 'navide-plugin package .' })
+    expect(readFileSync(join(directory, 'hello', '.gitignore'), 'utf8')).toContain('node_modules/')
     expect(run(['validate', 'hello'], directory).status).toBe(0)
     const packaged = run(['package', 'hello'], directory)
     expect(packaged.status, packaged.stderr).toBe(0)
@@ -336,6 +347,17 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     expect(bare.status).not.toBe(0)
     expect(bare.stderr).toContain('New to Navide plugins?')
     expect(bare.stderr).toContain('docs/en-US/build-for-navide.md')
+  })
+
+  it('keeps examples/hello-plugin equal to what init writes', () => {
+    // The copyable template in the repository is the default scaffold for acme.hello; only its README is longer.
+    const directory = root()
+    expect(run(['init', 'hello', '--id', 'acme.hello'], directory).status).toBe(0)
+    const example = join(process.cwd(), 'examples/hello-plugin')
+    for (const file of ['manifest.json', 'package.json', 'artifact-files.json', 'frontend/main/index.html', 'frontend/main/main.js', '.gitignore']) {
+      expect(readFileSync(join(example, file), 'utf8'), file).toBe(readFileSync(join(directory, 'hello', file), 'utf8'))
+    }
+    expect(readFileSync(join(example, 'README.md'), 'utf8')).toContain('build-for-navide.md#from-zero-to-a-listing')
   })
 
   it('scaffolds a buildable Vue view, Python backend and agent tool with --template vue', async () => {

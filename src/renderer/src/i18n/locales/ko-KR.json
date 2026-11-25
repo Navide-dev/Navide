@@ -11912,7 +11912,11 @@
         "publish": "다음: 버전을 게시하세요. 검토를 통과하면 Navide 마켓플레이스에 공개돼요."
       },
       "guide": "Build for Navide 열기",
-      "console": "developers.navide.dev 열기"
+      "console": "developers.navide.dev 열기",
+      "template": "템플릿 열기",
+      "copy": "복사",
+      "copied": "복사했어요",
+      "copy-failed": "복사하지 못했어요. 명령을 선택해 직접 복사해 주세요."
     },
     "account": {
       "title": "개발자 계정",

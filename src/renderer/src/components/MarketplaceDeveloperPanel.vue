@@ -35,7 +35,14 @@ import type {
   DeveloperVersionRow,
   StagedPackage,
 } from '../../../shared/marketplaceDeveloper'
-import { BUILD_FOR_NAVIDE_URL, DEVELOPER_DOC_URLS, DEVELOPERS_URL, PLUGIN_CHECK_COMMAND, PLUGIN_INIT_COMMAND } from '../../../shared/marketplaceDeveloper'
+import {
+  BUILD_FOR_NAVIDE_URL,
+  DEVELOPER_DOC_URLS,
+  DEVELOPERS_URL,
+  PLUGIN_CHECK_COMMAND,
+  PLUGIN_INIT_COMMAND,
+  PLUGIN_TEMPLATE_URL,
+} from '../../../shared/marketplaceDeveloper'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import TestplaceInviteForm from './TestplaceInviteForm.vue'
@@ -101,6 +108,18 @@ function formatDate(value: string | null | undefined): string {
 
 function openLink(url: string): void {
   void window.agentTeam?.openExternal?.(url)
+}
+
+/** The entry card's command last copied, for its button's "Copied". */
+const copiedCommand = ref('')
+async function copyCommand(command: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(command)
+    copiedCommand.value = command
+  } catch {
+    copiedCommand.value = ''
+    error.value = t('marketplace-developer.entry.copy-failed')
+  }
 }
 
 const form = computed(() => openMarketplaceForm.value)
@@ -400,15 +419,22 @@ onMounted(() => {
     <section class="dev-section dev-entry" data-testid="developer-entry" :aria-label="$t('marketplace-developer.entry.title')">
       <h2 class="dev-title">{{ $t('marketplace-developer.entry.title') }}</h2>
       <ol v-if="entryStep === 'signed-out'" class="dev-entry-steps">
-        <li>{{ $t('marketplace-developer.entry.step-init') }} <code data-testid="developer-entry-init">{{ PLUGIN_INIT_COMMAND }}</code></li>
+        <li>
+          {{ $t('marketplace-developer.entry.step-init') }} <code data-testid="developer-entry-init">{{ PLUGIN_INIT_COMMAND }}</code>
+          <button class="nv-btn nv-btn--ghost nv-btn--sm dev-entry-copy" data-testid="developer-entry-copy-init" @click="copyCommand(PLUGIN_INIT_COMMAND)">{{ copiedCommand === PLUGIN_INIT_COMMAND ? $t('marketplace-developer.entry.copied') : $t('marketplace-developer.entry.copy') }}</button>
+        </li>
         <li>{{ $t('marketplace-developer.entry.step-load') }}</li>
-        <li>{{ $t('marketplace-developer.entry.step-check') }} <code data-testid="developer-entry-check">{{ PLUGIN_CHECK_COMMAND }}</code></li>
+        <li>
+          {{ $t('marketplace-developer.entry.step-check') }} <code data-testid="developer-entry-check">{{ PLUGIN_CHECK_COMMAND }}</code>
+          <button class="nv-btn nv-btn--ghost nv-btn--sm dev-entry-copy" data-testid="developer-entry-copy-check" @click="copyCommand(PLUGIN_CHECK_COMMAND)">{{ copiedCommand === PLUGIN_CHECK_COMMAND ? $t('marketplace-developer.entry.copied') : $t('marketplace-developer.entry.copy') }}</button>
+        </li>
         <li>{{ $t('marketplace-developer.entry.step-apply') }}</li>
-        <li><i18n-t keypath="marketplace-developer.entry.step-publish" tag="span" scope="global"><template #command><code>navide-plugin publish</code></template></i18n-t></li>
+        <li><i18n-t keypath="marketplace-developer.entry.step-publish" tag="span" scope="global"><template #command><code>npx navide-plugin publish</code></template></i18n-t></li>
       </ol>
       <p v-else-if="entryStep" class="dev-muted" data-testid="developer-entry-next">{{ $t(`marketplace-developer.entry.next.${entryStep}`) }}</p>
       <div class="dev-actions">
         <button class="nv-btn nv-btn--sm" data-testid="developer-entry-guide" @click="openLink(BUILD_FOR_NAVIDE_URL)">{{ $t('marketplace-developer.entry.guide') }}</button>
+        <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-entry-template" @click="openLink(PLUGIN_TEMPLATE_URL)">{{ $t('marketplace-developer.entry.template') }}</button>
         <button class="nv-btn nv-btn--ghost nv-btn--sm" data-testid="developer-entry-console" @click="openLink(DEVELOPERS_URL)">{{ $t('marketplace-developer.entry.console') }}</button>
       </div>
     </section>
@@ -681,6 +707,7 @@ onMounted(() => {
 .dev-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .dev-entry-steps { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-1); font-size: var(--font-xs); color: var(--text-secondary); }
 .dev-entry-steps code { overflow-wrap: anywhere; }
+.dev-entry-copy { margin-left: var(--space-1); vertical-align: baseline; }
 .dev-testplace-list { margin: 0; padding-left: 1.2em; display: grid; gap: var(--space-1); font-size: var(--font-xs); color: var(--text-secondary); }
 .dev-testplace-list code { overflow-wrap: anywhere; }
 .dev-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }

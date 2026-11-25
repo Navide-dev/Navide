@@ -11912,7 +11912,11 @@
         "publish": "Дальше: опубликуйте версию; после проверки она появится в Navide Marketplace."
       },
       "guide": "Открыть Build for Navide",
-      "console": "Открыть developers.navide.dev"
+      "console": "Открыть developers.navide.dev",
+      "template": "Открыть шаблон",
+      "copy": "Копировать",
+      "copied": "Скопировано",
+      "copy-failed": "Не удалось скопировать. Выделите команду и скопируйте её вручную."
     },
     "account": {
       "title": "Аккаунт разработчика",

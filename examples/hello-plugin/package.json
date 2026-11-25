@@ -1,0 +1,12 @@
+{
+  "name": "acme-hello-navide-plugin",
+  "private": true,
+  "scripts": {
+    "check": "navide-plugin validate . && navide-plugin scan .",
+    "package": "navide-plugin package ."
+  },
+  "devDependencies": {
+    "@navide/plugin-contracts": "https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-contracts-1.0.1.tgz",
+    "@navide/plugin-sdk": "https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-sdk-1.0.1.tgz"
+  }
+}

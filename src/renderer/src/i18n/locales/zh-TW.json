@@ -11912,7 +11912,11 @@
         "publish": "下一步：上架一個版本，審核通過後就會出現在 Navide 市集。"
       },
       "guide": "開啟 Build for Navide",
-      "console": "開啟 developers.navide.dev"
+      "console": "開啟 developers.navide.dev",
+      "template": "開啟範本",
+      "copy": "複製",
+      "copied": "已複製",
+      "copy-failed": "無法複製，請自行選取指令再複製。"
     },
     "account": {
       "title": "開發者帳號",

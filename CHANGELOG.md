@@ -2,6 +2,16 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Navide plugin developers: `examples/hello-plugin` is the smallest Navide plugin, ready to copy — one view, no build step, no permissions — with the steps from a copy to a listing in its README; a test keeps it equal to what `navide-plugin init` writes. Build for Navide has a new section, From zero to a listing, with every command in order from an empty folder to a reviewed version. Settings → Navide Marketplace → Developer gains Copy buttons for its two commands and an Open Template button. All 11 languages.
+
+### Fixed
+
+- Navide plugin developers: the no-build template that `navide-plugin init` writes had no `package.json`, so the next step the Developer page, `init` itself and the guides gave (`navide-plugin validate`, or a bare `npx navide-plugin`) either found no CLI or made npx look `navide-plugin` up on npm, where Navide publishes nothing and anyone could publish a package of that name. The template now writes a `package.json` that installs the CLI from the `plugin-packages` GitHub Release of the SDK's own version, with `check` (validate and scan) and `package` scripts; it is never packaged. The Developer page, `init`'s next steps, the guides and the bundled `plugin-authoring` skill now say `npm install && npm run check && npm run package` in the plugin's folder, and say that `npx navide-plugin` works only inside a folder that installed it.
+
 ## [0.2.48] — 2026-11-25
 
 ### Added
