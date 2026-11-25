@@ -7,10 +7,15 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Navide plugin developers: `examples/hello-plugin` is the smallest Navide plugin, ready to copy — one view, no build step, no permissions — with the steps from a copy to a listing in its README; a test keeps it equal to what `navide-plugin init` writes. Build for Navide has a new section, From zero to a listing, with every command in order from an empty folder to a reviewed version. Settings → Navide Marketplace → Developer gains Copy buttons for its two commands and an Open Template button. All 11 languages.
+- Kiro CLI (`kiro`) panes (0.2.49): a model and effort can now be chosen when opening one — in the new pane dialog, Settings and `cli_open_agent` — and Navide passes them as `--model` and `--effort` (`low`, `medium`, `high`, `xhigh`, `max`). Navide Guard now sees a Kiro pane's tool calls on macOS and Linux: a `PreToolUse` hook in the pane's own Kiro home asks Guard first, and a call a Guard rule matches is refused, with the reason handed to Kiro. Kiro cannot ask, so a rule that would ask elsewhere refuses here, as for Codex. Anything Navide cannot read — an unknown tool, a missing field, Navide not running — is let through. Your `~/.kiro` hooks are not written.
 
 ### Fixed
 
 - Navide plugin developers: the no-build template that `navide-plugin init` writes had no `package.json`, so the next step the Developer page, `init` itself and the guides gave (`navide-plugin validate`, or a bare `npx navide-plugin`) either found no CLI or made npx look `navide-plugin` up on npm, where Navide publishes nothing and anyone could publish a package of that name. The template now writes a `package.json` that installs the CLI from the `plugin-packages` GitHub Release of the SDK's own version, with `check` (validate and scan) and `package` scripts; it is never packaged. The Developer page, `init`'s next steps, the guides and the bundled `plugin-authoring` skill now say `npm install && npm run check && npm run package` in the plugin's folder, and say that `npx navide-plugin` works only inside a folder that installed it.
+
+### Known limitations
+
+- Kiro CLI panes (0.2.49): Guard and the model and effort flags were built from Kiro's documentation and tested against a stand-in, not a real `kiro-cli`. Kiro Guard is not verified on a real install and fails open for now: Kiro's tool names and their input fields are not documented, so a call Navide does not recognise is let through, and the hook only runs on macOS and Linux. Which model ids Kiro accepts, and what it does with an unknown one or a level the model lacks, is unverified. Kiro panes still do not resume a conversation and show no usage, sign-in or account switching.
 
 ## [0.2.48] — 2026-11-25
 

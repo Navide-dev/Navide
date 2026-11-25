@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_team_backend import applog, guard_hooks, hook_auth, kiro_hooks
+from agent_team_backend import applog, guard_fail_closed, guard_hooks, hook_auth, kiro_hooks
 from agent_team_backend.cli_vendors import kiro, registry
 from agent_team_backend.cli_vendors.base import VendorRuntimeContext
 from agent_team_backend.mcp_server import pane_home
@@ -73,12 +73,18 @@ def test_navide_holds_no_key_and_switches_no_account() -> None:
     assert SPEC.quota_exhausted_patterns == ()
 
 
-def test_no_resume_model_reader_or_verified_version() -> None:
+def test_no_resume_reader_or_verified_version() -> None:
     assert SPEC.supports_session_resume is False
     assert SPEC.make_log_reader is None
-    assert SPEC.supports_model is False
-    assert SPEC.supports_effort is False
     assert SPEC.cli_verified_version == ""
+
+
+def test_model_and_effort_from_docs() -> None:
+    # kiro.dev/docs/reference/cli-commands: `--effort <LEVEL>` takes exactly
+    # these five; mirrors knownEfforts in agents/kiro.ts.
+    assert SPEC.supports_model is True
+    assert SPEC.supports_effort is True
+    assert SPEC.known_efforts == ("low", "medium", "high", "xhigh", "max")
 
 
 def test_extensions_declared_unverified() -> None:
@@ -116,10 +122,14 @@ def test_the_turn_hook_is_declared_and_names_its_pane_by_token() -> None:
 # ---- the hook file ----
 
 
-def test_hook_file_is_one_v3_stop_hook_posting_to_hooks_kiro(tmp_path: Path) -> None:
+def _hooks_by_trigger(document: dict) -> dict[str, dict]:
+    return {hook["trigger"]: hook for hook in document["hooks"]}
+
+
+def test_hook_file_has_a_v3_stop_hook_posting_to_hooks_kiro(tmp_path: Path) -> None:
     document = kiro_hooks.document(str(tmp_path / "port"))
     assert document["version"] == "v1"
-    [hook] = document["hooks"]
+    hook = _hooks_by_trigger(document)["Stop"]
     assert hook["trigger"] == "Stop"
     assert hook["action"]["type"] == "command"
     assert hook["timeout"] == 5
@@ -129,6 +139,102 @@ def test_hook_file_is_one_v3_stop_hook_posting_to_hooks_kiro(tmp_path: Path) -> 
     assert guard_hooks.PANE_TOKEN_ENV in command
     # The secret is read from its file at fire time, never written inline.
     assert hook_auth.token() not in command
+
+
+@posix_only
+def test_hook_file_has_a_fail_open_guard_hook_on_posix(tmp_path: Path) -> None:
+    hooks = _hooks_by_trigger(kiro_hooks.document(str(tmp_path / "port")))
+    assert set(hooks) == {"Stop", "PreToolUse"}
+    guard = hooks["PreToolUse"]
+    assert "matcher" not in guard  # Kiro's default: every tool
+    assert guard["timeout"] == 10
+    command = guard["action"]["command"]
+    assert "/hooks/kiro/pretooluse" in command
+    assert guard_hooks.PANE_TOKEN_ENV in command
+    assert hook_auth.token() not in command
+    # Never an unattended (fail-closed) pane: the header is never sent.
+    assert guard_fail_closed.HEADER not in command
+    assert guard_fail_closed.ENV not in command
+
+
+def test_windows_gets_no_guard_hook(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(kiro_hooks.osplat, "platform_id", "win32")
+    assert [hook["trigger"] for hook in kiro_hooks.document(str(tmp_path / "port"))["hooks"]] == ["Stop"]
+
+
+# ---- Guard: payload mapping and answers ----
+
+
+@pytest.mark.parametrize("payload,expected", [
+    ({"tool_name": "execute_bash", "tool_input": {"command": "rm -rf ~"}},
+     [("shell", {"command": "rm -rf ~"})]),
+    ({"tool_name": "execute_pwsh", "tool_input": {"command": "Remove-Item -Recurse C:\\"}},
+     [("shell", {"command": "Remove-Item -Recurse C:\\", "dialect": "powershell"})]),
+    ({"tool_name": "fs_write", "tool_input": {"command": "create", "path": "/a/.git/hooks/pre-commit"}},
+     [("write", {"path": "/a/.git/hooks/pre-commit"})]),
+    ({"tool_name": "str_replace", "tool_input": {"path": "a.py"}}, [("write", {"path": "a.py"})]),
+    ({"tool_name": "delete_file", "tool_input": {"path": "b.py"}}, [("write", {"path": "b.py"})]),
+    ({"tool_name": "read_file", "tool_input": {"path": "~/.ssh/id_rsa"}}, [("read", {"path": "~/.ssh/id_rsa"})]),
+    # Unmapped ids and unreadable inputs pass through (graded normal).
+    ({"tool_name": "mcp_postgres_query", "tool_input": {"sql": "SELECT 1"}},
+     [("mcp_postgres_query", {"sql": "SELECT 1"})]),
+    ({"tool_name": "fs_write", "tool_input": "not an object"}, [("write", {})]),
+    ({}, [("", {})]),
+])
+def test_kiro_tools_map_to_the_guard_contract(payload, expected) -> None:
+    assert guard_hooks.normalise("kiro", payload) == expected
+
+
+def test_kiro_tool_ids_mean_nothing_to_other_vendors() -> None:
+    for vendor in ("claude", "qwen"):
+        payload = {"tool_name": "execute_bash", "tool_input": {"command": "rm -rf ~"}}
+        assert guard_hooks.normalise(vendor, payload) == [("execute_bash", {"command": "rm -rf ~"})]
+
+
+class _Decision:
+    def __init__(self, action: str) -> None:
+        self.action, self.reason = action, "rm outside workspace"
+
+
+def test_kiro_answers_only_a_rule_match_and_always_as_deny() -> None:
+    assert guard_hooks.render("kiro", _Decision("allow")) is None
+    assert guard_hooks.render("kiro", _Decision("allow-audit")) is None
+    assert guard_hooks.render("kiro", _Decision("deny")) == {
+        "permissionDecision": "deny", "permissionDecisionReason": "Navide Guard: rm outside workspace",
+    }
+    ask = guard_hooks.render("kiro", _Decision("ask"))
+    assert ask["permissionDecision"] == "deny"
+    assert ask["permissionDecisionReason"].startswith("Navide Guard: rm outside workspace (needs local confirmation")
+
+
+def test_the_endpoint_serves_kiro_and_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from agent_team_backend import app as app_module
+
+    client = TestClient(app_module.app, base_url="http://127.0.0.1")
+    client.headers[hook_auth.HEADER] = hook_auth.token()
+    monkeypatch.setattr(app_module.attribution, "pane_for_session", lambda sid: ("pane-k", "/tmp/ws", "stage"))
+    url = "/hooks/kiro/pretooluse"
+    # The real guard: a critical command is refused, a normal one is not.
+    out = client.post(url, json={"session_id": "s", "cwd": "/tmp/ws", "tool_name": "execute_bash",
+                                 "tool_input": {"command": "rm -rf ~"}})
+    assert out.status_code == 200 and out.json()["permissionDecision"] == "deny"
+    for payload in (
+        {"session_id": "s", "cwd": "/tmp/ws", "tool_name": "execute_bash", "tool_input": {"command": "ls"}},
+        {"session_id": "s", "cwd": "/tmp/ws", "tool_name": "some_new_tool", "tool_input": {"x": 1}},
+        {"session_id": "s", "cwd": "/tmp/ws"},
+    ):
+        resp = client.post(url, json=payload)
+        assert resp.status_code == 200 and resp.content == b"", payload
+    # Not JSON at all: still no decision.
+    resp = client.post(url, content=b"not json", headers={"Content-Type": "application/json"})
+    assert resp.status_code == 200 and resp.content == b""
+    # The guard itself failing: no decision.
+    monkeypatch.setattr(guard_hooks, "decide", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    resp = client.post(url, json={"session_id": "s", "cwd": "/tmp/ws", "tool_name": "execute_bash",
+                                  "tool_input": {"command": "rm -rf ~"}})
+    assert resp.status_code == 200 and resp.content == b""
 
 
 # ---- the per-pane home ----
@@ -238,10 +344,30 @@ if args in (["--version"], ["-V"]):
 if not args or args[0] != "chat":
     print("error: unrecognized subcommand", file=sys.stderr)
     sys.exit(2)
-for flag in args[1:]:
-    if flag not in ("--v3", "--trust-all-tools"):
+rest = args[1:]
+while rest:
+    flag = rest.pop(0)
+    if flag in ("--model", "--effort"):
+        value = rest.pop(0) if rest else ""
+        if not value or (flag == "--effort" and value not in ("low", "medium", "high", "xhigh", "max")):
+            print(f"error: invalid value for '{flag}'", file=sys.stderr)
+            sys.exit(2)
+        print(f"{flag[2:]}: {value}")
+    elif flag not in ("--v3", "--trust-all-tools"):
         print(f"error: unexpected argument '{flag}'", file=sys.stderr)
         sys.exit(2)
+
+
+def hooks(trigger):
+    for path in sorted(glob.glob(str(home / "hooks" / "*.json"))):
+        try:
+            document = json.loads(Path(path).read_text())
+        except (OSError, ValueError):
+            continue
+        for hook in document.get("hooks", []):
+            action = hook.get("action") or {}
+            if hook.get("trigger") == trigger and hook.get("enabled") is not False and action.get("type") == "command":
+                yield hook, action["command"]
 
 # KIRO_HOME replaces ~/.kiro when it is an absolute path that is not the
 # filesystem root, the home or one of its ancestors.
@@ -264,32 +390,43 @@ for name, entry in sorted(servers.items()):
 session_id = str(uuid.uuid4())
 print("ready", flush=True)
 for line in sys.stdin:
-    print(f"reply: {line.strip()}", flush=True)
-    for path in sorted(glob.glob(str(home / "hooks" / "*.json"))):
-        try:
-            document = json.loads(Path(path).read_text())
-        except (OSError, ValueError):
-            continue
-        for hook in document.get("hooks", []):
-            action = hook.get("action") or {}
-            if hook.get("trigger") != "Stop" or hook.get("enabled") is False or action.get("type") != "command":
-                continue
-            payload = {"hook_event_name": "Stop", "cwd": os.getcwd(), "session_id": session_id}
-            done = subprocess.run(action["command"], shell=True, input=json.dumps(payload),
+    if line.startswith("tool "):
+        # A tool call: PreToolUse hooks first. Exit 2 blocks and hands stderr
+        # to the agent; any other non-zero exit is a warning (exit-codes page).
+        call = json.loads(line[5:])
+        blocked = ""
+        for hook, command in hooks("PreToolUse"):
+            payload = {"hook_event_name": "PreToolUse", "cwd": os.getcwd(), "session_id": session_id, **call}
+            done = subprocess.run(command, shell=True, input=json.dumps(payload),
                                   text=True, capture_output=True, timeout=hook.get("timeout") or 60)
-            if done.returncode != 0:
-                print(f"hook error: {hook.get('name')}: {done.stderr.strip()}", flush=True)
+            if done.returncode == 2:
+                blocked = done.stderr.strip()
+            elif done.returncode != 0:
+                print(f"hook warning: {hook.get('name')}: {done.stderr.strip()}", flush=True)
+            elif done.stdout.strip():
+                print(f"hook context: {done.stdout.strip()}", flush=True)
+        print(f"blocked: {blocked}" if blocked else f"ran: {call['tool_name']}", flush=True)
+        continue
+    print(f"reply: {line.strip()}", flush=True)
+    for hook, command in hooks("Stop"):
+        payload = {"hook_event_name": "Stop", "cwd": os.getcwd(), "session_id": session_id}
+        done = subprocess.run(command, shell=True, input=json.dumps(payload),
+                              text=True, capture_output=True, timeout=hook.get("timeout") or 60)
+        if done.returncode != 0:
+            print(f"hook error: {hook.get('name')}: {done.stderr.strip()}", flush=True)
 '''
 
 
 class _Capture(BaseHTTPRequestHandler):
     calls: list[dict] = []
+    #: What /hooks/kiro/pretooluse answers: b"" is no decision.
+    guard_reply: bytes = b""
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length)
         type(self).calls.append({"path": self.path, "headers": dict(self.headers), "body": json.loads(body)})
-        reply = b'{"ok": true}'
+        reply = type(self).guard_reply if self.path.endswith("/pretooluse") else b'{"ok": true}'
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(reply)))
@@ -303,6 +440,7 @@ class _Capture(BaseHTTPRequestHandler):
 @pytest.fixture
 def backend(port_file: Path):
     _Capture.calls = []
+    _Capture.guard_reply = b""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Capture)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -314,7 +452,9 @@ def backend(port_file: Path):
         server.server_close()
 
 
-def _run_fake(tmp_path: Path, home: Path, env_extra: dict[str, str], *args: str) -> subprocess.CompletedProcess:
+def _run_fake(
+    tmp_path: Path, home: Path, env_extra: dict[str, str], *args: str, stdin: str = "hello\n",
+) -> subprocess.CompletedProcess:
     script = tmp_path / "kiro_cli_fake.py"
     script.write_text(FAKE_KIRO, encoding="utf-8")
     workspace = tmp_path / "ws"
@@ -322,7 +462,7 @@ def _run_fake(tmp_path: Path, home: Path, env_extra: dict[str, str], *args: str)
     env = {k: v for k, v in os.environ.items() if k != "KIRO_HOME"}
     env.update({"HOME": str(home), **env_extra})
     return subprocess.run(
-        [sys.executable, str(script), *args], input="hello\n", text=True,
+        [sys.executable, str(script), *args], input=stdin, text=True,
         capture_output=True, env=env, cwd=workspace, timeout=60,
     )
 
@@ -332,6 +472,10 @@ def test_fake_kiro_follows_the_documented_flags(tmp_path: Path, home: Path) -> N
     # The pane's default command and the YOLO flag are accepted.
     assert _run_fake(tmp_path, home, {}, "chat", "--v3", "--trust-all-tools").returncode == 0
     assert _run_fake(tmp_path, home, {}, "chat", "--yolo").returncode == 2
+    # The model and effort flags the pane builds (agents/kiro.ts).
+    done = _run_fake(tmp_path, home, {}, "chat", "--v3", "--model", "claude-sonnet-4.6", "--effort", "high")
+    assert done.returncode == 0 and "model: claude-sonnet-4.6" in done.stdout and "effort: high" in done.stdout
+    assert _run_fake(tmp_path, home, {}, "chat", "--v3", "--effort", "extreme").returncode == 2
 
 
 @posix_only
@@ -388,3 +532,57 @@ def test_the_hook_exits_zero_when_navide_is_not_running(
     assert done.returncode == 0, done.stderr
     assert "reply: hello" in done.stdout
     assert "hook error" not in done.stdout
+
+
+# ---- Guard end to end with the fake kiro-cli (POSIX) ----
+
+_RM = "tool " + json.dumps({"tool_name": "execute_bash", "tool_input": {"command": "rm -rf ~"}}) + "\n"
+
+
+def _pane(home: Path) -> str:
+    _, root = pane_home.prepare("kiro", "p1", URL, SERVER)  # type: ignore[misc]
+    return root
+
+
+@posix_only
+def test_a_guard_answer_blocks_the_tool_and_reaches_the_agent(
+    tmp_path: Path, home: Path, backend: list[dict]
+) -> None:
+    _Capture.guard_reply = json.dumps(
+        {"permissionDecision": "deny", "permissionDecisionReason": "Navide Guard: rm outside workspace"}
+    ).encode()
+    done = _run_fake(tmp_path, home, {"KIRO_HOME": _pane(home), guard_hooks.PANE_TOKEN_ENV: "pane-token-1"},
+                     "chat", "--v3", stdin=_RM)
+    assert done.returncode == 0, done.stderr
+    assert "blocked: " in done.stdout and "Navide Guard: rm outside workspace" in done.stdout
+    [call] = backend
+    assert call["path"] == "/hooks/kiro/pretooluse"
+    headers = {k.lower(): v for k, v in call["headers"].items()}
+    assert headers[guard_hooks.PANE_TOKEN_HEADER.lower()] == "pane-token-1"
+    assert headers[hook_auth.HEADER.lower()] == hook_auth.token()
+    assert guard_fail_closed.HEADER.lower() not in headers
+    assert call["body"]["tool_name"] == "execute_bash"
+    assert call["body"]["tool_input"] == {"command": "rm -rf ~"}
+
+
+@posix_only
+def test_no_decision_runs_the_tool_with_nothing_added_to_the_agent(
+    tmp_path: Path, home: Path, backend: list[dict]
+) -> None:
+    done = _run_fake(tmp_path, home, {"KIRO_HOME": _pane(home)}, "chat", "--v3", stdin=_RM)
+    assert done.returncode == 0, done.stderr
+    assert "ran: execute_bash" in done.stdout
+    assert "hook warning" not in done.stdout and "hook context" not in done.stdout
+    assert len(backend) == 1
+
+
+@posix_only
+def test_the_guard_hook_fails_open_when_navide_is_not_running(
+    tmp_path: Path, home: Path, port_file: Path
+) -> None:
+    root = _pane(home)
+    for port in ("1", ""):  # nothing listening, then no port at all
+        port_file.write_text(port, encoding="utf-8")
+        done = _run_fake(tmp_path, home, {"KIRO_HOME": root}, "chat", "--v3", stdin=_RM)
+        assert done.returncode == 0, done.stderr
+        assert "ran: execute_bash" in done.stdout and "hook warning" not in done.stdout

@@ -48,6 +48,18 @@ qwen — qwenlm.github.io/qwen-code-docs/en/users/features/hooks. Payload:
   tool_name, tool_input, permission_mode. Output: the claude shape with
   allow|deny|ask; "ask" falls back to deny in headless (--prompt) runs and
   background subagents. Exit 2 blocks. Timeout is seconds, default 60.
+
+kiro — kiro.dev/docs/hooks, /docs/hooks/types, /docs/reference/exit-codes,
+  /docs/tools (read 2026-11-25). NOT VERIFIED ON A REAL INSTALL; FAIL-OPEN FOR
+  NOW. Payload: hook_event_name, cwd, session_id, tool_name, tool_input. There
+  is no JSON decision on stdout (stdout on exit 0 is added to the agent's
+  context); exit 2 blocks and hands stderr to the agent. So the hook
+  (kiro_hooks.py) prints our body to stderr and exits 2 only when this module
+  answers, and exits 0 on anything else. Kiro has no "ask", so a call a rule
+  matched is refused either way, as for codex. V3
+  tool ids (execute_bash, fs_write, str_replace, read_file, ...) are mapped to
+  the neutral names below; their input field names are undocumented, so an
+  unrecognised id or input passes through and the guard grades it normal.
 """
 
 from __future__ import annotations
@@ -63,7 +75,7 @@ from typing import Any
 log = logging.getLogger("agent_team_backend.guard_hooks")
 
 #: Vendors with a synchronous PreToolUse hook Navide installs.
-VENDORS = frozenset({"claude", "codex", "copilot", "qwen"})
+VENDORS = frozenset({"claude", "codex", "copilot", "qwen", "kiro"})
 
 #: A per-pane secret put in each pane's environment at spawn; the claude,
 #: qwen and copilot guard hooks send it back as a header. It names the pane
@@ -102,6 +114,14 @@ _WRITE_TOOLS = frozenset({
 _READ_TOOLS = frozenset({"read", "read_file", "view"})
 _PATH_KEYS = ("file_path", "path", "absolute_path", "notebook_path", "filePath")
 
+# Kiro V3 built-in tool ids (kiro.dev/docs/tools), as the names above. Not
+# verified on a real install; anything else passes through unmapped.
+_KIRO_TOOLS = {
+    "execute_bash": "bash", "execute_pwsh": "powershell",
+    "fs_write": "write", "fs_append": "write", "str_replace": "edit", "delete_file": "write",
+    "read_file": "read",
+}
+
 # apply_patch names every file it touches on one of these header lines.
 _PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.M)
 _PATCH_MOVE = re.compile(r"^\*\*\* Move to: (.+)$", re.M)
@@ -119,6 +139,10 @@ def _tool_input(vendor: str, payload: dict[str, Any]) -> tuple[str, dict[str, An
     else:
         name = str(payload.get("tool_name") or "")
         args = payload.get("tool_input")
+        if vendor == "kiro":
+            if name not in _KIRO_TOOLS:
+                log.debug("guard kiro: unmapped tool %r passes through", name)
+            name = _KIRO_TOOLS.get(name, name)
     return name, args if isinstance(args, dict) else {}
 
 
@@ -196,6 +220,12 @@ def render(vendor: str, decision: Any) -> dict[str, Any] | None:
         reason += " (needs local confirmation: run it yourself in the terminal)"
     if vendor == "copilot":
         return {"permissionDecision": action, "permissionDecisionReason": reason}
+    if vendor == "kiro":
+        # Kiro cannot ask either; any body is exit 2 in the hook (kiro_hooks),
+        # and only a rule match gets here. Not verified on a real install.
+        if action == "ask":
+            reason += " (needs local confirmation: run it yourself in the terminal)"
+        return {"permissionDecision": "deny", "permissionDecisionReason": reason}
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
