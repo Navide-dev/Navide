@@ -10,7 +10,7 @@ import { i18n } from '@navide/plugin-ui/foundation'
 
 import McpRestartButton from '../McpRestartButton.vue'
 import { UNSUPPORTED_REASON, useMcpHealth } from '../../composables/useMcpHealth'
-import { normalizePlatformId, setPlatformId } from '../../../../shared/osplat'
+import { platformId, setPlatformId } from '../../../../shared/osplat'
 import en from '../../i18n/locales/en-US.json'
 
 function mcpOn(platform: 'win32' | 'darwin' | 'linux') {
@@ -27,7 +27,9 @@ function mountButton(supported: boolean) {
   })
 }
 
-afterEach(() => setPlatformId(normalizePlatformId(process.platform)))
+// Back to what this file loaded with, not the host (src/shared/platformBaseline.test.ts).
+const BASELINE = platformId()
+afterEach(() => setPlatformId(BASELINE))
 
 describe('McpRestartButton', () => {
   it('on win32 is disabled and says to restart the whole backend instead', async () => {
