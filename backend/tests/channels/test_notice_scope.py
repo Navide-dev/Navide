@@ -47,10 +47,24 @@ async def test_a_panes_mcp_notice_reaches_only_its_workspaces_bot(env: Env) -> N
     assert _told(env.tg, token, client, text=text) == [("bot-token", ME)]
 
 
+async def test_an_auto_reconnected_notice_reaches_only_its_workspaces_bot(env: Env) -> None:
+    token, client = await _bots(env)
+    await env.m.notify_mcp_auto_reconnected("匯率設定規劃", "fx", "/ws/token")
+    text = quick_menu.text("zh-TW", "mcp_auto_reconnected", pane="匯率設定規劃")
+    assert _told(env.tg, token, client, text=text) == [("bot-token", ME)]
+
+
 async def test_an_account_sign_in_notice_reaches_only_the_main_bot(env: Env) -> None:
     token, client = await _bots(env)
     await env.m.notify_account_needs_login("Work")
     text = quick_menu.text("zh-TW", "account_needs_login", account="Work")
+    assert _told(env.tg, token, client, text=text) == [("default", ME)]
+
+
+async def test_an_mcp_endpoint_notice_reaches_only_the_main_bot(env: Env) -> None:
+    token, client = await _bots(env)
+    await env.m.notify_mcp_endpoint_down()
+    text = quick_menu.text("zh-TW", "mcp_endpoint_down")
     assert _told(env.tg, token, client, text=text) == [("default", ME)]
 
 

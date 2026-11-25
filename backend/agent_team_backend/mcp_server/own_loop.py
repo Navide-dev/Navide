@@ -22,6 +22,15 @@ Wiring (plan_mcp_url) points the CLIs at this port while it is up. The route
 on the main port stays for everything that was given that URL (external
 clients, a CLI spawned before this started). Only the production entry point
 turns this on (``enable``); tests and in-process apps keep one loop.
+
+``restart`` replaces the thread and its loop without touching a PTY: the MCP
+health probe's soft recovery. The listening socket is this module's for the
+whole run and each server is handed a duplicate of it: asyncio closes the
+socket a server was given when that server closes, which would release the
+port, and between that and a rebind any local process could take the port
+and collect the pane tokens the CLIs send to it. With the socket kept open
+the port is never free, and connections made while the new loop starts wait
+in its backlog.
 """
 
 from __future__ import annotations
@@ -139,8 +148,10 @@ async def _serve(state: _OwnLoop) -> None:
                 listening.set()
 
         state.server = _Server(config)
-        # Ready as soon as the listener is up, not when serve() returns.
-        serving = loop.create_task(state.server.serve(sockets=[state.sock]))
+        # Ready as soon as the listener is up, not when serve() returns. A
+        # duplicate: closing the server closes it, and the port stays held by
+        # state.sock (see the module docstring).
+        serving = loop.create_task(state.server.serve(sockets=[state.sock.dup()]))
         waiting = loop.create_task(listening.wait())
         await asyncio.wait({serving, waiting}, return_when=asyncio.FIRST_COMPLETED)
         waiting.cancel()
@@ -149,10 +160,14 @@ async def _serve(state: _OwnLoop) -> None:
         state.ready.set()
         await serving
     finally:
-        plan_mcp._own_runner = None
+        # A restart may have put a newer loop in place already (this one's
+        # join timed out): leave that one's alone.
+        if plan_mcp._own_runner is runner:
+            plan_mcp._own_runner = None
         runner.stop.set()
         await asyncio.wait([runner.task])
-        plan_mcp._own_loop = None
+        if plan_mcp._own_loop is loop:
+            plan_mcp._own_loop = None
 
 
 def _thread_main(state: _OwnLoop) -> None:
@@ -215,15 +230,66 @@ async def start() -> int | None:
     sock.set_inheritable(False)
     _install_dispatch()
     state = _OwnLoop(sock=sock, main_loop=asyncio.get_running_loop())
-    state.thread = threading.Thread(target=_thread_main, args=(state,), name="plan-mcp-loop", daemon=True)
     _state = state
-    state.thread.start()
-    await asyncio.to_thread(state.ready.wait, _START_TIMEOUT_S)
+    await _launch(state)
     if port() is None:
         log.warning("plan-mcp: own event loop did not start; CLIs use the main port")
         return None
     log.info("plan-mcp: serving on its own event loop at 127.0.0.1:%d", state.port)
     return state.port
+
+
+async def _launch(state: _OwnLoop) -> None:
+    state.thread = threading.Thread(target=_thread_main, args=(state,), name="plan-mcp-loop", daemon=True)
+    state.thread.start()
+    await asyncio.to_thread(state.ready.wait, _START_TIMEOUT_S)
+
+
+async def _stop_thread(state: _OwnLoop) -> bool:
+    """Ask the state's server to exit and join its thread. False when the
+    thread was still alive after the join timeout."""
+    if state.server is not None and state.loop is not None:
+        try:
+            state.loop.call_soon_threadsafe(setattr, state.server, "should_exit", True)
+        except RuntimeError:
+            pass  # that loop has already closed
+    if state.thread is not None:
+        await asyncio.to_thread(state.thread.join, _JOIN_TIMEOUT_S)
+        return not state.thread.is_alive()
+    return True
+
+
+_restart_lock: asyncio.Lock | None = None
+
+
+async def restart() -> dict[str, Any]:
+    """Replace the listener's thread and loop, on the same socket and so the
+    same port: the CLIs' wired URLs keep working and no PTY is touched.
+
+    Returns {ok, port, joined} or {ok: False, reason}: "not-running" when
+    this run never served on its own loop (nothing to restart), "not-ready"
+    when the new loop did not come up in time."""
+    global _state, _restart_lock
+    if _restart_lock is None:
+        _restart_lock = asyncio.Lock()
+    async with _restart_lock:
+        old = _state
+        if old is None:
+            return {"ok": False, "reason": "not-running"}
+        joined = await _stop_thread(old)
+        if not joined:
+            # Still holding its own duplicate, but told to exit: it accepts
+            # nothing while stuck and closes only that duplicate when it ends.
+            log.warning("plan-mcp: the old own-loop thread did not stop in %.0fs; starting a new one anyway",
+                        _JOIN_TIMEOUT_S)
+        state = _OwnLoop(sock=old.sock, main_loop=old.main_loop)
+        _state = state
+        await _launch(state)
+        if port() is None:
+            log.warning("plan-mcp: own event loop did not come back after a restart: %s", state.error)
+            return {"ok": False, "reason": "not-ready", "joined": joined}
+        log.info("plan-mcp: own event loop restarted at 127.0.0.1:%d", state.port)
+        return {"ok": True, "port": state.port, "joined": joined}
 
 
 async def stop() -> None:
@@ -232,10 +298,7 @@ async def stop() -> None:
     state, _state = _state, None
     if state is None:
         return
-    if state.server is not None and state.loop is not None:
-        state.loop.call_soon_threadsafe(setattr, state.server, "should_exit", True)
-    if state.thread is not None:
-        await asyncio.to_thread(state.thread.join, _JOIN_TIMEOUT_S)
+    await _stop_thread(state)
     try:
         state.sock.close()
     except OSError:

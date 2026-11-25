@@ -499,6 +499,7 @@ import {
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
+import { useMcpHealth } from './composables/useMcpHealth'
 import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
@@ -26502,6 +26503,39 @@ onUnmounted(() => {
 
 // Backend supervisor popover (status bar pill → manage/restart/stop the backend).
 const backendBusy = ref(false)
+// /plan-mcp health (useMcpHealth): the status bar light and its two recoveries.
+const mcpHealth = useMcpHealth({ send: backend.send })
+const mcpRestartNote = ref('')
+const mcpConfirmFullRestart = ref(false)
+const mcpLightTitle = computed(() => {
+  const h = mcpHealth.health.value
+  const state = i18n.global.t('label.mcp-state-' + h.state)
+  return h.consecutiveFailures > 0
+    ? `${state} · ${i18n.global.t('label.mcp-failures', { n: h.consecutiveFailures, error: h.lastError })}`
+    : state
+})
+/** The panes a whole-backend restart interrupts, as this window names them. */
+const mcpFullRestartPanes = computed(() => {
+  const names = panes.value.filter((p) => p.realized).map((p) => {
+    const shown = paneRefs[p.id]?.displayStatus as string | undefined
+    const busy = shown === 'running' || shown === 'awaiting'
+    return backendRestartPaneName(p) + (busy ? i18n.global.t('label.mcp-pane-busy') : '')
+  })
+  if (!names.length) return i18n.global.t('label.mcp-full-restart-none')
+  return new Intl.ListFormat(String(i18n.global.locale.value), { type: 'unit' }).format(names)
+})
+async function onRestartMcp(): Promise<void> {
+  mcpRestartNote.value = ''
+  const out = await mcpHealth.restartMcp()
+  mcpRestartNote.value = out.ok
+    ? i18n.global.t('label.mcp-restart-done')
+    : i18n.global.t('label.mcp-restart-failed', { reason: out.reason ?? '' })
+}
+async function onConfirmFullRestart(): Promise<void> {
+  mcpConfirmFullRestart.value = false
+  await onRestartBackend()
+}
+
 async function onRestartBackend(): Promise<void> {
   if (backendBusy.value) return
   backendBusy.value = true
@@ -28240,6 +28274,17 @@ function paneIsCommander(p: ActivePane): boolean {
           <span v-if="backendUrl" class="sb-url">· {{ backendUrl }}</span>
         </span>
         <span
+          v-if="backend.status.value === 'connected' && mcpHealth.health.value.state !== 'unknown'"
+          class="sb-item sb-mcp sb-clickable"
+          :class="'sb-mcp-' + mcpHealth.health.value.state"
+          role="button"
+          tabindex="0"
+          :title="mcpLightTitle"
+          :aria-label="mcpLightTitle"
+          @click="togglePopover('backend')"
+          @keydown.enter="togglePopover('backend')"
+        ><span class="sb-dot" />MCP</span>
+        <span
           v-if="panes.length > 0"
           class="sb-item sb-resource sb-clickable"
           role="button"
@@ -28399,6 +28444,29 @@ function paneIsCommander(p: ActivePane): boolean {
       <div class="bp-rows">
         <div class="bp-row"><span class="bp-k">URL</span><span class="bp-v">{{ backendUrl || '—' }}</span></div>
         <div class="bp-row"><span class="bp-k">PID</span><span class="bp-v">{{ backend.pid.value || '—' }}</span></div>
+        <div class="bp-row">
+          <span class="bp-k">MCP</span>
+          <span class="bp-v bp-mcp" :class="'sb-mcp-' + mcpHealth.health.value.state"><span class="sb-dot" /> {{ mcpLightTitle }}</span>
+        </div>
+      </div>
+      <div v-if="backend.status.value === 'connected'" class="bp-mcp-actions">
+        <button class="bp-btn bp-mcp-restart" :disabled="mcpHealth.restarting.value || backendBusy" @click="onRestartMcp">
+          {{ mcpHealth.restarting.value ? $t('label.mcp-restarting') : $t('label.mcp-restart') }}
+        </button>
+        <div v-if="mcpRestartNote" class="bp-mcp-note">{{ mcpRestartNote }}</div>
+        <template v-if="mcpHealth.health.value.state === 'down'">
+          <button
+            v-if="!mcpConfirmFullRestart"
+            class="bp-btn bp-mcp-full"
+            :disabled="backendBusy"
+            @click="mcpConfirmFullRestart = true"
+          >{{ $t('label.mcp-full-restart') }}</button>
+          <div v-else class="bp-mcp-confirm">
+            <div class="bp-mcp-note">{{ $t('label.mcp-full-restart-confirm', { panes: mcpFullRestartPanes }) }}</div>
+            <button class="bp-btn bp-mcp-full" :disabled="backendBusy" @click="onConfirmFullRestart">{{ $t('label.mcp-full-restart-go') }}</button>
+            <button class="bp-btn" @click="mcpConfirmFullRestart = false">{{ $t('label.mcp-cancel') }}</button>
+          </div>
+        </template>
       </div>
       <div class="bp-actions">
         <button class="bp-btn bp-restart" :disabled="backendBusy" @click="onRestartBackend">
@@ -28999,6 +29067,13 @@ function paneIsCommander(p: ActivePane): boolean {
   flex-shrink: 0;
 }
 .sb-backend.sb-connected .sb-dot { background: var(--success-fg); }
+.sb-mcp-ok .sb-dot { background: var(--success-fg); }
+.sb-mcp-degraded .sb-dot { background: var(--warning-fg); }
+.sb-mcp-down .sb-dot { background: var(--danger-fg); }
+.bp-mcp .sb-dot { display: inline-block; vertical-align: middle; }
+.bp-mcp-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bp-mcp-confirm { display: flex; flex-direction: column; gap: 6px; }
+.bp-mcp-note { font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: normal; }
 .sb-backend:not(.sb-connected) .sb-dot { background: var(--danger-fg); }
 .sb-pipeline.sb-running { color: var(--accent-fg); }
 .sb-pipeline.sb-completed { color: var(--success-fg); }

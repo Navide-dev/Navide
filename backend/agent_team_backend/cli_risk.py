@@ -98,11 +98,15 @@ class CliRiskService:
         self._apply_lock = asyncio.Lock()
         self._closed = False
 
-    def request(self, panes: list[RiskPane]) -> dict:
-        """Schedule at most one sweep of each kind; return completed state only."""
-        result = self.current(panes)
+    def request(self, panes: list[RiskPane]) -> None:
+        """Schedule at most one sweep of each kind. Runs on the event loop, so
+        it projects nothing: the completed state is current(), which the
+        resource handler runs off the loop. Projecting here as well cost a
+        full pass over every signal for each window's poll, and with 85 panes
+        under load it was the event loop's most common stall frame
+        (2026-11-26, backend.log: 15 stalls of 2–8 s in request → project)."""
         if self._closed or not panes:
-            return result
+            return
         if self._network_task is None or self._network_task.done():
             self._network_task = asyncio.create_task(self._network(panes))
         if self._disk_task is None or self._disk_task.done():
@@ -113,7 +117,6 @@ class CliRiskService:
             if due:
                 self._disk_attempts.update({key: now for key in due})
                 self._disk_task = asyncio.create_task(self._disk(panes, due, now))
-        return result
 
     def current(self, panes: list[RiskPane]) -> dict:
         return project(self._snapshot, panes, self.clock())

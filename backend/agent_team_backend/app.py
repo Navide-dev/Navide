@@ -1426,6 +1426,19 @@ async def _notify_mcp_disconnected(entry: Any) -> None:
                                               entry.spawned_by)
 
 
+async def _notify_mcp_auto_reconnected(pane_id: str) -> None:
+    """A flagged pane came back after Navide typed `/mcp reconnect navide` into
+    it: one notice to the chats of that pane, like the disconnect notice."""
+    from . import agent_messaging
+    from .channels import get_manager
+
+    entry = agent_messaging.current(pane_id)
+    manager = get_manager()
+    if entry is None or manager is None:
+        return
+    await manager.notify_mcp_auto_reconnected(entry.name, entry.pane_id, entry.workspace_path, entry.spawned_by)
+
+
 async def _auto_reconnect_mcp(entry: Any) -> bool:
     """Ask the window holding a flagged pane to type `/mcp reconnect navide`
     into it (ui.pane.reconnectMcp, in place only — never a rebuild). True when
@@ -2892,7 +2905,7 @@ async def _start_log_watcher() -> None:
     global _mcp_connect_watch_task, _parked_message_watch_task
     _mcp_connect_watch_task = asyncio.create_task(mcp_connect_watch.run(
         _notify_mcp_never_connected, _notify_mcp_connected, _notify_mcp_disconnected,
-        _auto_reconnect_mcp,
+        _auto_reconnect_mcp, _notify_mcp_auto_reconnected,
     ))
     # A stall longer than the CLIs' reconnect budget: re-check their streams
     # as soon as the loop is back.
@@ -3236,6 +3249,14 @@ async def health() -> dict[str, Any]:
         "version": __version__,
         "started_at": STARTED_AT,
     }
+    # /plan-mcp's health (counters only) and the port the CLIs are wired to,
+    # which the main process probes (mcp_server.health, src/main/mcp-health.ts).
+    try:
+        from .mcp_server import health as mcp_health, own_loop as mcp_own_loop
+
+        body["mcp"] = {**mcp_health.snapshot(), "port": mcp_own_loop.port()}
+    except Exception as err:  # noqa: BLE001 — fail open
+        log.debug("health mcp block unavailable: %s", err)
     # A load reading for diagnosing starvation. Measuring must never cost the
     # route its answer, so any failure just leaves the block out.
     try:

@@ -26,6 +26,13 @@ type PluginGlobalStopRecord = import('../../shared/pluginStop').PluginGlobalStop
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
+interface McpHealthSnapshot {
+  state: 'unknown' | 'ok' | 'degraded' | 'down'
+  consecutiveFailures: number
+  lastError: string
+  checkedAt: number
+}
+
 interface BackendInfo {
   status: 'starting' | 'ready' | 'error'
   host?: string
@@ -96,6 +103,9 @@ declare global {
       restartBackend: () => Promise<BackendInfo>
       stopBackend: () => Promise<{ ok: boolean }>
       onBackendChanged: (cb: (info: BackendInfo) => void) => void
+      getMcpHealth?: () => Promise<McpHealthSnapshot | null>
+      checkMcpHealth?: () => Promise<McpHealthSnapshot | null>
+      onMcpHealthChanged?: (cb: (snapshot: McpHealthSnapshot) => void) => void
       retryGitV2: () => Promise<{ ok: boolean; reason?: string }>
       retryPlansV2: () => Promise<{ ok: boolean; reason?: string }>
       repairPlansStorageRecord: () => Promise<{ ok: boolean; repaired: boolean; reason?: string }>

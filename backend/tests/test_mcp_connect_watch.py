@@ -563,3 +563,81 @@ def test_the_server_instructions_tell_the_two_disconnections_apart() -> None:
     assert "target-offline" in text
     assert "/mcp reconnect navide" in text
     assert "ui.pane.reconnectMcp" in text
+
+
+# ── 2026-11-26: retry only once the backend recovered; log and announce ─────
+# IDA, load 88, 85 panes: a pane dropped its navide MCP after the loop stalled,
+# backend.log said nothing, and nothing told anyone it came back.
+
+
+def test_no_try_is_spent_while_the_endpoint_is_reported_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend.mcp_server import health
+
+    health._reset_for_tests()
+    monkeypatch.setattr(health, "_probe_state", "down")
+    _dropped_pane()
+    assert watch.due_reconnects(now=1000.0 + 91) == []
+    assert watch.auto_tries("p1") == 0
+    monkeypatch.setattr(health, "_probe_state", "ok")
+    assert [e.pane_id for e in watch.due_reconnects(now=1000.0 + 92)] == ["p1"]
+
+
+def test_no_try_right_after_a_long_stall() -> None:
+    _dropped_pane()
+    watch.note_stall(20.0, now=1080.0)
+    assert watch.due_reconnects(now=1080.0 + watch.RECOVERY_SETTLE_S - 1) == []
+    assert [e.pane_id for e in watch.due_reconnects(now=1080.0 + watch.RECOVERY_SETTLE_S + 1)] == ["p1"]
+
+
+def test_a_disconnect_is_written_to_the_backend_log(caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    _dropped_pane()
+    with caplog.at_level(logging.WARNING, logger="agent_team_backend.mcp_connect_watch"):
+        watch.sweep_dropped(now=1000.0 + 91)
+    assert "event=pane_disconnected pane=p1" in caplog.text
+    assert "stream_closed_s_ago=91" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_pane_back_after_an_automatic_try_is_logged_and_announced(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    import asyncio
+    import logging
+
+    watch.note_reconnect_sent("p9")
+    rounds = iter([["p9"], []])
+    monkeypatch.setattr(watch, "SWEEP_INTERVAL_S", 0)
+    monkeypatch.setattr(watch, "sweep", lambda: [])
+    monkeypatch.setattr(watch, "sweep_dropped", lambda: [])
+    monkeypatch.setattr(watch, "due_reconnects", lambda: [])
+    monkeypatch.setattr(watch, "take_cleared", lambda: next(rounds, []))
+    cleared: list[str] = []
+    announced: list[str] = []
+
+    async def ignore(e: Any) -> None:
+        pass
+
+    async def on_cleared(pane_id: str) -> None:
+        cleared.append(pane_id)
+
+    async def on_auto(pane_id: str) -> None:
+        announced.append(pane_id)
+
+    with caplog.at_level(logging.INFO, logger="agent_team_backend.mcp_connect_watch"):
+        task = asyncio.create_task(watch.run(ignore, on_cleared, ignore, None, on_auto))
+        for _ in range(10):
+            await asyncio.sleep(0)
+        task.cancel()
+    assert cleared == ["p9"] and announced == ["p9"]
+    assert "event=pane_auto_reconnected pane=p9 tries=1" in caplog.text
+
+
+@pytest.mark.parametrize("lang", ["zh-TW", "en-US", "ja-JP", "zh-CN", "ko-KR", "es-ES", "fr-FR", "de-DE",
+                                  "pt-BR", "ru-RU", "vi-VN"])
+def test_the_auto_reconnected_notice_exists_in_every_language(lang: str) -> None:
+    from agent_team_backend.channels import quick_menu
+
+    assert "Pane-X" in quick_menu.text(lang, "mcp_auto_reconnected", pane="Pane-X")
+    assert quick_menu.text(lang, "mcp_endpoint_down")

@@ -5,8 +5,10 @@ and that half was failing silently: the tool had already answered ok, the
 caller took "ok" for "delivered", and six minutes later the pane was still
 idle with an empty prompt. Now the window emits a second event —
 agent_spawn.kickoff — once the injection settles, and the tool waits for it:
-the answer carries `kickoff: "sent"` or `kickoff: "failed"` plus a hint to
-resend with cli_send, and never a "pending".
+the answer carries `kickoff: "sent"`, `"failed"` (the window saw it not go in:
+resend) or `"unverified"` (it could not tell: look first), and never a
+"pending". 2026-11-26: "unverified" used to be reported as "failed", and on a
+loaded machine (45 s deadline, load 88) tasks that had arrived were resent.
 """
 
 from __future__ import annotations
@@ -116,12 +118,11 @@ async def test_open_agent_answers_kickoff_failed_with_a_resend_hint(
 
 
 @pytest.mark.asyncio
-async def test_open_agent_treats_an_unverified_kickoff_as_failed(
+async def test_open_agent_reports_an_unverified_kickoff_as_unverified(
     captured: list[dict[str, Any]],
 ) -> None:
-    """The return shape has two values only. "unverified" is the window's
-    honest word for "bytes written, nothing seen" — to the caller that is a
-    task that did not arrive."""
+    """"unverified" is the window's honest word for "bytes written, nothing
+    seen": the task may be running, so it is not reported as a failure."""
     agent_messaging.register("pa", "lead", "/ws/alpha", agent_key="claude")
 
     async def window() -> None:
@@ -132,7 +133,7 @@ async def test_open_agent_treats_an_unverified_kickoff_as_failed(
     result = await plan_mcp.cli_open_agent("codex", "reviewer", "review the PR", _ctx())
     await task
 
-    assert result["kickoff"] == "failed"
+    assert result["kickoff"] == "unverified"
     assert "cli_send" in result["hint"]
     # But NOT a blind resend: 'unverified' is also what the window answers when
     # its own text is still sitting in the composer, where a resend would
@@ -142,10 +143,11 @@ async def test_open_agent_treats_an_unverified_kickoff_as_failed(
 
 
 @pytest.mark.asyncio
-async def test_open_agent_times_out_the_kickoff_wait_as_failed(
+async def test_open_agent_times_out_the_kickoff_wait_as_unverified(
     captured: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No verdict inside the deadline is a failure, not a hang and not "pending"."""
+    """No verdict inside the deadline is "unverified", not a hang, not
+    "pending" and not a failure: the window may still be typing it."""
     agent_messaging.register("pa", "lead", "/ws/alpha", agent_key="claude")
     monkeypatch.setattr(plan_mcp, "_KICKOFF_VERDICT_TIMEOUT_S", 0.05)
 
@@ -154,7 +156,7 @@ async def test_open_agent_times_out_the_kickoff_wait_as_failed(
     await task
 
     assert result["ok"] is True
-    assert result["kickoff"] == "failed"
+    assert result["kickoff"] == "unverified"
     assert "cli_send" in result["hint"]
     # The window may still be typing it past the deadline (a cold CLI plus its
     # session-marker turn): a resend-now hint would double the task once it
@@ -309,3 +311,28 @@ async def test_open_agent_reports_a_launch_prompt_it_did_not_answer(
     assert result["prompt_fingerprint"] == plan_mcp._prompt_fingerprint(ADD_DIR_PROMPT, options)
     assert "cli_answer_prompt" in result["hint"] and "do NOT resend" in result["hint"]
     assert "did not hand this pane" in " ".join(result["advisories"])
+
+
+def test_the_kickoff_deadline_outlasts_the_windows_own_budget() -> None:
+    """The window decides within its prompt-ready wait (90 s for a resumed CLI)
+    plus its echo wait (120 s); the backend must not answer before it does."""
+    import re
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[2]
+    app_vue = (repo / "src/renderer/src/App.vue").read_text(encoding="utf-8")
+    coordination = (repo / "src/renderer/src/lib/cliCoordination.ts").read_text(encoding="utf-8")
+
+    def ms(text: str, name: str) -> float:
+        match = re.search(rf"const {name} = ([0-9_]+)", text)
+        assert match, name
+        return int(match.group(1).replace("_", "")) / 1000
+
+    window_budget = ms(app_vue, "KICKOFF_PROMPT_READY_TIMEOUT_RESUME_MS") + ms(coordination, "KICKOFF_ECHO_WAIT_MS")
+    assert plan_mcp._KICKOFF_VERDICT_TIMEOUT_S > window_budget
+
+
+def test_the_docstring_explains_unverified_and_what_to_do() -> None:
+    doc = plan_mcp.cli_open_agent.__doc__ or ""
+    assert '`kickoff: "unverified"`' in doc
+    assert "cli_get_status first" in doc
