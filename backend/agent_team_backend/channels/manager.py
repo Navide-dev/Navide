@@ -4384,6 +4384,18 @@ class ChannelManager:
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an account sign-in notice to %s failed: %s", b.platform, exc)
 
+    async def notify_mcp_endpoint_down(self) -> None:
+        """The main bot's direct chat, in the user's language: Navide's own MCP
+        endpoint stopped answering and the automatic MCP restart did not bring it
+        back (mcp_server.health). A notice about no one pane: _owner_chats."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "mcp_endpoint_down")
+        for b in self._owner_chats():
+            try:
+                await self.mirror.send(b.location(), redact.redact_text(text))
+            except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+                log.warning("channels: an MCP endpoint notice to %s failed: %s", b.platform, exc)
+
     async def notify_mcp_never_connected(self, pane: str, pane_id: str = "", workspace_path: str = "",
                                          parent_pane_id: str = "") -> None:
         """Each bound direct chat of the pane, its workspace or the pane that opened it
@@ -4396,6 +4408,12 @@ class ChannelManager:
         """The same, for a pane's CLI that was connected and gave up after
         losing the connection."""
         await self._notify_mcp_connection("mcp_disconnected", pane, pane_id, workspace_path, parent_pane_id)
+
+    async def notify_mcp_auto_reconnected(self, pane: str, pane_id: str = "", workspace_path: str = "",
+                                          parent_pane_id: str = "") -> None:
+        """The same chats, once: Navide reconnected that pane's tools by itself
+        (mcp_connect_watch, after the backend recovered and the pane was idle)."""
+        await self._notify_mcp_connection("mcp_auto_reconnected", pane, pane_id, workspace_path, parent_pane_id)
 
     async def _notify_mcp_connection(self, key: str, pane: str, pane_id: str, workspace_path: str,
                                      parent_pane_id: str) -> None:

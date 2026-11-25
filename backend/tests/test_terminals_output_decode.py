@@ -16,6 +16,7 @@ import pytest
 # Real POSIX PTY behaviour: the module is skipped where these do not exist.
 fcntl = pytest.importorskip("fcntl")
 
+from agent_team_backend import pane_log_writer
 from agent_team_backend.osplat._posix import PosixTerminalHandle
 from agent_team_backend.terminals import TerminalService
 
@@ -62,6 +63,7 @@ async def test_log_mirror_reassembles_a_split_multibyte_char():
     payload = "中文字".encode("utf-8")
     svc._mirror_to_log(session, payload[:4])
     svc._mirror_to_log(session, payload[4:])
+    assert pane_log_writer.WRITER.drain()  # written off the loop (pane_log_writer)
     assert "�" not in log_fp.getvalue()
     assert "中文字" in log_fp.getvalue()
 
@@ -74,4 +76,5 @@ async def test_log_mirror_turns_genuinely_invalid_bytes_into_replacements():
     )
     # 0xFF/0xFE can never start a UTF-8 sequence.
     svc._mirror_to_log(session, b"ok\xff\xfeok\n")
+    assert pane_log_writer.WRITER.drain()
     assert "ok��ok" in log_fp.getvalue()

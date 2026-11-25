@@ -20,7 +20,7 @@ from uuid import uuid4
 
 import psutil
 
-from . import login_panes, osplat, pty_registry
+from . import login_panes, osplat, pane_log_writer, pty_registry
 from .applog import app_data_dir, in_data_dir
 from .cli_vendors.base import VendorRuntimeContext
 from .cli_vendors.registry import risk_runtime_context
@@ -1061,12 +1061,8 @@ class TerminalService:
         ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         marker = f"[→ {label.upper()} @ {ts}]"
         sep = "─" * min(60, len(marker) + 4)
-        try:
-            session.output_log_fp.write(
-                f"\n{sep}\n{marker}\n{sep}\n{text}\n{sep}\n\n"
-            )
-        except Exception as err:  # noqa: BLE001
-            log.warning("log_sent write failed: %s", err)
+        # Through the same writer as the output mirror, so the two keep their order.
+        pane_log_writer.WRITER.write(session.output_log_fp, f"\n{sep}\n{marker}\n{sep}\n{text}\n{sep}\n\n")
 
     def resize(self, session_id: str, cols: int, rows: int) -> None:
         session = self._require(session_id)
@@ -1973,7 +1969,8 @@ class TerminalService:
 
         Only sessions with an open log (pipeline panes) pay for decoding; the
         per-session incremental decoder keeps chunk-split multi-byte chars from
-        becoming U+FFFD in the log.
+        becoming U+FFFD in the log. Decoding stays here (the decoder is the
+        session's); the write and flush go to pane_log_writer, off the loop.
         """
         if not session.output_log_fp:
             return
@@ -1981,15 +1978,17 @@ class TerminalService:
         if decoder is None:
             decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
             self._decoders[session.id] = decoder
+        # cli_read_log reads the file, and line buffering is not enough:
+        # cleaning drops each chunk's trailing line break, and ConPTY moves
+        # between lines with cursor positioning, so a Windows shell's echo,
+        # output and prompt never carried a newline and sat unflushed. The
+        # writer flushes within pane_log_writer.FLUSH_WITHIN_S.
         try:
-            session.output_log_fp.write(_clean_for_log(decoder.decode(data)))
-            # cli_read_log reads the file, and line buffering is not enough:
-            # cleaning drops each chunk's trailing line break, and ConPTY moves
-            # between lines with cursor positioning, so a Windows shell's echo,
-            # output and prompt never carried a newline and sat unflushed.
-            session.output_log_fp.flush()
+            text = _clean_for_log(decoder.decode(data))
         except Exception as err:  # noqa: BLE001
             log.warning("output log write failed: %s", err)
+            return
+        pane_log_writer.WRITER.write(session.output_log_fp, text)
 
     @staticmethod
     def _split_chunks(combined: bytes) -> list[bytes]:
@@ -2057,10 +2056,7 @@ class TerminalService:
         if decoder and session.output_log_fp:
             tail = decoder.decode(b"", final=True)
             if tail:
-                try:
-                    session.output_log_fp.write(_clean_for_log(tail))
-                except Exception as err:  # noqa: BLE001
-                    log.warning("output log write failed: %s", err)
+                pane_log_writer.WRITER.write(session.output_log_fp, _clean_for_log(tail))
         # Best-effort wait for child to avoid zombies
         try:
             session.proc.poll()
@@ -2119,10 +2115,8 @@ class TerminalService:
         session.exit_signal = exit_signal
         log.info("terminal session closed id=%s reason=%s exit=%s", session.id, reason, exit_code)
         if session.output_log_fp:
-            try:
-                session.output_log_fp.close()
-            except Exception:  # noqa: BLE001
-                pass
+            # After everything already queued for it (pane_log_writer).
+            pane_log_writer.WRITER.close(session.output_log_fp)
             session.output_log_fp = None
         _forget_live_log(session.id)
         event = make_event(

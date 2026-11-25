@@ -1289,7 +1289,7 @@ class EvolveService:
                 return await self._fail(workspace, run, fields, "error", "open_failed", error)
             fields.update(mode="auto", pane_id=str(answer.get("pane_id") or ""),
                           pane_name=str(answer.get("name") or name))
-            if answer.get("kickoff") == "failed":
+            if answer.get("kickoff") in ("failed", "unverified"):
                 fields["detail"] = (fields.get("detail", "") + " kickoff unverified: "
                                     + str(answer.get("hint") or "")).strip()
                 self._unconfirmed[run["id"]] = task

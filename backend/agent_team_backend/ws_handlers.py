@@ -4123,6 +4123,34 @@ async def mcp_list_servers(session: "Session", msg_id: str, msg_type: str, paylo
     )
 
 
+@handler("mcp.health_report")
+async def mcp_health_report(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """A window passes on the main process' /plan-mcp probe verdict
+    (src/main/mcp-health.ts). The turn to "down" restarts MCP once, without
+    touching a pane (mcp_server.health.handle_report)."""
+    from .mcp_server import health as mcp_health
+
+    state = str(payload.get("state") or "")
+    if state not in mcp_health.PROBE_STATES:
+        await session.send_json(make_error(msg_id, msg_type, f"unknown MCP probe state: {state!r}"))
+        return
+    try:
+        failures = int(payload.get("failures") or 0)
+    except (TypeError, ValueError):
+        failures = 0
+    out = await mcp_health.handle_report(state, failures, str(payload.get("error") or ""))
+    await session.send_json(make_response(msg_id, msg_type, out))
+
+
+@handler("mcp.soft_restart")
+async def mcp_soft_restart(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The status bar's "Restart MCP": /plan-mcp's thread and loop only, on the
+    same port; every pane keeps running."""
+    from .mcp_server import health as mcp_health
+
+    await session.send_json(make_response(msg_id, msg_type, await mcp_health.soft_restart("user")))
+
+
 @handler("mcp.save_servers")
 async def mcp_save_servers(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
