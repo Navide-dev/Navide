@@ -11912,7 +11912,11 @@
         "publish": "Als Nächstes: Veröffentlichen Sie eine Version; nach der Prüfung erscheint sie im Navide Marketplace."
       },
       "guide": "Build for Navide öffnen",
-      "console": "developers.navide.dev öffnen"
+      "console": "developers.navide.dev öffnen",
+      "template": "Vorlage öffnen",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "copy-failed": "Kopieren fehlgeschlagen. Markiere den Befehl und kopiere ihn selbst."
     },
     "account": {
       "title": "Entwicklerkonto",

@@ -1,7 +1,7 @@
 // `navide-plugin init`: a minimal frontend-only Manifest v2 plugin that
 // validates and packages as written, with no build step.
 
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { vueTemplateFiles } from './init-template-vue.mjs'
 
@@ -9,6 +9,11 @@ const PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
 const DISPLAY_NAME = /^[^\r\n<>]{1,80}$/
 // `engines.navide` is a minimum: the Navide release this scaffold targets.
 const MIN_NAVIDE = '>=0.2.13'
+// The CLI is not on npm: the scaffold's package.json installs it from the
+// GitHub Release of this SDK's own version, so `npm run check` never reaches
+// for an npm package of the same name.
+const SDK_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+const PLUGIN_PACKAGES_RELEASE = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${SDK_VERSION}`
 
 function titleCase(slug) {
   return slug.split('-').filter(Boolean).map((word) => word[0].toUpperCase() + word.slice(1)).join(' ')
@@ -58,12 +63,29 @@ function files(id, name) {
       '',
     ].join('\n'),
     'README.md': `# ${name}\n\n${manifest.marketplace.description}\n`,
+    // Not in artifact-files.json, so never packaged: it only installs the CLI.
+    'package.json': `${JSON.stringify(
+      {
+        name: `${publisher}-${id.split('.').slice(1).join('-')}-navide-plugin`,
+        private: true,
+        scripts: {
+          check: 'navide-plugin validate . && navide-plugin scan .',
+          package: 'navide-plugin package .',
+        },
+        devDependencies: {
+          '@navide/plugin-contracts': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-contracts-${SDK_VERSION}.tgz`,
+          '@navide/plugin-sdk': `${PLUGIN_PACKAGES_RELEASE}/navide-plugin-sdk-${SDK_VERSION}.tgz`,
+        },
+      },
+      null,
+      2,
+    )}\n`,
     'artifact-files.json': `${JSON.stringify(
       { files: ['manifest.json', 'README.md', 'frontend/main/index.html', 'frontend/main/main.js'] },
       null,
       2,
     )}\n`,
-    '.gitignore': '*.key\n*.vsix\n*.sig\n',
+    '.gitignore': 'node_modules/\n*.key\n*.vsix\n*.sig\n',
   }
 }
 

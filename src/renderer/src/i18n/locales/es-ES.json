@@ -11912,7 +11912,11 @@
         "publish": "Siguiente: publica una versión; aparecerá en Navide Marketplace tras la revisión."
       },
       "guide": "Abrir Build for Navide",
-      "console": "Abrir developers.navide.dev"
+      "console": "Abrir developers.navide.dev",
+      "template": "Abrir plantilla",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "copy-failed": "No se pudo copiar. Selecciona el comando y cópialo tú."
     },
     "account": {
       "title": "Cuenta de desarrollador",

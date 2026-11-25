@@ -11912,7 +11912,11 @@
         "publish": "次へ：バージョンを公開してください。審査後に Navide マーケットプレイスに掲載されます。"
       },
       "guide": "Build for Navide を開く",
-      "console": "developers.navide.dev を開く"
+      "console": "developers.navide.dev を開く",
+      "template": "テンプレートを開く",
+      "copy": "コピー",
+      "copied": "コピーしました",
+      "copy-failed": "コピーできませんでした。コマンドを選択して手動でコピーしてください。"
     },
     "account": {
       "title": "開発者アカウント",

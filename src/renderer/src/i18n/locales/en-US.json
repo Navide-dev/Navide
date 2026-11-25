@@ -11912,7 +11912,11 @@
         "publish": "Next: publish a version; it goes public on the Navide Marketplace after review."
       },
       "guide": "Open Build for Navide",
-      "console": "Open developers.navide.dev"
+      "console": "Open developers.navide.dev",
+      "template": "Open Template",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copy-failed": "Couldn't copy. Select the command and copy it yourself."
     },
     "account": {
       "title": "Developer account",

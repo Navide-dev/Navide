@@ -32,7 +32,12 @@ npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plu
 ```
 
 In a `--template vue` project, run `npm install $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz`
-before `npm install`, so `package.json` names the tarballs.
+before `npm install`, so `package.json` names the tarballs. The default
+template's `package.json` already names them: `npm install` in its folder
+installs the CLI, then `npm run check` (validate and scan) and
+`npm run package` run there, and `npx navide-plugin …` works inside that
+folder only. `examples/hello-plugin` in the Navide repository holds the same
+files.
 
 The first writes a frontend-only plugin that validates and packages as written
 (the `--template vue` one is a buildable Vue view + Python backend + agent tool +

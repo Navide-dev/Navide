@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "acme.hello",
+  "name": "Hello",
+  "version": "0.1.0",
+  "publisher": "acme",
+  "engines": {
+    "navide": ">=0.2.13"
+  },
+  "permissions": {},
+  "marketplace": {
+    "description": "Hello, a Navide plugin.",
+    "license": "MIT"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "main",
+        "kind": "custom",
+        "location": "main",
+        "title": "Hello",
+        "entry": "frontend/main/index.html"
+      }
+    ]
+  }
+}
