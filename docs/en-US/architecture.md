@@ -354,11 +354,11 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   into an unexported variable and handed, with the connection's terminal
   and the login PATH, to the new session through a fifo, never a command
   line, a file or the tmux server's environment (every tmux command runs
-  under `env -u`). Claude and Codex in tmux are wired under
-  `ssh-<tmuxSession>` and a tunnel port derived from the session name, so
-  the running CLI's URL stays valid across launches: each launch aliases
-  that id to the pane's current id, and its token is kept
-  (`remote_ssh.hold_identity`) until the pane is closed. Without tmux the
+  under `env -u`). The tunnel port is new on every launch and a taken one
+  fails the connection (`ExitOnForwardFailure=yes`); the pane's token is
+  revoked when its ssh exits (`remote_ssh.revoke_exited`), even with the pane
+  on screen, since a CLI left in tmux keeps calling that port while the
+  connection is down. So a reattached CLI has no Navide tools. Without tmux the
   pane starts as before. Closing the pane sends `remote_ssh.end_session`, one
   BatchMode ssh call that kills the session.
   SSH panes are recorded (`manual_pane.spawn` with the spec, the id through

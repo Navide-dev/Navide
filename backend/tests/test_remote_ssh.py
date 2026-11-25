@@ -757,54 +757,56 @@ def test_a_terminal_pane_in_the_server_a_claude_pane_started_gets_no_token(fake_
     assert token not in (state / "start.env").read_text(encoding="utf-8")
 
 
-def test_a_tmux_pane_keeps_its_tool_port_and_identity():
-    spec = _tmux_claude()
-    port = remote_ssh.tmux_port(spec)
-    low, high = rd.REMOTE_PORT_RANGE
-    assert low <= port <= high and port == remote_ssh.tmux_port(_tmux_claude(resume=True))
-    assert remote_ssh.tool_identity(spec) == f"ssh-{_TMUX}"
-    assert remote_ssh.tool_identity(_cli_spec()) == ""
-    argv = _claude_argv(spec)
-    # A host still holding the port for a dropped connection must not stop
-    # the reattach; without tmux the pane fails and retries on a new port.
-    assert "ExitOnForwardFailure=yes" not in argv
-    assert "ExitOnForwardFailure=yes" in _claude_argv(_cli_spec())
+def test_a_taken_tunnel_port_fails_the_connection_so_no_token_goes_out(fake_host):
+    """The fake ssh holds to ExitOnForwardFailure like the real one: with the
+    port taken by someone else on the host, nothing runs there, so the token
+    is never asked for and no CLI starts with it."""
+    argv = _claude_argv(_tmux_claude())
+    assert "ExitOnForwardFailure=yes" in argv
+    _write_exe(fake_host["bin"] / "ssh", (
+        'printf "%s\\n" "$*" >> "$FAKE_STATE/ssh.log"\n'
+        'case " $* " in *" ExitOnForwardFailure=yes "*) '
+        'echo "Error: remote port forwarding failed for listen port 45000" >&2; exit 255;; esac\n'
+        'exit 0\n'
+    ))
+    token = "tok-" + os.urandom(6).hex()
+    out = _run_on_host(fake_host, argv, (token + "\n").encode())
+    assert rd.TOKEN_REQUEST not in out
+    assert not (fake_host["state"] / "claude.argv").exists()
+    assert not (fake_host["state"] / "tmux.log").exists()
 
 
-def test_a_rebuilt_tmux_pane_keeps_its_cli_tools_until_it_is_closed(monkeypatch):
+def test_every_launch_of_a_tmux_pane_gets_a_new_port_and_fails_on_a_taken_one():
+    first, again = _claude_argv(_tmux_claude()), _claude_argv(_tmux_claude(resume=True))
+    assert "ExitOnForwardFailure=yes" in first and "ExitOnForwardFailure=yes" in again
+    assert first[first.index("-R") + 1] == "127.0.0.1:45000:127.0.0.1:1234"
+
+
+def test_the_tool_token_goes_when_the_ssh_exits_even_with_the_pane_on_screen(monkeypatch):
     from agent_team_backend import agent_messaging
     from agent_team_backend.mcp_server import wiring
 
     monkeypatch.setattr(wiring, "backend_port", lambda: 1234)
     monkeypatch.setattr(wiring, "_PANE_TOKENS", {})
-    monkeypatch.setattr(agent_messaging, "_ALIASES", {})
-    monkeypatch.setattr(remote_ssh, "_HELD_IDENTITIES", set())
-    tool_id = f"ssh-{_TMUX}"
+    monkeypatch.setattr(remote_ssh, "_TOKEN_PANES", set())
     remote = {**_SPEC, "cli": "claude", "sessionId": "0f0e", "tmuxSession": _TMUX}
-    sess = _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": remote, "metadata": {"workspace_path": "/w"}})
-    command = sess.terminals.created[0]["command"]
-    assert f"pane%3D{tool_id}" in command[-1] or f"pane={tool_id}" in command[-1]
-    assert command[command.index("-R") + 1].startswith(f"127.0.0.1:{remote_ssh.tmux_port(remote)}:")
-    assert agent_messaging.resolve_alias(tool_id) == "p1"
-    token = wiring.bound_pane_token(tool_id)
-    assert token
-    # The pane is rebuilt under a new id: the old one is forgotten, which
-    # releases the tokens of every id that named it.
-    agent_messaging._forget_aliases_to("p1")
-    agent_messaging._release_caller_tokens(["p1", tool_id])
-    assert wiring.bound_pane_token(tool_id) == token
-    _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": {**remote, "resume": True},
-                                    "metadata": {"workspace_path": "/w"}, "pane_id": "p2"})
-    assert wiring.bound_pane_token(tool_id) == token
-    assert agent_messaging.resolve_alias(tool_id) == "p2"
+    sess = _create(monkeypatch, _TRUSTED, {"agent_key": "remote", "remote": remote})
+    assert sess.sent[-1]["ok"] is True
+    assert wiring.bound_pane_token("p1")
+    # The pane is still on screen, which would keep its token for a local
+    # CLI; a CLI left in tmux would call a port anyone could bind meanwhile.
+    monkeypatch.setattr(agent_messaging, "names_pane", lambda _pid: True)
+    wiring.release_pane_token("p1")
+    assert wiring.bound_pane_token("p1")
+    remote_ssh.revoke_exited("p1")
+    assert wiring.bound_pane_token("p1") == ""
+    # A terminal pane or a local pane is left as it was.
+    wiring.caller_token("local")
+    remote_ssh.revoke_exited("local")
+    assert wiring.bound_pane_token("local")
 
-    async def run_end(argv: list[str]) -> tuple[int, str, str]:
-        return 255, "", "unreachable"
 
-    monkeypatch.setattr(remote_devcontainer_ws, "_run_ssh", run_end)
-    agent_messaging._forget_aliases_to("p2")
-    sock = _EndSock()
-    asyncio.run(remote_devcontainer_ws.remote_ssh_end_session(sock, "m", "remote_ssh.end_session", {"remote": remote}))
-    # Closed: the token goes even though the host could not be reached.
-    assert sock.sent[-1]["payload"] == {"ended": False}
-    assert wiring.bound_pane_token(tool_id) == "" and not remote_ssh.holds_identity(tool_id)
+def test_a_terminal_exit_revokes_an_ssh_panes_token():
+    source = (Path(__file__).resolve().parents[1] / "agent_team_backend" / "app.py").read_text(encoding="utf-8")
+    exit_branch = source[source.index('if event.get("type") == "terminal.exit" and isinstance(payload, dict):'):]
+    assert "remote_ssh.revoke_exited(str(exit_pane_id))" in exit_branch[:1500]

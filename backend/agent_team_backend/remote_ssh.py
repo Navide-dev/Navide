@@ -119,44 +119,26 @@ _TMUX_SESSION_RE = re.compile(r"^navide-[0-9a-f]{16,32}$")
 # Navide's own tmux server socket on the host, apart from the user's.
 TMUX_SOCKET = "navide"
 
-# A CLI in a tmux session outlives the pane: every reconnect, rebuild and
-# restore makes a new pane id, while the CLI keeps the tool URL and token it
-# was started with. So such a CLI is wired under an id of its session's
-# (tool_identity) and a tunnel port of its session's (tmux_port), both the
-# same on every launch. The id is an alias of whichever pane shows the
-# session now, and its token stays minted while the session is held here
-# (until the pane is closed or Navide quits). Memory only: a Navide restart
-# mints a new token, which the running CLI does not have.
-_HELD_IDENTITIES: set[str] = set()
+# Pane ids whose CLI holds a tool token on the host. The token is revoked as
+# soon as the pane's ssh exits, even while the pane stays on screen: a CLI
+# left running in a tmux session keeps calling its tunnel port while the
+# connection is down, and whoever binds that port on the host then would
+# be handed the token (revoke_exited).
+_TOKEN_PANES: set[str] = set()
 
 
-def tool_identity(spec: Mapping[str, Any]) -> str:
-    """The id a tmux pane's CLI presents to Navide's tools, "" without tmux."""
-    name = str(spec.get("tmuxSession") or "")
-    return f"ssh-{name}" if _TMUX_SESSION_RE.match(name) else ""
+def note_token_pane(pane_id: str) -> None:
+    _TOKEN_PANES.add(pane_id)
 
 
-def tmux_port(spec: Mapping[str, Any]) -> int:
-    """The host-side tunnel port of a tmux pane: fixed by its session name."""
-    import hashlib
+def revoke_exited(pane_id: str) -> None:
+    """The ssh of ``pane_id`` exited: revoke its CLI's tool token now."""
+    if pane_id in _TOKEN_PANES:
+        from .mcp_server import wiring
 
-    low, high = rd.REMOTE_PORT_RANGE
-    digest = hashlib.sha256(str(spec["tmuxSession"]).encode("ascii")).digest()
-    return low + int.from_bytes(digest[:4], "big") % (high - low + 1)
+        _TOKEN_PANES.discard(pane_id)
+        wiring.revoke_pane_token(pane_id)
 
-
-def hold_identity(identity: str) -> None:
-    _HELD_IDENTITIES.add(identity)
-
-
-def release_identity(identity: str) -> None:
-    _HELD_IDENTITIES.discard(identity)
-
-
-def holds_identity(identity: str) -> bool:
-    """Whether a tmux pane's CLI may still present ``identity`` (its token is
-    kept across the pane being rebuilt under a new id)."""
-    return identity in _HELD_IDENTITIES
 
 # A user name ssh accepts without quoting; a leading "-" would be an option.
 _USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
@@ -480,10 +462,8 @@ def cli_pane_argv(
         port = remote_port
         tunnel = [
             # A taken remote port fails the connection rather than leaving
-            # the pane without its tools. Not for a tmux pane: its port is
-            # fixed, and a host still holding it for a dropped connection
-            # must not keep the pane from reattaching to work that runs.
-            *([] if spec.get("tmuxSession") else ["-o", "ExitOnForwardFailure=yes"]),
+            # the pane without its tools, or its token for whoever holds it.
+            "-o", "ExitOnForwardFailure=yes",
             "-R", f"127.0.0.1:{remote_port}:127.0.0.1:{local_port}",
         ]
     script = cli_script(spec, pane_id=pane_id, remote_port=port, nonce=nonce)

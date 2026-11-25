@@ -1273,6 +1273,11 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
             # The CLI holding the pane's /plan-mcp token is gone; the token
             # goes too unless the pane is still on screen (see wiring).
             mcp_server_wiring.release_pane_token(str(exit_pane_id))
+            # An SSH pane's CLI may outlive its connection in a tmux session;
+            # its token goes with the connection (see remote_ssh).
+            from . import remote_ssh
+
+            remote_ssh.revoke_exited(str(exit_pane_id))
             # A CLI that exits with subagents still running never reports their
             # stops, so the count would stay above zero for a pane id that no
             # longer has a CLI behind it.

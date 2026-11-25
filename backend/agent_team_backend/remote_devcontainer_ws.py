@@ -329,8 +329,7 @@ async def remote_ssh_set_session(session: "Session", msg_id: str, msg_type: str,
 async def remote_ssh_end_session(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The user closed an SSH pane that ran in a tmux session on the host:
     one BatchMode ssh call ends that session, so nothing is left running
-    there, and the tool token of the CLI in it is revoked. Only to a trusted
-    target, like the pane itself. ``ended`` is False
+    there. Only to a trusted target, like the pane itself. ``ended`` is False
     when the host could not be reached that way (a key that needs a
     passphrase, say); the session then stays until it ends on its own."""
     from . import remote_ssh
@@ -345,13 +344,6 @@ async def remote_ssh_end_session(session: "Session", msg_id: str, msg_type: str,
     except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
         return
-    # The pane is closed: its CLI's tool token goes now, whether or not the
-    # host can be reached to end the session.
-    from .mcp_server import wiring
-
-    tool_id = remote_ssh.tool_identity(spec)
-    remote_ssh.release_identity(tool_id)
-    wiring.release_pane_token(tool_id)
     if not remote_ssh.is_trusted(settings, spec):
         await session.send_json(make_error(
             msg_id, msg_type, "REMOTE_UNTRUSTED", "connect to this host from the SSH Remote dialog first",
@@ -390,15 +382,12 @@ async def create_ssh_pane(
         if str(payload.get("agent_key") or "") != agent_key:
             raise remote_ssh.SshTargetError(f"an SSH Remote pane running {spec['cli']} has agent_key {agent_key!r}")
         nonce = remote_ssh.new_nonce()
-        # A CLI in a tmux session is wired under its session's id and port,
-        # which every later launch of the pane reuses (see tool_identity).
-        tool_id = remote_ssh.tool_identity(spec) if spec["cli"] in remote_ssh.MCP_CLIS else ""
         if agent_key == "terminal":
             argv = remote_ssh.shell_argv(spec)
         else:
             argv = remote_ssh.cli_pane_argv(
-                spec, pane_id=tool_id or pane_id, local_port=wiring.backend_port(),
-                remote_port=remote_ssh.tmux_port(spec) if tool_id else rd.pick_remote_port(), nonce=nonce,
+                spec, pane_id=pane_id, local_port=wiring.backend_port(),
+                remote_port=rd.pick_remote_port(), nonce=nonce,
             )
     except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
@@ -441,14 +430,10 @@ async def create_ssh_pane(
     )
     transaction["term_id"] = term.id
     app._PTY_OWNERS[term.id] = session
-    if tool_id:
-        from . import agent_messaging
-
-        remote_ssh.hold_identity(tool_id)
-        agent_messaging.add_aliases(pane_id, [tool_id], str(metadata.get("workspace_path") or ""))
     if spec["cli"] in remote_ssh.MCP_CLIS:
+        remote_ssh.note_token_pane(pane_id)
         feeder = rd.TokenFeeder(
-            wiring.spawn_token(tool_id or pane_id),
+            wiring.spawn_token(pane_id),
             lambda text: session.terminals.write(term.id, text),
         )
         term.output_taps.append(feeder.feed)
