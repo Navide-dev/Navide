@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 from sqlmodel import Session, select
 
-from . import audit, qualification, review
+from . import audit, qualification, review, review_notify
 from .account_auth import SCOPE_PUBLISHER, Bearer, BearerError, require_bearer
 from .models import Extension, ExtensionVersion, Publisher
 from .plugin_contract.disclosure_scan_contract import card_risk_level, declared_vs_scanned
@@ -228,6 +228,7 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
                 status = 422 if exc.code == "APPLICATION_INVALID" else 409
                 extra = {"field": exc.field} if exc.field else {}
                 raise _error(status, exc.code, exc.message, **extra) from exc
+            review_notify.notify(request, review_notify.DEVELOPER, "via api")
             return JSONResponse(
                 {"status": row.status, "submitted_at": _iso(row.submitted_at)}, status_code=201, headers=_NO_STORE
             )
@@ -420,6 +421,7 @@ def register_developer_routes(router: APIRouter, *, page, guarded, require_viewe
                 qualification.submit_application(session, viewer.member_id, fields=fields, source="web")
             except qualification.QualificationError as exc:
                 return apply_page(request, viewer, {"error": exc.message, "values": fields}, status=400)
+        review_notify.notify(request, review_notify.DEVELOPER, "via web")
         return redirect(request, "/developer/apply")
 
     # -- admin queue: website ---------------------------------------------

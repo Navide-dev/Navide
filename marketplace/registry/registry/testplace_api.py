@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import or_
 from sqlmodel import Session, select
 
-from . import audit, testplace
+from . import audit, review_notify, testplace
 from .account_auth import BearerError, require_bearer, require_member
 from .blocklist import digest_blocked
 from .models import Extension, ExtensionVersion, Publisher
@@ -416,6 +416,7 @@ def register_testplace_routes(
 
     @app.post("/api/testplace/{namespace}/{name}/codes", status_code=201)
     def developer_code(
+        request: Request,
         namespace: str,
         name: str,
         max_testers: int = Body(..., embed=True),
@@ -434,6 +435,8 @@ def register_testplace_routes(
             plain, row = testplace.create_code(session, extension, max_testers)
         except testplace.TestplaceError as exc:
             raise _http(exc) from exc
+        if row.review_status == testplace.PENDING:
+            review_notify.notify(request, review_notify.TESTPLACE_CODE, extension.identity)
         return {**code_view(session, row), "code": plain}
 
     @app.post("/api/testplace/{namespace}/{name}/codes/{code_id}/revoke")
@@ -484,6 +487,7 @@ def register_testplace_routes(
 
     @app.post("/api/testplace/{namespace}/{name}/versions/{version}/promote")
     def developer_promote(
+        request: Request,
         namespace: str,
         name: str,
         version: str,
@@ -501,6 +505,7 @@ def register_testplace_routes(
             rows = testplace.request_promotion(session, extension, version)
         except testplace.TestplaceError as exc:
             raise _http(exc) from exc
+        review_notify.notify(request, review_notify.PROMOTION, f"{extension.identity}@{version}")
         return {"version": version, "targets": [r.target for r in rows], "promotion_status": "requested"}
 
     # -- admins ----------------------------------------------------------------

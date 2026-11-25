@@ -626,6 +626,9 @@ approved by default.
 | `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
 | `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
 | `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` | _(unset)_ | Path to Navide-Server's assertion public keys, `{"keys": [{"kid": "20261114", "public_key": "<Ed25519 SPKI PEM>"}]}`; list two during a rotation. Unset or missing turns `/api/cli/cloud-exchange` off (`404`); a malformed file, a bad `kid` (`[A-Za-z0-9_-]{1,64}`) or a non-Ed25519 key stops startup. Not secret, but kept out of Git. |
+| `REGISTRY_REVIEW_NOTIFY_TO` | _(unset)_ | Admin address that gets one email per item entering a review queue (listing version, Testplace public code, Testplace promotion, developer application). The email holds only the kind, the package id, the submission time and the admin page link. Set with the next two, or leave all three unset to turn the email off. |
+| `REGISTRY_REVIEW_NOTIFY_FROM` | _(unset)_ | Sender address; its domain must be a verified Amazon SES identity. |
+| `REGISTRY_SES_REGION` | _(unset)_ | SES region. Credentials come from the host's instance role through boto3 (IMDSv2, so the hop limit must be at least 2 for a container); no key is configured. A failed send is logged and never affects the submission. |
 
 ## Seams left for later Phase 3 todos
 

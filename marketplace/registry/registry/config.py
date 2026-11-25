@@ -38,6 +38,9 @@ ENV_LEGACY_HOSTS = "REGISTRY_LEGACY_HOSTS"
 ENV_LEGACY_REDIRECT_TO = "REGISTRY_LEGACY_REDIRECT_TO"
 ENV_LEGACY_ROBOTS_DISALLOW = "REGISTRY_LEGACY_ROBOTS_DISALLOW"
 ENV_CLOUD_ASSERTION_KEYS_FILE = "REGISTRY_CLOUD_ASSERTION_KEYS_FILE"
+ENV_REVIEW_NOTIFY_TO = "REGISTRY_REVIEW_NOTIFY_TO"
+ENV_REVIEW_NOTIFY_FROM = "REGISTRY_REVIEW_NOTIFY_FROM"
+ENV_SES_REGION = "REGISTRY_SES_REGION"
 CLOUD_ASSERTION_KID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 DEFAULT_LEGACY_REDIRECT_TO = "https://navide.dev/"
 _ORIGIN_PATTERN = re.compile(r"^https?://[a-z0-9.-]+(?::[0-9]{1,5})?$")
@@ -132,6 +135,16 @@ class Settings:
     """(kid, Ed25519 SPKI PEM) pairs that may sign Navide-Server sign-in
     assertions (cloud_assertion.py). Empty turns `/api/cli/cloud-exchange`
     off (404). Two entries during a key rotation."""
+    review_notify_to: str | None = None
+    """Admin address that gets one email per item entering a review queue
+    (review_notify.py). Unset, with review_notify_from and ses_region, turns
+    the email off; the three are set together."""
+    review_notify_from: str | None = None
+    ses_region: str | None = None
+
+    @property
+    def review_notify_enabled(self) -> bool:
+        return self.review_notify_to is not None
 
     @property
     def host_routing_enabled(self) -> bool:
@@ -184,6 +197,7 @@ class Settings:
         self._validate_host_routing()
         self._validate_auth_upstream()
         self._validate_cloud_assertion_keys()
+        self._validate_review_notify()
         if self.trust_profile != TRUST_PROFILE_OFFICIAL:
             return
         if self.verifier_kind != VERIFIER_ED25519:
@@ -198,6 +212,11 @@ class Settings:
             raise ValueError("official registry cannot allow open admin endpoints")
         if not self.cookie_secure:
             raise ValueError("official registry requires Secure cookies")
+
+    def _validate_review_notify(self) -> None:
+        values = (self.review_notify_to, self.review_notify_from, self.ses_region)
+        if any(v is not None for v in values) and None in values:
+            raise ValueError("review_notify_to, review_notify_from and ses_region must be set together")
 
     def _validate_cloud_assertion_keys(self) -> None:
         kids = [kid for kid, _ in self.cloud_assertion_keys]
@@ -538,5 +557,8 @@ def load_settings() -> Settings:
         or DEFAULT_LEGACY_REDIRECT_TO,
         legacy_robots_disallow=_env_bool(ENV_LEGACY_ROBOTS_DISALLOW, False),
         cloud_assertion_keys=_load_cloud_assertion_keys(os.environ.get(ENV_CLOUD_ASSERTION_KEYS_FILE)),
+        review_notify_to=(os.environ.get(ENV_REVIEW_NOTIFY_TO) or "").strip() or None,
+        review_notify_from=(os.environ.get(ENV_REVIEW_NOTIFY_FROM) or "").strip() or None,
+        ses_region=(os.environ.get(ENV_SES_REGION) or "").strip() or None,
         **trust_config,
     )
