@@ -187,7 +187,8 @@ async def test_a_busy_pane_is_switched_once_idle(env: Env, monkeypatch: pytest.M
     env.fake.states["pane-1"] = {"exists": True, "busy": False, "display_status": "idle"}
     await _until(lambda: len(switches.calls) == 2 and any("✅" in t for t in env.tg.texts()))
     assert switches.calls[-1] == ("pane-1", "sonnet", "", "telegram:alice")
-    assert env.m._model_waits == {}
+    # The wait task reports before its `finally` drops the entry.
+    await _until(lambda: env.m._model_waits == {})
 
 
 async def test_a_wait_times_out_and_says_so(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
