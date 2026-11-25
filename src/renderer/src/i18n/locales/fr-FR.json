@@ -8260,6 +8260,7 @@
     "mcp-restarting": "Redémarrage de MCP…",
     "mcp-restart-done": "MCP redémarré ; aucun panneau interrompu",
     "mcp-restart-failed": "Échec du redémarrage de MCP : {reason}",
+    "mcp-restart-unsupported": "Sous Windows, redémarrer MCP seul n'est pas encore pris en charge. Utilisez « Redémarrer tout le backend » ci-dessous.",
     "mcp-full-restart": "Redémarrer tout le backend…",
     "mcp-full-restart-confirm": "Redémarrer le backend interrompt les panneaux de toutes les fenêtres : leurs CLI et terminaux se ferment puis rouvrent sur leur conversation précédente, et tout tour en cours est coupé. Panneaux de cette fenêtre : {panes}",
     "mcp-full-restart-none": "cette fenêtre n'a aucun panneau",

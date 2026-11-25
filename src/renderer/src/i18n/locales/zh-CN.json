@@ -8260,6 +8260,7 @@
     "mcp-restarting": "正在重启 MCP…",
     "mcp-restart-done": "MCP 已重启，分格都没有中断",
     "mcp-restart-failed": "MCP 重启失败：{reason}",
+    "mcp-restart-unsupported": "Windows 暂不支持只重启 MCP；可使用下方的“重启整个后端”。",
     "mcp-full-restart": "重启整个后端…",
     "mcp-full-restart-confirm": "重启后端会中断所有窗口的分格：CLI 和终端都会被结束，再用原来的对话重新打开，进行中的回合会中断。本窗口受影响的分格：{panes}",
     "mcp-full-restart-none": "本窗口没有分格",

@@ -8260,6 +8260,7 @@
     "mcp-restarting": "MCP 다시 시작 중…",
     "mcp-restart-done": "MCP를 다시 시작했습니다. 중단된 창은 없습니다",
     "mcp-restart-failed": "MCP 다시 시작 실패: {reason}",
+    "mcp-restart-unsupported": "Windows에서는 아직 MCP만 다시 시작할 수 없습니다. 아래의 ‘백엔드 전체 다시 시작’을 사용하세요.",
     "mcp-full-restart": "백엔드 전체 다시 시작…",
     "mcp-full-restart-confirm": "백엔드를 다시 시작하면 모든 창이 중단됩니다. CLI와 터미널이 종료된 뒤 이전 대화로 다시 열리며, 진행 중인 턴은 끊깁니다. 이 창에서 영향을 받는 창: {panes}",
     "mcp-full-restart-none": "이 창에는 창이 없습니다",

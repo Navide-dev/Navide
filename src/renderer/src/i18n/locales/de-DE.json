@@ -8260,6 +8260,7 @@
     "mcp-restarting": "MCP wird neu gestartet…",
     "mcp-restart-done": "MCP neu gestartet; kein Bereich wurde unterbrochen",
     "mcp-restart-failed": "MCP-Neustart fehlgeschlagen: {reason}",
+    "mcp-restart-unsupported": "Nur MCP neu zu starten wird unter Windows noch nicht unterstützt. Verwenden Sie unten „Ganzes Backend neu starten“.",
     "mcp-full-restart": "Ganzes Backend neu starten…",
     "mcp-full-restart-confirm": "Ein Backend-Neustart unterbricht die Bereiche in allen Fenstern: Ihre CLIs und Terminals werden beendet und mit der bisherigen Unterhaltung neu geöffnet, ein laufender Zug bricht ab. Bereiche in diesem Fenster: {panes}",
     "mcp-full-restart-none": "dieses Fenster hat keine Bereiche",

@@ -8260,6 +8260,7 @@
     "mcp-restarting": "Restarting MCP…",
     "mcp-restart-done": "MCP restarted; no pane was interrupted",
     "mcp-restart-failed": "MCP restart failed: {reason}",
+    "mcp-restart-unsupported": "Restarting only MCP is not supported on Windows yet. Use “Restart the whole backend” below.",
     "mcp-full-restart": "Restart the whole backend…",
     "mcp-full-restart-confirm": "Restarting the backend interrupts the panes in every window: their CLIs and terminals end and reopen on their earlier conversations, and any turn in progress is cut off. Panes in this window: {panes}",
     "mcp-full-restart-none": "this window has no panes",
