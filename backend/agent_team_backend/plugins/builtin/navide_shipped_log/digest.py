@@ -189,7 +189,7 @@ async def run(workspace: str, *, manual: bool = False, now: datetime | None = No
         if manager is None:
             return {"status": "skipped", "reason": "no_chat", "detail": "chat channels are not running"}
         sender = manager.notify_shipped_digest
-    sent = await sender(text)
+    sent = await sender(text, workspace)
     if not sent:
         return {"status": "skipped", "reason": "no_chat", "detail": "no direct chat is bound"}
     return {"status": "ok", "detail": f"sent to {sent} chat(s), {built['count']} item(s)"}
