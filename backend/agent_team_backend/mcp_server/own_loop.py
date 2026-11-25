@@ -31,6 +31,18 @@ port, and between that and a rebind any local process could take the port
 and collect the pane tokens the CLIs send to it. With the socket kept open
 the port is never free, and connections made while the new loop starts wait
 in its backlog.
+
+Not on Windows. A proactor loop ties a socket to its I/O completion port, and
+Windows ties every duplicate of a socket to that same port for good: the next
+loop's accept fails (WinError 87) and the listener answers nothing again.
+Binding a fresh socket to the port while the old one holds it would need
+SO_REUSEADDR, which on Windows also lets any other local process bind the port
+and take the CLIs' connections. So there ``restart`` reports
+"unsupported-platform" and changes nothing: the window still shows the red
+light and the chat still gets its notice, and the whole-backend restart stays
+the way back. On Windows the listener binds with SO_EXCLUSIVEADDRUSE (no other
+socket can share the port); elsewhere SO_REUSEADDR, which does not let a
+second socket bind a port that is listening.
 """
 
 from __future__ import annotations
@@ -38,6 +50,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -50,6 +63,10 @@ _START_TIMEOUT_S = 15.0
 _JOIN_TIMEOUT_S = 10.0
 
 _enabled = False
+
+#: Whether ``restart`` can bring the listener back on a new loop (see the
+#: module docstring: not on Windows).
+_SOFT_RESTART_SUPPORTED = sys.platform != "win32"
 
 
 @dataclass
@@ -225,7 +242,10 @@ async def start() -> int | None:
     if not _enabled or _state is not None:
         return port()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if sys.platform == "win32":
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("127.0.0.1", 0))
     sock.set_inheritable(False)
     _install_dispatch()
@@ -267,8 +287,9 @@ async def restart() -> dict[str, Any]:
     same port: the CLIs' wired URLs keep working and no PTY is touched.
 
     Returns {ok, port, joined} or {ok: False, reason}: "not-running" when
-    this run never served on its own loop (nothing to restart), "not-ready"
-    when the new loop did not come up in time."""
+    this run never served on its own loop (nothing to restart),
+    "unsupported-platform" on Windows (nothing is touched; see the module
+    docstring), "not-ready" when the new loop did not come up in time."""
     global _state, _restart_lock
     if _restart_lock is None:
         _restart_lock = asyncio.Lock()
@@ -276,6 +297,8 @@ async def restart() -> dict[str, Any]:
         old = _state
         if old is None:
             return {"ok": False, "reason": "not-running"}
+        if not _SOFT_RESTART_SUPPORTED:
+            return {"ok": False, "reason": "unsupported-platform"}
         joined = await _stop_thread(old)
         if not joined:
             # Still holding its own duplicate, but told to exit: it accepts

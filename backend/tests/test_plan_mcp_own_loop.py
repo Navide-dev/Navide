@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import threading
 import time
 import urllib.error
@@ -145,8 +146,34 @@ async def _post_off_loop(port: int, body: dict[str, Any]) -> tuple[int, Any, flo
     return await asyncio.to_thread(_post, port, body)
 
 
+#: Windows cannot restart the listener on a new loop (own_loop's docstring):
+#: there every restart test checks that it says so and changes nothing.
+WINDOWS = sys.platform == "win32"
+
+
+async def _restart_is_refused_and_nothing_breaks(served: int) -> None:
+    thread = own_loop._state.thread  # noqa: SLF001
+    assert await own_loop.restart() == {"ok": False, "reason": "unsupported-platform"}
+    assert own_loop._state.thread is thread and thread.is_alive()  # noqa: SLF001
+    assert own_loop.port() == served
+    status, document, _ = await _post_off_loop(served, _INITIALIZE)
+    assert status == 200
+    assert document["result"]["serverInfo"]["name"]
+
+
+async def test_where_restart_is_unsupported_it_says_so_and_keeps_serving(
+        served: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows' path, run on every platform."""
+    monkeypatch.setattr(own_loop, "_SOFT_RESTART_SUPPORTED", False)
+    await _restart_is_refused_and_nothing_breaks(served)
+    await _call_after_restart_tool(served)
+
+
 async def test_restart_keeps_the_port_and_answers_again(served: int) -> None:
     assert (await _post_off_loop(served, _INITIALIZE))[0] == 200
+    if WINDOWS:
+        await _restart_is_refused_and_nothing_breaks(served)
+        return
     old_thread = own_loop._state.thread  # noqa: SLF001
 
     result = await own_loop.restart()
@@ -162,9 +189,11 @@ async def test_restart_keeps_the_port_and_answers_again(served: int) -> None:
     assert plan_mcp_wiring.plan_mcp_url(4242, "p1").startswith(f"http://127.0.0.1:{served}/plan-mcp?")
 
 
-async def test_the_port_is_never_free_during_a_restart(served: int) -> None:
+@pytest.mark.parametrize("reuse_address", [False, True], ids=["plain", "so_reuseaddr"])
+async def test_the_port_is_never_free_during_a_restart(served: int, reuse_address: bool) -> None:
     """No other process can bind the port while the new loop starts: it would
-    receive the pane tokens the CLIs send."""
+    receive the pane tokens the CLIs send. Not even with SO_REUSEADDR, which
+    on Windows would share a port bound without SO_EXCLUSIVEADDRUSE."""
     import socket
 
     stop_probing = threading.Event()
@@ -174,6 +203,8 @@ async def test_the_port_is_never_free_during_a_restart(served: int) -> None:
         while not stop_probing.is_set():
             thief = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
+                if reuse_address:
+                    thief.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 thief.bind(("127.0.0.1", served))
                 took.append(1)
             except OSError:
@@ -184,8 +215,9 @@ async def test_the_port_is_never_free_during_a_restart(served: int) -> None:
     thread = threading.Thread(target=try_to_take, daemon=True)
     thread.start()
     try:
-        assert (await own_loop.restart())["ok"]
-        assert (await own_loop.restart())["ok"]
+        for _ in range(2):
+            result = await own_loop.restart()
+            assert result["ok"] is not WINDOWS, result
     finally:
         stop_probing.set()
         thread.join(5)
@@ -193,8 +225,14 @@ async def test_the_port_is_never_free_during_a_restart(served: int) -> None:
 
 
 async def test_a_tool_call_still_runs_on_the_main_loop_after_a_restart(served: int) -> None:
-    await own_loop.restart()
+    if WINDOWS:
+        await _restart_is_refused_and_nothing_breaks(served)
+    else:
+        assert (await own_loop.restart())["ok"]
+    await _call_after_restart_tool(served)
 
+
+async def _call_after_restart_tool(served: int) -> None:
     def after_restart() -> str:
         """Test-only tool."""
         return "back"
@@ -217,6 +255,9 @@ async def test_restart_brings_back_a_loop_that_died(served: int) -> None:
     state.thread.join(10)
     assert not state.thread.is_alive()
 
+    if WINDOWS:
+        assert await own_loop.restart() == {"ok": False, "reason": "unsupported-platform"}
+        return
     assert (await own_loop.restart())["ok"]
     assert (await _post_off_loop(served, _INITIALIZE))[0] == 200
 
@@ -235,5 +276,6 @@ async def test_a_connected_mcp_client_keeps_working_across_a_restart(served: int
     async with streamablehttp_client(url) as (read, write, _), ClientSession(read, write) as session:
         await session.initialize()
         assert (await session.list_tools()).tools
-        assert (await own_loop.restart())["ok"]
+        result = await own_loop.restart()
+        assert result["ok"] is not WINDOWS, result
         assert (await session.list_tools()).tools
