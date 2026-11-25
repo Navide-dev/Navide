@@ -69,6 +69,20 @@ describe('App – SSH Remote panes', () => {
     expect(record).toContain('auto_name: pane.autoName,')
   })
 
+  it('runs each pane in its own tmux session, kept across reconnects and ended on close', () => {
+    // Only when the dialog's box was ticked (off by default: without it the
+    // pane is the 0.2.48 one). Chosen once when the pane opens; the rebuild
+    // and restore paths copy the whole spec, so they attach to the same session.
+    const connected = functionBody('onSshRemoteConnected')
+    expect(connected).toContain("tmuxSession: useTmux ? newSshTmuxSession() : '',")
+    expect(connected).toContain('const { useTmux, ...fields } = target')
+    expect(functionBody('savedSshTarget')).toContain('tmuxSession: sshTmuxSessionField(r.tmuxSession),')
+    // Only a real close ends it; a rebuild (markRemoved: false, keepInList)
+    // or a workspace close keeps it for the reconnect.
+    const kill = functionBody('onKill')
+    expect(kill).toMatch(/if \(markRemoved && !keepInList && pane\?\.sshRemote\?\.tmuxSession\) \{\s*void sendQuiet\('remote_ssh\.end_session', \{ remote: \{ kind: 'ssh', \.\.\.pane\.sshRemote \} \}\)/)
+  })
+
   it('a restore never opens an SSH pane by itself', () => {
     // Scope, interrupted-at-launch and fresh batches all skip it; the user
     // opens it, as with a local terminal pane.

@@ -325,6 +325,37 @@ async def remote_ssh_set_session(session: "Session", msg_id: str, msg_type: str,
     await session.send_json(make_response(msg_id, msg_type, {"recorded": recorded}))
 
 
+@handler("remote_ssh.end_session")
+async def remote_ssh_end_session(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user closed an SSH pane that ran in a tmux session on the host:
+    one BatchMode ssh call ends that session, so nothing is left running
+    there. Only to a trusted target, like the pane itself. ``ended`` is False
+    when the host could not be reached that way (a key that needs a
+    passphrase, say); the session then stays until it ends on its own."""
+    from . import remote_ssh
+
+    settings = await _settings()
+    if not rd.enabled(settings):
+        await session.send_json(make_error(msg_id, msg_type, "REMOTE_DISABLED", "remote panes are off"))
+        return
+    try:
+        spec = remote_ssh.parse_spec(payload.get("remote"))
+        argv = remote_ssh.end_session_argv(spec)
+    except (remote_ssh.SshTargetError, rd.RemoteSpecError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    if not remote_ssh.is_trusted(settings, spec):
+        await session.send_json(make_error(
+            msg_id, msg_type, "REMOTE_UNTRUSTED", "connect to this host from the SSH Remote dialog first",
+            {"host": spec["host"]},
+        ))
+        return
+    code, _out, err = await _run_ssh(argv)
+    if code != 0:
+        log.info("ssh tmux session not ended on %s: exit %s", spec["host"], code)
+    await session.send_json(make_response(msg_id, msg_type, {"ended": code == 0}))
+
+
 async def create_ssh_pane(
     session: "Session",
     msg_id: str,
@@ -400,6 +431,7 @@ async def create_ssh_pane(
     transaction["term_id"] = term.id
     app._PTY_OWNERS[term.id] = session
     if spec["cli"] in remote_ssh.MCP_CLIS:
+        remote_ssh.note_token_pane(pane_id)
         feeder = rd.TokenFeeder(
             wiring.spawn_token(pane_id),
             lambda text: session.terminals.write(term.id, text),

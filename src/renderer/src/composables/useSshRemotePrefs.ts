@@ -39,6 +39,24 @@ export interface SshRemoteTarget {
   /** The CLI's own session id on the host, once known ('' or absent before):
    *  a reconnect or restore resumes exactly this conversation. */
   sessionId?: string
+  /** The tmux session the pane runs in on the host (`navide-` and hex, one
+   *  per pane, chosen when the pane is first opened); a reconnect or restore
+   *  attaches to it when the host has tmux. '' or absent: none. */
+  tmuxSession?: string
+  /** From the dialog only: the user ticked "run in tmux" (off by default).
+   *  Never sent to the backend or recorded; tmuxSession is what is kept. */
+  useTmux?: boolean
+}
+
+/** A new pane's tmux session name (remote_ssh._TMUX_SESSION_RE). */
+export function newSshTmuxSession(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return 'navide-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** A saved tmux session name, or '' for anything else. */
+export function sshTmuxSessionField(value: unknown): string {
+  return typeof value === 'string' && /^navide-[0-9a-f]{16,32}$/.test(value) ? value : ''
 }
 
 /** Copies the four fields and nothing else; null for a malformed row. */

@@ -48,6 +48,9 @@ const port = ref<number | string>(SSH_DEFAULT_PORT)
 const keyPath = ref('')
 const remoteDir = ref(SSH_DEFAULT_DIR)
 const cli = ref<string>(SSH_TERMINAL)
+/** Run the pane in a tmux session on the host (off by default): the work
+ *  survives a dropped connection, but a reattached CLI has no Navide tools. */
+const useTmux = ref(false)
 const recent = ref<SshRemoteTarget[]>([])
 const busy = ref(false)
 const error = ref('')
@@ -80,6 +83,7 @@ function reset(): void {
   keyPath.value = ''
   remoteDir.value = SSH_DEFAULT_DIR
   cli.value = SSH_TERMINAL
+  useTmux.value = false
   error.value = ''
   reason.value = null
 }
@@ -102,6 +106,7 @@ const target = computed<SshRemoteTarget | null>(() => {
     keyPath: keyPath.value.trim(),
     dir: remoteDir.value.trim() || SSH_DEFAULT_DIR,
     cli: cli.value,
+    useTmux: useTmux.value,
   }
 })
 
@@ -179,13 +184,18 @@ async function connect(force = false): Promise<void> {
               <option v-for="o in cliOptions" :key="o.key" :value="o.key">{{ o.label }}</option>
             </select>
           </label>
+          <label class="check wide">
+            <input v-model="useTmux" type="checkbox" data-testid="ssh-tmux" />
+            <span>{{ $t('sshRemote.tmux-label') }}</span>
+          </label>
+          <p v-if="useTmux" class="note wide" data-testid="ssh-tmux-note">{{ $t('sshRemote.tmux-note') }}</p>
           <button type="submit" hidden />
         </form>
 
         <div v-if="isCli" class="cli-notes" data-testid="ssh-cli-notes">
           <p class="note">{{ $t('sshRemote.accounts-note', { cli: cliLabel }) }}</p>
           <p class="note" data-testid="ssh-tools-note">{{ SSH_MCP_CLIS.includes(cli) ? $t('sshRemote.tools-note', { cli: cliLabel }) : $t('sshRemote.no-tools-note', { cli: cliLabel }) }}</p>
-          <p class="note">{{ SSH_RESUMABLE_CLIS.includes(cli) ? $t('sshRemote.resume-note') : $t('sshRemote.fresh-note', { cli: cliLabel }) }}</p>
+          <p v-if="!useTmux" class="note" data-testid="ssh-resume-note">{{ SSH_RESUMABLE_CLIS.includes(cli) ? $t('sshRemote.resume-note') : $t('sshRemote.fresh-note', { cli: cliLabel }) }}</p>
         </div>
 
         <div class="field">
@@ -247,6 +257,9 @@ h2 { margin: 0; font-size: 16px; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 0 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; min-width: 0; }
 .field.wide { grid-column: 1 / -1; }
+.wide { grid-column: 1 / -1; }
+.check { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px; color: var(--text-primary); cursor: pointer; }
+.check input { padding: 0; margin: 0; }
 .lb { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
 input,
 select {

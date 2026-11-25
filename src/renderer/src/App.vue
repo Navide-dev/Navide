@@ -240,7 +240,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
-import { SSH_TERMINAL, sshFailureReason, sshTargetFields, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
+import { SSH_TERMINAL, newSshTmuxSession, sshFailureReason, sshTargetFields, sshTargetLabel, sshTmuxSessionField, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -9685,6 +9685,11 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   // mcp-spawned panes are recorded on spawn, so they must be cleared on close too.
   // Gating this on origin === 'manual' left them at spawn_status 'spawned', and a
   // workspace switch resurrected them as placeholders.
+  // A closed SSH pane's tmux session on the host ends with it; a rebuild,
+  // reconnect or workspace close keeps it to attach back to.
+  if (markRemoved && !keepInList && pane?.sshRemote?.tmuxSession) {
+    void sendQuiet('remote_ssh.end_session', { remote: { kind: 'ssh', ...pane.sshRemote } })
+  }
   if (opts.markRemoved !== false && pane != null && pane.origin !== 'pipeline') {
     await sendQuiet<ProjectPayload>('manual_pane.unspawn', {
       workspace_path: pane.workspacePath,
@@ -14284,7 +14289,11 @@ function savedSshTarget(saved: { remote?: Partial<RemoteTarget> }): SshRemoteTar
   if (!r || r.kind !== 'ssh') return undefined
   const target = sshTargetFields(r)
   if (!target) return undefined
-  return { ...target, sessionId: typeof r.sessionId === 'string' ? r.sessionId : '' }
+  return {
+    ...target,
+    sessionId: typeof r.sessionId === 'string' ? r.sessionId : '',
+    tmuxSession: sshTmuxSessionField(r.tmuxSession),
+  }
 }
 
 /** A saved pane's remote target, or undefined for a local pane. */
@@ -25010,7 +25019,16 @@ async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
   const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
   const cli = target.cli || SSH_TERMINAL
   const agentKey = cli === SSH_TERMINAL ? 'terminal' : REMOTE_AGENT_KEY
-  const sshRemote: SshRemoteTarget = { ...target, cli, sessionId: cli === 'claude' ? crypto.randomUUID() : '' }
+  const { useTmux, ...fields } = target
+  const sshRemote: SshRemoteTarget = {
+    ...fields,
+    cli,
+    sessionId: cli === 'claude' ? crypto.randomUUID() : '',
+    // Only when the user asked for it: one per pane, kept across reconnects
+    // and restores, so with tmux on the host the pane attaches back to what
+    // kept running there. Without it the pane behaves as in 0.2.48.
+    tmuxSession: useTmux ? newSshTmuxSession() : '',
+  }
   const paneId = await spawnPane({
     agentKey,
     roleKey: '',
