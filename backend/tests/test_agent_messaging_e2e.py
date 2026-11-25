@@ -563,12 +563,24 @@ async def test_cli_send_and_wait_reports_a_target_that_vanishes_mid_wait(
     await _register(window_b, "pw", "worker", "/ws/beta")
     await log_activity("pw", "/ws/beta", "turn_complete", "the answer to the PREVIOUS question")
 
-    async def window_b_delivers_then_disappears() -> None:
+    async def window_b_delivers() -> None:
         payload = await _await_delivery(window_b)
         await _report_delivered(window_b, payload["msg_key"], ok=True)
-        agent_messaging.unregister("pw")
 
-    task = asyncio.create_task(window_b_delivers_then_disappears())
+    # The window closes as the wait begins, tied to the wait itself rather than
+    # to a clock. Unregistering from the delivery task instead raced the
+    # budget: a host stall longer than timeout_s (2.5 s seen on a Windows CI
+    # runner) let the wait spend it all without yielding, so the pane was
+    # still addressable at the deadline and "timeout" was the honest answer.
+    real_wait_idle = plan_mcp.cli_wait_idle
+
+    async def window_b_closes_as_the_wait_starts(*args: Any, **kwargs: Any) -> Any:
+        agent_messaging.unregister("pw")
+        return await real_wait_idle(*args, **kwargs)
+
+    monkeypatch.setattr(plan_mcp, "cli_wait_idle", window_b_closes_as_the_wait_starts)
+
+    task = asyncio.create_task(window_b_delivers())
     result = await plan_mcp.cli_send_and_wait(
         "beta/worker", "run the tests", _ctx("pa"), timeout_s=1.0
     )
