@@ -126,14 +126,17 @@ async def test_a_run_sends_the_masked_chat_rendering(env) -> None:
     env.book.record_detection(env.ws, at=at + 2, pane="p", vendor="claude", rule="npm-publish",
                               excerpt="npm publish", ok=True)
     sent: list[str] = []
+    scopes: list[str] = []
 
-    async def sender(text: str) -> int:
+    async def sender(text: str, workspace: str) -> int:
         sent.append(text)
+        scopes.append(workspace)
         return 2
 
     outcome = await digest.run(env.ws, now=NOW, book=env.book, sender=sender)
     assert outcome == {"status": "ok", "detail": "sent to 2 chat(s), 2 item(s)"}
     [text] = sent
+    assert scopes == [digest._canonical(env.ws)]  # only that workspace's chats
     assert text.startswith("📋 proj｜每日上線摘要")
     assert _fake_email() not in text and "o***@dealpilot.example" in text
     assert "SMTP relay switched" not in text and "正式機設定變更 1 筆" in text
@@ -142,7 +145,7 @@ async def test_a_run_sends_the_masked_chat_rendering(env) -> None:
 
 
 async def test_empty_days_skip_unless_asked(env) -> None:
-    async def sender(text: str) -> int:
+    async def sender(text: str, workspace: str) -> int:
         return 1
 
     assert (await digest.run(env.ws, now=NOW, book=env.book, sender=sender))["reason"] == "empty"
@@ -152,7 +155,7 @@ async def test_empty_days_skip_unless_asked(env) -> None:
 
 
 async def test_no_chat_and_plugin_off_are_skips(env, monkeypatch: pytest.MonkeyPatch) -> None:
-    async def nobody(text: str) -> int:
+    async def nobody(text: str, workspace: str) -> int:
         return 0
 
     assert (await digest.run(env.ws, manual=True, now=NOW, book=env.book, sender=nobody))["reason"] == "no_chat"
@@ -161,12 +164,14 @@ async def test_no_chat_and_plugin_off_are_skips(env, monkeypatch: pytest.MonkeyP
     assert (await digest.run(env.ws + "-gone", now=NOW, book=env.book))["reason"] == "workspace_gone"
 
 
-async def test_the_manager_sends_each_direct_chat_once() -> None:
+async def test_the_manager_sends_each_direct_chat_of_the_workspace_once() -> None:
+    from types import MethodType
+
     from agent_team_backend.channels.manager import ChannelManager
 
-    def binding(key: str, kind: str) -> Any:
+    def binding(key: str, kind: str, pane: str) -> Any:
         return SimpleNamespace(location=lambda: SimpleNamespace(key=lambda: key, name=key), platform="telegram",
-                               kind=kind)
+                               kind=kind, pane_id=pane, account="default")
 
     sent: list[str] = []
 
@@ -175,12 +180,15 @@ async def test_the_manager_sends_each_direct_chat_once() -> None:
             raise RuntimeError("down")
         sent.append(location.name)
 
+    workspaces = {"p1": "/ws/a", "p2": "/ws/a", "other": "/ws/b"}
     fake = SimpleNamespace(
-        store=SimpleNamespace(bindings=lambda: [binding("a", "direct"), binding("a", "direct"),
-                                                binding("g", "group"), binding("broken", "direct"),
-                                                binding("b", "direct")]),
+        store=SimpleNamespace(bindings=lambda: [binding("a", "direct", "p1"), binding("a", "direct", "p2"),
+                                                binding("g", "group", "p1"), binding("broken", "direct", "p1"),
+                                                binding("b", "direct", "p2"), binding("x", "direct", "other")]),
         _chat_kind=lambda b: b.kind,
+        _seams=SimpleNamespace(resolve_pane=lambda p: p, pane_workspace=lambda p: workspaces.get(p, "")),
         mirror=SimpleNamespace(send=send),
     )
-    assert await ChannelManager.notify_shipped_digest(fake, "digest") == 2
-    assert sent == ["a", "b"]
+    fake._workspace_chats = MethodType(ChannelManager._workspace_chats, fake)
+    assert await ChannelManager.notify_shipped_digest(fake, "digest", "/ws/a") == 2
+    assert sent == ["a", "b"]  # never "x", another workspace's chat

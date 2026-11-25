@@ -4320,31 +4320,52 @@ class ChannelManager:
             log.warning("channels: a share-link notice to %s failed: %s", loc.platform,
                         share_cmds.mask_links(str(exc)))
 
-    async def notify_plugin_paused(self, plugin_id: str, rule: str) -> None:
-        """Plan P5: every bound direct chat once, in the user's language."""
-        lang = prompt_skills.language(await self._ui_settings())
-        text = quick_menu.text(lang, "plugins_auto_paused", id=plugin_id, reason=quick_menu.text(lang, f"plugins_rule_{rule}"))
+    def _owner_chats(self) -> list[Binding]:
+        """Where a notice about no one pane goes: the direct chats of the main bot
+        (account "default") only, never every bot. Each bot is bound to one project,
+        some to a client's, and a direct chat is not always the user's (2026-11-25: a
+        pane's MCP notice reached every bot, client bots included). None: not sent."""
         seen: set[str] = set()
+        out: list[Binding] = []
         for b in self.store.bindings():
             key = b.location().key()
-            if key in seen or self._chat_kind(b) != "direct":
+            if b.account == DEFAULT_ACCOUNT and key not in seen and self._chat_kind(b) == "direct":
+                seen.add(key)
+                out.append(b)
+        return out
+
+    def _workspace_chats(self, workspace: str) -> list[Binding]:
+        """The direct chats bound to a pane of ``workspace``, once each."""
+        want = os.path.realpath(workspace) if workspace else ""
+        seen: set[str] = set()
+        out: list[Binding] = []
+        for b in self.store.bindings():
+            key = b.location().key()
+            if not want or key in seen or self._chat_kind(b) != "direct":
                 continue
-            seen.add(key)
+            bound = self._seams.resolve_pane(b.pane_id)
+            ws = self._seams.pane_workspace(bound) if bound else ""
+            if ws and os.path.realpath(ws) == want:
+                seen.add(key)
+                out.append(b)
+        return out
+
+    async def notify_plugin_paused(self, plugin_id: str, rule: str) -> None:
+        """Plan P5: the main bot's direct chat, in the user's language."""
+        lang = prompt_skills.language(await self._ui_settings())
+        text = quick_menu.text(lang, "plugins_auto_paused", id=plugin_id, reason=quick_menu.text(lang, f"plugins_rule_{rule}"))
+        for b in self._owner_chats():
             try:
                 await self.mirror.send(b.location(), redact.redact_text(text))
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
                 log.warning("channels: an automatic pause notice to %s failed: %s", b.platform, exc)
 
-    async def notify_shipped_digest(self, text: str) -> int:
-        """The daily Shipped Log digest (already masked by the plugin), to every
-        bound direct chat once. Returns how many chats it reached."""
-        seen: set[str] = set()
+    async def notify_shipped_digest(self, text: str, workspace: str = "") -> int:
+        """A workspace's daily Shipped Log digest (already masked by the plugin), to
+        the direct chats bound to that workspace's panes; without a workspace, the
+        main bot's. Returns how many chats it reached."""
         sent = 0
-        for b in self.store.bindings():
-            key = b.location().key()
-            if key in seen or self._chat_kind(b) != "direct":
-                continue
-            seen.add(key)
+        for b in self._workspace_chats(workspace) if workspace else self._owner_chats():
             try:
                 await self.mirror.send(b.location(), redact.redact_text(text))
                 sent += 1
@@ -4353,16 +4374,11 @@ class ChannelManager:
         return sent
 
     async def notify_account_needs_login(self, account: str) -> None:
-        """Every bound direct chat once, in the user's language: the claude
+        """The main bot's direct chat, in the user's language: the claude
         account just switched in cannot sign in (account_switch_verify)."""
         lang = prompt_skills.language(await self._ui_settings())
         text = quick_menu.text(lang, "account_needs_login", account=account)
-        seen: set[str] = set()
-        for b in self.store.bindings():
-            key = b.location().key()
-            if key in seen or self._chat_kind(b) != "direct":
-                continue
-            seen.add(key)
+        for b in self._owner_chats():
             try:
                 await self.mirror.send(b.location(), redact.redact_text(text))
             except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
@@ -4409,7 +4425,7 @@ class ChannelManager:
                                      needs_login: bool = False, from_builtin: bool = False,
                                      to_builtin: bool = False) -> int:
         """An automatic quota switch (plan agent-0-2-42_3f728e P3): once per bound direct
-        chat whose pane runs that CLI or was moved by the switch. Where the chat has
+        chat whose pane was moved by the switch. Where the chat has
         buttons, a claude switch carries "switch back": a one-row /account menu, so the
         press goes the /account way (owner and chat checked, the active account
         re-checked by the window, written to account_switch_log). Returns the chats told."""
@@ -4428,8 +4444,9 @@ class ChannelManager:
             loc = b.location()
             if loc.key() in seen or self._chat_kind(b) != "direct":
                 continue
+            # Only the panes the switch moved: "runs that CLI" reached every bot.
             pane_id = self._seams.resolve_pane(b.pane_id)
-            if not pane_id or (pane_id not in moved and self._seams.pane_agent(pane_id) != agent_key):
+            if not pane_id or pane_id not in moved:
                 continue
             seen.add(loc.key())
             adapter = self._adapters.get((loc.platform, loc.account))
@@ -4454,7 +4471,7 @@ class ChannelManager:
                                     minutes: int, expires_in: str, final: bool) -> int:
         """A stopped automatic continuation nobody acted on (a reminder), or its
         expiry (``final``): once per bound direct chat whose pane reported the
-        exhaustion or runs that CLI. Text only. Returns the chats told."""
+        exhaustion. Text only. Returns the chats told."""
         lang = prompt_skills.language(await self._ui_settings())
         agent = agent_key.capitalize()
         body = (account_menu.text(lang, "failover_stuck_expired", agent=agent, reason=reason)
@@ -4469,7 +4486,7 @@ class ChannelManager:
             if loc.key() in seen or self._chat_kind(b) != "direct":
                 continue
             pane_id = self._seams.resolve_pane(b.pane_id)
-            if not pane_id or (pane_id not in named and self._seams.pane_agent(pane_id) != agent_key):
+            if not pane_id or pane_id not in named:
                 continue
             seen.add(loc.key())
             adapter = self._adapters.get((loc.platform, loc.account))
