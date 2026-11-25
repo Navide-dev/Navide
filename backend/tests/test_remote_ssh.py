@@ -810,3 +810,14 @@ def test_a_terminal_exit_revokes_an_ssh_panes_token():
     source = (Path(__file__).resolve().parents[1] / "agent_team_backend" / "app.py").read_text(encoding="utf-8")
     exit_branch = source[source.index('if event.get("type") == "terminal.exit" and isinstance(payload, dict):'):]
     assert "remote_ssh.revoke_exited(str(exit_pane_id))" in exit_branch[:1500]
+
+
+@pytest.mark.parametrize("cli", ["terminal", "claude", "codex", "opencode"])
+def test_a_pane_without_the_tmux_box_runs_no_tmux_at_all(cli):
+    spec = remote_ssh.parse_spec({**_SPEC, "dir": "~/proj", "cli": cli, "sessionId": "abc-1", "resume": True})
+    assert spec["tmuxSession"] == ""
+    if cli == "terminal":
+        argv = remote_ssh.shell_argv(spec)
+    else:
+        argv = remote_ssh.cli_pane_argv(spec, pane_id="p1", local_port=1234, remote_port=45000, nonce=_NONCE)
+    assert "tmux" not in " ".join(argv) and "mkfifo" not in " ".join(argv)

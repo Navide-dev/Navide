@@ -25019,13 +25019,15 @@ async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
   const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
   const cli = target.cli || SSH_TERMINAL
   const agentKey = cli === SSH_TERMINAL ? 'terminal' : REMOTE_AGENT_KEY
+  const { useTmux, ...fields } = target
   const sshRemote: SshRemoteTarget = {
-    ...target,
+    ...fields,
     cli,
     sessionId: cli === 'claude' ? crypto.randomUUID() : '',
-    // One per pane, kept across reconnects and restores: with tmux on the
-    // host, the pane attaches back to what kept running there.
-    tmuxSession: newSshTmuxSession(),
+    // Only when the user asked for it: one per pane, kept across reconnects
+    // and restores, so with tmux on the host the pane attaches back to what
+    // kept running there. Without it the pane behaves as in 0.2.48.
+    tmuxSession: useTmux ? newSshTmuxSession() : '',
   }
   const paneId = await spawnPane({
     agentKey,

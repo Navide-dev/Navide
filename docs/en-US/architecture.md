@@ -347,7 +347,8 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   `codex resume <id>`. A resume that cannot happen starts fresh and reports
   that (`remote_ssh.resume_missed`); never `--continue` or `resume --last`.
   With tmux on the host, a pane whose spec names a `tmuxSession` (chosen by
-  the renderer when the pane opens, kept on its record) runs in that session
+  the renderer when the pane opens with the dialog's tmux box ticked, off by
+  default; kept on its record) runs in that session
   of Navide's own tmux server (`tmux -L navide`, started with `-f /dev/null`):
   a launch that finds the session attaches to it, so a reconnect, rebuild or
   restore returns to what kept running; otherwise the token is read as above

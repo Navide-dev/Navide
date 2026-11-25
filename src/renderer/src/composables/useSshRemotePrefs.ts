@@ -43,6 +43,9 @@ export interface SshRemoteTarget {
    *  per pane, chosen when the pane is first opened); a reconnect or restore
    *  attaches to it when the host has tmux. '' or absent: none. */
   tmuxSession?: string
+  /** From the dialog only: the user ticked "run in tmux" (off by default).
+   *  Never sent to the backend or recorded; tmuxSession is what is kept. */
+  useTmux?: boolean
 }
 
 /** A new pane's tmux session name (remote_ssh._TMUX_SESSION_RE). */
