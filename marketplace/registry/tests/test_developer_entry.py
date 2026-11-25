@@ -78,6 +78,9 @@ def test_home_has_the_build_card_and_footer_links(client) -> None:
     # The packages are not on npm: the command runs the CLI from the GitHub Release.
     assert "npx --yes --package https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-contracts-1.0.1.tgz --package https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-sdk-1.0.1.tgz navide-plugin init acme-hello --id acme.hello --template vue" in html
     assert "npx navide-plugin init" not in html
+    # A block that one click selects whole; the site stays script-free.
+    assert '<code class="cmd-block" title="Click to select the whole command">npx --yes' in html
+    assert "<script" not in html
     assert 'href="https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1"' in html
     assert "Navide 0.2.39 or later" in html
     assert f'href="{GUIDE}"' in html
@@ -101,6 +104,9 @@ def test_developer_landing_is_open_without_signing_in(client) -> None:
     assert 'aria-current="step"' not in html
     assert "What the application needs" in html
     assert "Do this before you sign in" in html
+    # A block that one click selects whole; the site stays script-free.
+    assert '<code class="cmd-block" title="Click to select the whole command">npx --yes' in html
+    assert "<script" not in html
     assert "npx --yes --package https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-contracts-1.0.1.tgz --package https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1/navide-plugin-sdk-1.0.1.tgz navide-plugin init acme-hello --id acme.hello --template vue" in html
     assert 'href="https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1"' in html
     assert 'href="/login?next=/developer/apply">Sign in to apply' in html
