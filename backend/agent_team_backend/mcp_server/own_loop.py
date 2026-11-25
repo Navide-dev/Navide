@@ -50,10 +50,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any
+
+from agent_team_backend import osplat
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ _enabled = False
 
 #: Whether ``restart`` can bring the listener back on a new loop (see the
 #: module docstring: not on Windows).
-_SOFT_RESTART_SUPPORTED = sys.platform != "win32"
+_SOFT_RESTART_SUPPORTED = osplat.listener_can_change_loops
 
 
 @dataclass
@@ -242,10 +243,7 @@ async def start() -> int | None:
     if not _enabled or _state is not None:
         return port()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    if sys.platform == "win32":
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-    else:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.setsockopt(socket.SOL_SOCKET, osplat.exclusive_listener_option, 1)
     sock.bind(("127.0.0.1", 0))
     sock.set_inheritable(False)
     _install_dispatch()
