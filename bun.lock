@@ -47,11 +47,11 @@
     },
     "packages/plugin-contracts": {
       "name": "@navide/plugin-contracts",
-      "version": "1.0.1",
+      "version": "1.0.2",
     },
     "packages/plugin-sdk": {
       "name": "@navide/plugin-sdk",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "bin": {
         "navide-plugin": "bin/navide-plugin.mjs",
       },
@@ -64,7 +64,7 @@
     },
     "packages/plugin-ui": {
       "name": "@navide/plugin-ui",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "devDependencies": {
         "@navide/plugin-sdk": "^1.0.0",
         "@xterm/addon-fit": "^0.11.0",

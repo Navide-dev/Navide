@@ -52,9 +52,10 @@ async def test_request_returns_completed_only_one_flight_and_30_pane_latency(sto
     panes = [pane(str(i)) for i in range(30)]
     try:
         started = time.perf_counter()
-        first = service.request(panes)
+        assert service.request(panes) is None  # schedules only; projects nothing on the loop
         elapsed = time.perf_counter() - started
         assert elapsed < 0.1
+        first = service.current(panes)
         assert all(not item["signals"] for item in first.values())
         tasks = service._network_task, service._disk_task
         for _ in range(10):
@@ -82,7 +83,7 @@ async def test_disk_five_minute_attempt_throttle_including_failure_and_restart(s
         raise PermissionError("fixture")
     service = CliRiskService(store, clock=lambda: now[0], disk_collector=disk)
     unsupported = [pane(hosts=())]
-    assert service.request([]) == {}
+    assert service.request([]) is None
     assert service._disk_task is None and service._network_task is None
     service.request(unsupported)
     await settle(service)
@@ -168,7 +169,8 @@ async def test_action_race_inflight_collector_does_not_resurrect(store):
         return NetworkSample("successful", (Connection(10, "198.51.100.1", 443),))
     service = CliRiskService(store, clock=lambda: now, resolver=resolver(now), network_collector=network)
     panes = [pane(roots=())]
-    current = service.request(panes)
+    service.request(panes)
+    current = service.current(panes)
     await started.wait()
     signal_id = current["pane"]["signals"][0]["id"]
     action = await service.action(panes, "pane", signal_id, "ignore")

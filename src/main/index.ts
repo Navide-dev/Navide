@@ -137,6 +137,7 @@ import { createResumeGate } from './resume-gate'
 import { stabilizeDroppedPaths, pruneDroppedFiles, saveClipboardImage } from './dropped-file-store'
 import { watchBackendExit } from './backend-crash'
 import { createBackendAutoRestart } from './backend-autorestart'
+import { createMcpHealthMonitor, createMcpProber } from './mcp-health'
 import {
   CliBufferRelay,
   CLI_BUFFER_REPLY_CHANNEL,
@@ -972,8 +973,40 @@ function brokerWsUrl(handle: BackendHandle): string {
 // event (see below).
 const backendBroadcastTracker = new BackendBroadcastTracker<ReturnType<typeof backendInfoPayload>>()
 
+// /plan-mcp health (mcp-health.ts): probed here, shown in the main windows'
+// status bar. Detection only — recovery is the backend's soft restart, which a
+// window asks for, or the user's whole-backend restart.
+let mcpHealthPid = 0
+const mcpHealth = createMcpHealthMonitor({
+  target: () => backend && !backendBusy
+    ? { host: backend.host, port: backend.port, hostSessionToken: backend.hostSessionToken, pid: backend.proc.pid ?? 0 }
+    : null,
+  probe: createMcpProber(),
+  onChange: (snapshot) => {
+    if (snapshot.state === 'down' || snapshot.state === 'degraded') {
+      infoMain(`[main] mcp health ${snapshot.state} (${snapshot.consecutiveFailures} in a row): ${snapshot.lastError}`)
+    }
+    for (const win of mainWindows) {
+      if (!win.isDestroyed()) win.webContents.send('mcp-health:changed', snapshot)
+    }
+  },
+})
+mcpHealth.start()
+function fromMainWindow(event: IpcMainInvokeEvent): boolean {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  return !!win && mainWindows.has(win)
+}
+ipcMain.handle('mcp-health:get', (event) => (fromMainWindow(event) ? mcpHealth.snapshot() : null))
+ipcMain.handle('mcp-health:check', (event) => (fromMainWindow(event) ? mcpHealth.checkNow() : null))
+
 function broadcastBackendChanged(): void {
   const payload = backendInfoPayload()
+  // A different backend process (or none): its MCP verdict starts over.
+  const pid = payload.status === 'ready' && backend ? (backend.proc.pid ?? 0) : 0
+  if (pid !== mcpHealthPid) {
+    mcpHealthPid = pid
+    mcpHealth.reset()
+  }
   // Point the main-process transport at the new backend before changing its
   // bearer. This prevents a reconnect from registering the new token on the
   // old socket while that socket's registration task is still in flight.

@@ -51,7 +51,7 @@ def test_form_action_allows_the_cli_loopback_and_navide_auth(tmp_path) -> None:
     sign_in(client)
     resp = client.get("/publisher/claim")
     form_action = _directives(resp.headers["content-security-policy"])["form-action"].split()
-    assert form_action == ["'self'", "http://127.0.0.1:*", "https://forum.example.test"]
+    assert form_action == ["'self'", "http://127.0.0.1:*", "https://auth.example.test"]
 
 
 def test_json_api_and_package_assets_keep_their_own_headers(client: TestClient) -> None:

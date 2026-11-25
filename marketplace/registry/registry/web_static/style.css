@@ -1011,3 +1011,18 @@ details[open] > :not(summary) { animation: disclose-in var(--motion-base) var(--
 .build-steps li { padding: var(--space-3); border-radius: var(--radius-md); background: var(--bg); font-size: var(--fs-sm); color: var(--text-secondary); }
 .build-steps b { display: block; margin-bottom: 4px; color: var(--text-bright); font-size: var(--fs-md); }
 .build-steps code { display: block; margin-bottom: 4px; overflow-wrap: anywhere; }
+.cmd-block {
+  display: block;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin: 4px 0;
+  cursor: text;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.cmd-hint { display: block; margin-bottom: 4px; font-size: var(--fs-xs); color: var(--text-secondary); }

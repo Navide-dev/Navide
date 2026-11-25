@@ -21,7 +21,8 @@ it was wired from the docs with no binary installed (see the
 [integration record](cli-extension-guide.md)). Kiro CLI (`kiro`, AWS) was
 added on 2026-11-12 the same way, making 20: roster only, docs-wired, with
 the navide MCP server (a per-pane `KIRO_HOME`) and a `Stop` turn-end hook but
-no reader, resume, model flag, usage or account switching.
+no reader, resume, usage or account switching. 0.2.49 added `--model` /
+`--effort` and a fail-open Guard hook (POSIX), both docs-wired.
 
 This file is a reading aid, not a source of truth. The tree is. Every number
 below was read out of the files named beside it, and the

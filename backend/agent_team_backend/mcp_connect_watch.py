@@ -33,6 +33,14 @@ for an in-place `/mcp reconnect navide` (the window types it, the same command
 the Reconnect button tries first) at most AUTO_RECONNECT_MAX_TRIES times,
 AUTO_RECONNECT_RETRY_S apart. Only a try the window actually typed counts, and
 the budget starts over once the pane connects again.
+
+A try is only made once the backend has recovered (backend_recovered): not
+while the main process' probe says /plan-mcp is down, and not within
+RECOVERY_SETTLE_S of a long loop stall — a reconnect into a server that is
+still failing spends a try and fixes nothing (2026-11-26: 85 panes at load
+88). Every judgement is logged as an ``event=`` line in backend.log (it used
+to reach only the window and the chat), and a pane that comes back after an
+automatic try is logged and announced as auto-reconnected.
 """
 
 from __future__ import annotations
@@ -67,6 +75,8 @@ STALL_RECHECK_S = 15.0
 AUTO_RECONNECT_MAX_TRIES = 3
 #: Between two automatic reconnects of one pane.
 AUTO_RECONNECT_RETRY_S = 120.0
+#: How long after a long loop stall ends before an automatic reconnect is tried.
+RECOVERY_SETTLE_S = 10.0
 
 #: Vendors whose CLI connects to its MCP servers while it starts.
 EAGER_AGENTS = frozenset({"claude"})
@@ -194,6 +204,8 @@ def sweep(now: float | None = None) -> list[agent_messaging.RegisteredPane]:
         if state(entry.pane_id, now) and entry.pane_id not in _reported:
             _reported.add(entry.pane_id)
             newly.append(entry)
+            log.warning("mcp connect watch: event=pane_never_connected pane=%s name=%r up_for_s=%.0f",
+                        entry.pane_id, entry.name, now - _up_since[entry.pane_id])
     for pane_id in [p for p in _up_since if p not in live]:
         del _up_since[pane_id]
     _cleared.extend(
@@ -219,6 +231,13 @@ def sweep_dropped(now: float | None = None) -> list[agent_messaging.RegisteredPa
         if entry.offline_since is None and entry.pane_id not in _reported_dropped:
             _reported_dropped.add(entry.pane_id)
             newly.append(entry)
+            closed = max(t for t in (_closed_at.get(i) for i in [entry.pane_id, *agent_messaging.former_ids(entry.pane_id)])
+                         if t is not None)
+            log.warning(
+                "mcp connect watch: event=pane_disconnected pane=%s name=%r stream_closed_s_ago=%.0f grace_s=%.0f "
+                "after_long_stall=%s",
+                entry.pane_id, entry.name, now - closed, _grace(closed), _grace(closed) == DROPPED_AFTER_STALL_S,
+            )
     _cleared.extend(
         p for p in _reported_dropped
         if p not in dropped and agent_messaging.current(p) is not None and state(p, now) == ""
@@ -233,18 +252,32 @@ def sweep_dropped(now: float | None = None) -> list[agent_messaging.RegisteredPa
     return newly
 
 
+def backend_recovered(now: float | None = None) -> bool:
+    """Whether a reconnect now can work: the endpoint is not reported down and
+    no long loop stall ended in the last RECOVERY_SETTLE_S."""
+    from .mcp_server import health as mcp_health
+
+    if mcp_health.snapshot()["probe_state"] == "down":
+        return False
+    now = time.monotonic() if now is None else now
+    stall = _last_long_stall
+    return stall is None or now - stall[1] >= RECOVERY_SETTLE_S
+
+
 def due_reconnects(now: float | None = None) -> list[agent_messaging.RegisteredPane]:
     """Flagged panes to reconnect in place right now: idle, window connected,
-    with tries left and the last one AUTO_RECONNECT_RETRY_S ago. Forgets the
-    tries of a pane that is no longer flagged, so its next drop starts over."""
+    with tries left and the last one AUTO_RECONNECT_RETRY_S ago, and only once
+    the backend has recovered (no try is spent before). Forgets the tries of a
+    pane that is no longer flagged, so its next drop starts over."""
     now = time.monotonic() if now is None else now
+    recovered = backend_recovered(now)
     flagged: set[str] = set()
     due: list[agent_messaging.RegisteredPane] = []
     for entry in agent_messaging.list_panes():
         if not state(entry.pane_id, now):
             continue
         flagged.add(entry.pane_id)
-        if entry.offline_since is not None or entry.display_status != "idle":
+        if not recovered or entry.offline_since is not None or entry.display_status != "idle":
             continue
         tries, last = _auto_tries.get(entry.pane_id, (0, 0.0))
         if tries >= AUTO_RECONNECT_MAX_TRIES or (tries and now - last < AUTO_RECONNECT_RETRY_S):
@@ -262,6 +295,11 @@ def note_reconnect_sent(pane_id: str, now: float | None = None) -> None:
     _auto_tries[pane_id] = (tries + 1, now)
 
 
+def auto_tries(pane_id: str) -> int:
+    """Automatic reconnects typed into ``pane_id`` in its current episode."""
+    return _auto_tries.get(pane_id, (0, 0.0))[0]
+
+
 def take_cleared() -> list[str]:
     """Reported panes that connected after all (a manual /mcp, a rebuild)."""
     out = list(_cleared)
@@ -274,6 +312,7 @@ async def run(
     notify_cleared: Callable[[str], Awaitable[None]] | None = None,
     notify_dropped: Callable[[agent_messaging.RegisteredPane], Awaitable[None]] | None = None,
     reconnect: Callable[[agent_messaging.RegisteredPane], Awaitable[bool]] | None = None,
+    notify_auto_reconnected: Callable[[str], Awaitable[None]] | None = None,
 ) -> None:
     """Sweep every SWEEP_INTERVAL_S: hand each newly flagged pane to
     ``notify`` (never connected) or ``notify_dropped`` (disconnected), each
@@ -303,12 +342,20 @@ async def run(
             except Exception as err:  # noqa: BLE001
                 log.warning("mcp connect watch: disconnect notice for %s failed: %s", entry.pane_id, err)
         for pane_id in take_cleared():
-            if notify_cleared is None:
-                continue
-            try:
-                await notify_cleared(pane_id)
-            except Exception as err:  # noqa: BLE001
-                log.warning("mcp connect watch: cleared notice for %s failed: %s", pane_id, err)
+            # Read before due_reconnects() below forgets the episode's tries.
+            tries = auto_tries(pane_id)
+            if tries:
+                log.info("mcp connect watch: event=pane_auto_reconnected pane=%s tries=%d", pane_id, tries)
+            if notify_cleared is not None:
+                try:
+                    await notify_cleared(pane_id)
+                except Exception as err:  # noqa: BLE001
+                    log.warning("mcp connect watch: cleared notice for %s failed: %s", pane_id, err)
+            if tries and notify_auto_reconnected is not None:
+                try:
+                    await notify_auto_reconnected(pane_id)
+                except Exception as err:  # noqa: BLE001
+                    log.warning("mcp connect watch: auto-reconnected notice for %s failed: %s", pane_id, err)
         if reconnect is not None:
             # Together, not one by one: a window that does not answer costs
             # each request its full timeout, and 65 panes dropped at once.
@@ -322,6 +369,8 @@ async def _reconnect_one(
     try:
         if await reconnect(entry):
             note_reconnect_sent(entry.pane_id)
+            log.info("mcp connect watch: event=pane_auto_reconnect_sent pane=%s try=%d",
+                     entry.pane_id, auto_tries(entry.pane_id))
     except Exception as err:  # noqa: BLE001 — the loop must survive a failed try
         log.warning("mcp connect watch: reconnect of %s failed: %s", entry.pane_id, err)
 

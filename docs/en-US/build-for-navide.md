@@ -32,7 +32,9 @@ once you sign in, the one you are on.
 | 6 | Sign and submit for review | `navide-plugin publish`, or Navide's publish form | fill the form (`marketplace_publish_fill`); you submit it |
 
 Nothing in steps 1–3 leaves your machine. Steps 4–6 are sent only when you
-press the button or run the command yourself.
+press the button or run the command yourself. Every command in order, from a
+copy of the template to a listing, is in
+[From zero to a listing](#from-zero-to-a-listing).
 
 ## 1. Five minutes to a running plugin
 
@@ -43,31 +45,31 @@ form.
 The public packages (`@navide/plugin-contracts`, `@navide/plugin-sdk`,
 `@navide/plugin-ui`) are distributed only as GitHub Release files, not through
 npm or PyPI. Install them from the newest
-[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
+[`plugin-packages-1.0.2`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.2)
 release, the same files Navide's own plugins build against (every
 `plugin-packages-*` release is listed on the
 [Releases page](https://github.com/Navide-dev/Navide/releases?q=plugin-packages)):
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz \
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz \
   navide-plugin init acme-hello --id acme.hello --template vue
 cd acme-hello
-npm install $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
+npm install $R/navide-plugin-contracts-1.0.2.tgz $R/navide-plugin-sdk-1.0.2.tgz
 npm install
 npm run build        # writes dist/package, then npm run check validates it
 ```
 
 The first `npm install` writes the two tarball addresses into `package.json`
-(a template from SDK 1.0.1 or earlier names the 1.0.0 files; from the next
-release on, the template names the release it came from). After that
+(a template from SDK 1.0.1 or earlier names the 1.0.0 files; from 1.0.2 on,
+the template names the release it came from). After that
 `npx navide-plugin` and the `package.json` scripts use the local copy. The
 release's SHA-256 sums, to compare with `shasum -a 256` on a downloaded file:
 
 ```text
-385f8184be75fde978686e0768c1a04a56241551d077276359fd2531f4910147  navide-plugin-contracts-1.0.1.tgz
-81e702467a3d0f3b334c9206c9c2c5c5442f752977edaef3d45de12a99d31dd8  navide-plugin-sdk-1.0.1.tgz
-a6fea9aacec705a089622318898b318f33f58c4ec2c4e41a87121cb36970e861  navide-plugin-ui-1.0.1.tgz
+4beea478ec24dd87be491ba9ed84e0375a27007f49e61df4dcc4a2cebde047f0  navide-plugin-contracts-1.0.2.tgz
+c60737218c99614e7e1403e8dbe27bdc19f34f2e5d314d0b7def7d2374d1c818  navide-plugin-sdk-1.0.2.tgz
+37e39c4e6a4cc69564a14bc2c99a5eaa2892fe1bf5b420dfd5359d1bdc797720  navide-plugin-ui-1.0.2.tgz
 ```
 
 A Python backend needs no package: the `vue` template's backend uses only the
@@ -78,9 +80,12 @@ where it stays until its own version changes:
 `pip install https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.0/navide_plugin_sdk-1.0.0-py3-none-any.whl`.
 
 Want the smallest possible start? Leave out `--template vue`: the default
-template is one HTML view and one script with no build step and no
-dependencies, and `navide-plugin validate acme-hello` and
-`navide-plugin package acme-hello` accept it as written.
+template is one HTML view and one script with no build step, and
+`npm install && npm run check && npm run package` in its folder validates,
+scans and packages it as written (its `package.json` only installs the CLI
+from the same release and is never packaged). The same files are in the
+repository as [`examples/hello-plugin`](../../examples/hello-plugin/), to
+copy without running anything first.
 
 `--id` is `<namespace>.<name>`; the namespace is the one you will claim on
 the Marketplace later, and the id never changes once published. The `vue`
@@ -205,6 +210,80 @@ The MCP tools `marketplace_developer_application_*`, `marketplace_publish_*`,
 `marketplace_testplace_invite_*` and `marketplace_publish_yank_*` let an agent
 in a pane fill these forms for you; you approve each submission in Navide's
 main window.
+
+## From zero to a listing
+
+Every step from an empty folder to a version on the Navide Marketplace, with
+the smallest template. Replace `acme` with your namespace and `hello` with
+your plugin's name. Steps 1–5 stay on your machine; 6–11 are the publishing
+process of [§4](#4-publishing-is-the-business-process).
+
+1. **Create the plugin.** Copy
+   [`examples/hello-plugin`](../../examples/hello-plugin/), or write the same
+   files with the CLI straight from the release:
+
+   ```bash
+   R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+   npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz \
+     navide-plugin init acme-hello --id acme.hello
+   cd acme-hello
+   ```
+
+2. **Install the CLI into the project.** `npm install` installs
+   `@navide/plugin-contracts` and `@navide/plugin-sdk` from the release
+   tarballs named in `package.json`. From here on run the CLI as
+   `npx navide-plugin …` or through `npm run` inside this folder. Outside a
+   folder that installed it, `npx navide-plugin` looks the name up on npm,
+   where Navide publishes nothing. (`init` from SDK 1.0.1 or earlier writes
+   no `package.json`; copy the one in `examples/hello-plugin` into the folder
+   first.)
+3. **Make it yours.** In `manifest.json` set `name`,
+   `marketplace.description` and `marketplace.license`, and declare in
+   `permissions` what the plugin calls ([§2](#2-what-a-plugin-can-do)).
+   Every file the package holds is listed in `artifact-files.json`; add a
+   file there when you add it to the plugin. `README.md` is your listing
+   page.
+4. **Load it into Navide.** Settings → Navide Plugins → turn on Developer
+   Mode → Load from Folder… → the project folder. Saving a file reloads the
+   view.
+5. **Check and package.** `npm run check` runs `navide-plugin validate` and
+   `navide-plugin scan`, the checks review runs; fix what they name until the
+   scan reports that everything found is declared. `npm run package` writes
+   `acme.hello-0.1.0-universal.vsix`.
+6. **Apply as a developer, once.** Settings → Navide Marketplace →
+   Developer, or `developers.navide.dev/developer/apply`, signed in with your
+   Navide Cloud account. A person reviews the application (target: 3
+   business days).
+7. **Claim the namespace.** `developers.navide.dev/publisher/claim`; it must
+   equal the first segment of your id (`acme`) and the manifest's
+   `publisher`.
+8. **Register a signing key.** `npx navide-plugin keygen --out-dir keys --name acme`,
+   then paste `keys/acme.pub` into **Signing key** on
+   `developers.navide.dev/publisher/acme`. `keys/acme.key` stays on your
+   machine: the template's `.gitignore` already keeps `*.key` out of Git, and
+   it is never listed in `artifact-files.json`.
+9. **Sign in from the CLI.** `npx navide-plugin login` opens the browser;
+   pick the namespace and press **Authorize**. `npx navide-plugin whoami`
+   shows who you are signed in as.
+10. **Sign and submit.**
+
+    ```bash
+    npx navide-plugin sign acme.hello-0.1.0-universal.vsix --key keys/acme.key
+    npx navide-plugin publish acme.hello-0.1.0-universal.vsix \
+      --signature acme.hello-0.1.0-universal.vsix.sig
+    ```
+
+    Or `npx navide-plugin publish acme.hello-0.1.0-universal.vsix --via-navide`
+    to submit it from Navide's publish form, where you are already signed in.
+    To let testers try it first, add `--channel testplace` and invite them
+    (see [Testplace](marketplace-publishing.md#testplace)).
+11. **Follow the review.** `npx navide-plugin status acme.hello` shows
+    `pending`, `approved` or `rejected` with the reviewer's reason; so does
+    Settings → Navide Marketplace → Developer. Once approved, the version is
+    listed on [marketplace.navide.dev](https://marketplace.navide.dev/).
+
+The next version follows steps 3, 5, 10 and 11 with a higher `version` in
+`manifest.json`; a version number is never reused.
 
 ## 5. Take part
 

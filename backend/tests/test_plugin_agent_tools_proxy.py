@@ -193,7 +193,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.48 scheduler settings (previous pin 1285ae18…): the
 #: scheduler_list and scheduler_upsert descriptions say the daily run counts
 #: are the user's settings. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "8c6d897fde58d98cab6a40f110d5028e15ae5898d1c51cc45363291636db7165"
+#: Re-pinned for 0.2.49 kickoff verdicts (previous pin 8c6d897f…): the
+#: cli_open_agent description documents `kickoff: "unverified"`, what it means
+#: and what the caller does, and the 4-minute wait. No other tool changed.
+MAIN_TOOLS_LIST_SHA256 = "803b62d5005a0dd44f71378c5336d87c4d92bc12c1401e20854f46eac5f11fc5"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -470,7 +473,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: Re-pinned with MAIN for 0.2.46 terminal delivery (previous pin e94a55fb…).
 #: Re-pinned with MAIN for 0.2.47 MCP reconnect (previous pin f5f52db5…).
 #: Re-pinned with MAIN for 0.2.48 scheduler settings (previous pin 2b8d853f…).
-ACP_ON_TOOLS_LIST_SHA256 = "300c146375968200488c3939b2cdae9a2f605dbbeebd016dd42befe1ea3e428d"
+#: Re-pinned with MAIN for 0.2.49 kickoff verdicts (previous pin 300c1463…).
+ACP_ON_TOOLS_LIST_SHA256 = "6eeaee6ef0d6d785d4ae74705751b48835d7099b83f0f799143e590a952bd209"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:

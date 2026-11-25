@@ -1,0 +1,8 @@
+{
+  "files": [
+    "manifest.json",
+    "README.md",
+    "frontend/main/index.html",
+    "frontend/main/main.js"
+  ]
+}

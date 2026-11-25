@@ -66,7 +66,7 @@ def test_callback_creates_a_secure_session(client):
         pytest.param(lambda n: navide_auth_callback(n, secret="d" * 44), id="wrong-secret"),
         pytest.param(lambda n: navide_auth_callback("another-nonce-0123456789"), id="nonce-mismatch"),
         pytest.param(lambda n: navide_auth_callback(n, email_verified="false"), id="unverified"),
-        pytest.param(lambda n: navide_auth_callback(n, client="forum"), id="other-client"),
+        pytest.param(lambda n: navide_auth_callback(n, client="teams"), id="other-client"),
         pytest.param(
             lambda n: navide_auth_callback(n, issued_at_ms=int((time.time() - 3600) * 1000)), id="stale"
         ),
@@ -143,7 +143,7 @@ def test_logout_needs_the_csrf_token(client):
         ({"session_secret": None}, "together"),
         ({"auth_secret": "short"}, "at least"),
         ({"session_secret": AUTH_SECRET}, "must differ"),
-        ({"auth_url": "http://forum.example.test/navide-auth"}, "https"),
+        ({"auth_url": "http://auth.example.test/navide-auth"}, "https"),
     ],
 )
 def test_settings_refuse_incomplete_or_weak_auth(tmp_path, overrides, message):

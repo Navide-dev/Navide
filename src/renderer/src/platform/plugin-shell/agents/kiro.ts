@@ -13,9 +13,15 @@ export const SPEC = {
   // Trusts every tool; interactive V3 shows a confirmation warning first.
   // From the docs, not a live install.
   skipPermissionFlag: '--trust-all-tools',
-  // No modelArgs / effortArgs: `--model` and `--effort` are documented but
-  // were not checked against an invalid value without an install. No
-  // resumeArgs: `--resume-id <ID>` exists but nothing can name the id of a
+  // `--model <MODEL>` and `--effort <LEVEL>` are flags of `chat`, spaced
+  // form, levels low/medium/high/xhigh/max (kiro.dev/docs/reference/
+  // cli-commands and /docs/models/effort, read 2026-11-25). From the docs,
+  // not a live install: what Kiro does with an unknown model id, or a level
+  // the chosen model lacks, is undocumented and unverified.
+  modelArgs: (m) => `--model ${m}`,
+  effortArgs: (e) => `--effort ${e}`,
+  knownEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+  // No resumeArgs: `--resume-id <ID>` exists but nothing can name the id of a
   // session Navide started (see the backend spec). bracketedPaste /
   // fullScreenTui not measured (the docs leave bracketed paste out; the
   // alternate screen is used only after `/fullscreen`).

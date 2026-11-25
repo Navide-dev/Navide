@@ -44,6 +44,13 @@ export interface ClearElectronCachesResult {
   error: string | null
 }
 
+export interface McpHealthSnapshot {
+  state: 'unknown' | 'ok' | 'degraded' | 'down'
+  consecutiveFailures: number
+  lastError: string
+  checkedAt: number
+}
+
 export interface BackendInfo {
   status: 'starting' | 'ready' | 'error'
   host?: string
@@ -698,6 +705,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
   stopBackend: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('backend:stop'),
   onBackendChanged: (cb: (info: BackendInfo) => void): void => {
     ipcRenderer.on('backend:changed', (_event, info: BackendInfo) => cb(info))
+  },
+  // /plan-mcp health, probed by main (src/main/mcp-health.ts). Main windows only.
+  getMcpHealth: (): Promise<McpHealthSnapshot | null> => ipcRenderer.invoke('mcp-health:get'),
+  checkMcpHealth: (): Promise<McpHealthSnapshot | null> => ipcRenderer.invoke('mcp-health:check'),
+  onMcpHealthChanged: (cb: (snapshot: McpHealthSnapshot) => void): void => {
+    ipcRenderer.on('mcp-health:changed', (_event, snapshot: McpHealthSnapshot) => cb(snapshot))
   },
   // Ask the Host to leave legacy Git recovery and re-activate the bundled v2
   // package. Called when the user opens the Git tab, which is the natural

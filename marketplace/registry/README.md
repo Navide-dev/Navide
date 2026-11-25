@@ -456,7 +456,7 @@ settings below are set; without them the registry behaves exactly as before
 (admin-created publishers only).
 
 - **Sign in** (`/publish`, `/login`, `/auth/callback`): the registry is the
-  `registry` client of navide-auth (forum.navide.dev/navide-auth). It signs the
+  `registry` client of navide-auth (developers.navide.dev/navide-auth). It signs the
   request with its own client secret, checks the returned signature, `client`,
   nonce (bound to a 10-minute login-state cookie), freshness and
   `email_verified`, then sets its own HttpOnly, Secure, SameSite=Lax session
@@ -613,7 +613,7 @@ approved by default.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://forum.navide.dev/navide-auth`. |
+| `REGISTRY_AUTH_URL` | _(unset)_ | navide-auth base, e.g. `https://developers.navide.dev/navide-auth`. |
 | `REGISTRY_AUTH_SECRET` / `_FILE` | _(unset)_ | This registry's navide-auth client secret (≥ 32 chars; equals navide-auth's `REGISTRY_CONNECT_SECRET`, never the Discourse secret). |
 | `REGISTRY_AUTH_UPSTREAM` | _(unset)_ | navide-auth's address as this container reaches it, e.g. `http://172.17.0.1:18790`. Set, the storefront and the console serve the sign-in page on their own host (needs host routing, and `REGISTRY_AUTH_URL` ending in `/navide-auth`). Unset, the browser goes to `REGISTRY_AUTH_URL`. |
 | `REGISTRY_AUTH_RETURN_URL` | _(unset)_ | Exact callback, e.g. `https://server.navide.dev/registry/auth/callback`; must be in navide-auth's `REGISTRY_RETURN_URLS`. |
@@ -626,6 +626,9 @@ approved by default.
 | `REGISTRY_LEGACY_REDIRECT_TO` | `https://navide.dev/` | Where website pages on a legacy host redirect. |
 | `REGISTRY_LEGACY_ROBOTS_DISALLOW` | `false` | `true` makes the legacy `/robots.txt` disallow crawling. |
 | `REGISTRY_CLOUD_ASSERTION_KEYS_FILE` | _(unset)_ | Path to Navide-Server's assertion public keys, `{"keys": [{"kid": "20261114", "public_key": "<Ed25519 SPKI PEM>"}]}`; list two during a rotation. Unset or missing turns `/api/cli/cloud-exchange` off (`404`); a malformed file, a bad `kid` (`[A-Za-z0-9_-]{1,64}`) or a non-Ed25519 key stops startup. Not secret, but kept out of Git. |
+| `REGISTRY_REVIEW_NOTIFY_TO` | _(unset)_ | Admin address that gets one email per item entering a review queue (listing version, Testplace public code, Testplace promotion, developer application). The email holds only the kind, the package id, the submission time and the admin page link. Set with the next two, or leave all three unset to turn the email off. |
+| `REGISTRY_REVIEW_NOTIFY_FROM` | _(unset)_ | Sender address; its domain must be a verified Amazon SES identity. |
+| `REGISTRY_SES_REGION` | _(unset)_ | SES region. Credentials come from the host's instance role through boto3 (IMDSv2, so the hop limit must be at least 2 for a container); no key is configured. A failed send is logged and never affects the submission. |
 
 ## Seams left for later Phase 3 todos
 

@@ -139,3 +139,22 @@ __all__ += ["watch_reports_touch_as_modified"]
 # ControlMaster unix socket. Windows' OpenSSH port lacks it.
 ssh_connection_sharing: bool = {"darwin": True, "linux": True, "win32": False}[platform_id]
 __all__ += ["ssh_connection_sharing"]
+
+# Whether a listening socket can be handed to a new event loop (a duplicate of
+# it, served by a fresh loop on another thread). Windows' proactor loop ties a
+# socket, and every duplicate of it, to the first loop's I/O completion port
+# for good: the next loop's accept fails with WinError 87.
+listener_can_change_loops: bool = {"darwin": True, "linux": True, "win32": False}[platform_id]
+__all__ += ["listener_can_change_loops"]
+
+import socket as _socket  # noqa: E402
+
+#: The option a loopback listener sets so that no other socket can bind its
+#: port while it holds it. POSIX SO_REUSEADDR never lets a second socket bind
+#: a listening port (and lets a restarted process rebind past TIME_WAIT);
+#: Windows' SO_REUSEADDR would let any local process share the port, so there
+#: it is SO_EXCLUSIVEADDRUSE.
+exclusive_listener_option: int = (
+    _socket.SO_EXCLUSIVEADDRUSE if platform_id == "win32" else _socket.SO_REUSEADDR  # type: ignore[attr-defined]
+)
+__all__ += ["exclusive_listener_option"]

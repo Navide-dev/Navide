@@ -4,8 +4,7 @@ developer console's own host.
 With REGISTRY_AUTH_UPSTREAM set, /login on marketplace.navide.dev or
 developers.navide.dev sends the browser to /navide-auth/registry/sso on that
 same host, and this module relays exactly those two paths (the page and its
-form post) to navide-auth. Nothing else under /navide-auth is relayed: the
-forum's own sign-in stays on the forum's host.
+form post) to navide-auth. Nothing else under /navide-auth is relayed.
 
 What crosses the relay is kept to what the sign-in needs:
 - Request: only the navide_auth_registry cookie (never the registry's own

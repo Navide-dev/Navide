@@ -126,7 +126,7 @@ export type TestplaceManageRequest =
 
 /** The shared version of the public plugin packages in the newest
  * `plugin-packages-<version>` GitHub Release; equal to packages/plugin-sdk's version. */
-export const PLUGIN_PACKAGES_VERSION = '1.0.1'
+export const PLUGIN_PACKAGES_VERSION = '1.0.2'
 /** The GitHub Release the public plugin packages are installed from; they are
  * not on npm (docs/en-US/build-for-navide.md, "Five minutes to a running plugin"). */
 export const PLUGIN_PACKAGES_RELEASE_URL = `https://github.com/Navide-dev/Navide/releases/download/plugin-packages-${PLUGIN_PACKAGES_VERSION}`
@@ -134,8 +134,12 @@ export const PLUGIN_PACKAGES_RELEASE_URL = `https://github.com/Navide-dev/Navide
 export const PLUGIN_INIT_COMMAND =
   `npx --yes --package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-contracts-${PLUGIN_PACKAGES_VERSION}.tgz ` +
   `--package ${PLUGIN_PACKAGES_RELEASE_URL}/navide-plugin-sdk-${PLUGIN_PACKAGES_VERSION}.tgz navide-plugin init acme-hello --id acme.hello`
-/** The entry card's self-check, the same checks the Registry runs before review. */
-export const PLUGIN_CHECK_COMMAND = 'navide-plugin validate acme-hello && navide-plugin package acme-hello'
+/** The entry card's self-check, the same checks the Registry runs before review. The
+ * scaffold's package.json installs the CLI from the release; a bare `navide-plugin`
+ * is not installed, and `npx navide-plugin` outside the folder would look it up on npm. */
+export const PLUGIN_CHECK_COMMAND = 'cd acme-hello && npm install && npm run check && npm run package'
+/** The copyable smallest plugin in the repository: what the entry card's init command writes. */
+export const PLUGIN_TEMPLATE_URL = 'https://github.com/Navide-dev/Navide/tree/main/examples/hello-plugin'
 /** The developer console's open page: the publishing steps, before signing in. */
 export const DEVELOPERS_URL = 'https://developers.navide.dev/developer'
 /** The Official Registry's API. It stays under `/registry` on the Navide

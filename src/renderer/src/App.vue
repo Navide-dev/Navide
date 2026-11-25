@@ -83,6 +83,7 @@ import { usePreviewLog } from './preview/usePreviewLog'
 import NotificationHost from './components/NotificationHost.vue'
 import BackendResourceNotices from './components/BackendResourceNotices.vue'
 import DeveloperModeReminder from './components/DeveloperModeReminder.vue'
+import McpRestartButton from './components/McpRestartButton.vue'
 import Welcome from './components/Welcome.vue'
 import { agentUsesBracketedPaste } from '@navide/plugin-shell'
 import { useNotify, useTheme } from '@navide/plugin-ui/foundation'
@@ -240,7 +241,7 @@ import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { useArenaPrefs } from './composables/useArenaPrefs'
 import { useRemoteDevcontainerPrefs, type RemoteTarget } from './composables/useRemoteDevcontainerPrefs'
 import type { RemoteOpenRequest } from './components/RemoteDevcontainerDialog.vue'
-import { SSH_TERMINAL, sshFailureReason, sshTargetFields, sshTargetLabel, type SshRemoteTarget } from './composables/useSshRemotePrefs'
+import { SSH_TERMINAL, newSshTmuxSession, sshFailureReason, sshTargetFields, sshTargetLabel, sshTmuxSessionField, type SshRemoteTarget } from './composables/useSshRemotePrefs'
 import { arenaPaneName, candidatesToStop, type ArenaRun, type ArenaStatus } from './lib/arena'
 import type { ArenaPrefill, ArenaStartRequest } from './components/ArenaStartDialog.vue'
 import { injectStandaloneTask, standaloneKickoffVerdict, type StandaloneKickoffEvidence, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
@@ -499,6 +500,7 @@ import {
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
+import { UNSUPPORTED_REASON as MCP_RESTART_UNSUPPORTED, useMcpHealth } from './composables/useMcpHealth'
 import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
 import { usePermissions } from './composables/usePermissions'
 import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
@@ -9685,6 +9687,11 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
   // mcp-spawned panes are recorded on spawn, so they must be cleared on close too.
   // Gating this on origin === 'manual' left them at spawn_status 'spawned', and a
   // workspace switch resurrected them as placeholders.
+  // A closed SSH pane's tmux session on the host ends with it; a rebuild,
+  // reconnect or workspace close keeps it to attach back to.
+  if (markRemoved && !keepInList && pane?.sshRemote?.tmuxSession) {
+    void sendQuiet('remote_ssh.end_session', { remote: { kind: 'ssh', ...pane.sshRemote } })
+  }
   if (opts.markRemoved !== false && pane != null && pane.origin !== 'pipeline') {
     await sendQuiet<ProjectPayload>('manual_pane.unspawn', {
       workspace_path: pane.workspacePath,
@@ -14284,7 +14291,11 @@ function savedSshTarget(saved: { remote?: Partial<RemoteTarget> }): SshRemoteTar
   if (!r || r.kind !== 'ssh') return undefined
   const target = sshTargetFields(r)
   if (!target) return undefined
-  return { ...target, sessionId: typeof r.sessionId === 'string' ? r.sessionId : '' }
+  return {
+    ...target,
+    sessionId: typeof r.sessionId === 'string' ? r.sessionId : '',
+    tmuxSession: sshTmuxSessionField(r.tmuxSession),
+  }
 }
 
 /** A saved pane's remote target, or undefined for a local pane. */
@@ -25010,7 +25021,16 @@ async function onSshRemoteConnected(target: SshRemoteTarget): Promise<void> {
   const spawnGroupId = resolveReadySpawnGroupId(runGroups.value, activeTab.value, runGroupsReady.value, '')
   const cli = target.cli || SSH_TERMINAL
   const agentKey = cli === SSH_TERMINAL ? 'terminal' : REMOTE_AGENT_KEY
-  const sshRemote: SshRemoteTarget = { ...target, cli, sessionId: cli === 'claude' ? crypto.randomUUID() : '' }
+  const { useTmux, ...fields } = target
+  const sshRemote: SshRemoteTarget = {
+    ...fields,
+    cli,
+    sessionId: cli === 'claude' ? crypto.randomUUID() : '',
+    // Only when the user asked for it: one per pane, kept across reconnects
+    // and restores, so with tmux on the host the pane attaches back to what
+    // kept running there. Without it the pane behaves as in 0.2.48.
+    tmuxSession: useTmux ? newSshTmuxSession() : '',
+  }
   const paneId = await spawnPane({
     agentKey,
     roleKey: '',
@@ -26502,6 +26522,41 @@ onUnmounted(() => {
 
 // Backend supervisor popover (status bar pill → manage/restart/stop the backend).
 const backendBusy = ref(false)
+// /plan-mcp health (useMcpHealth): the status bar light and its two recoveries.
+const mcpHealth = useMcpHealth({ send: backend.send })
+const mcpRestartNote = ref('')
+const mcpConfirmFullRestart = ref(false)
+const mcpLightTitle = computed(() => {
+  const h = mcpHealth.health.value
+  const state = i18n.global.t('label.mcp-state-' + h.state)
+  return h.consecutiveFailures > 0
+    ? `${state} · ${i18n.global.t('label.mcp-failures', { n: h.consecutiveFailures, error: h.lastError })}`
+    : state
+})
+/** The panes a whole-backend restart interrupts, as this window names them. */
+const mcpFullRestartPanes = computed(() => {
+  const names = panes.value.filter((p) => p.realized).map((p) => {
+    const shown = paneRefs[p.id]?.displayStatus as string | undefined
+    const busy = shown === 'running' || shown === 'awaiting'
+    return backendRestartPaneName(p) + (busy ? i18n.global.t('label.mcp-pane-busy') : '')
+  })
+  if (!names.length) return i18n.global.t('label.mcp-full-restart-none')
+  return new Intl.ListFormat(String(i18n.global.locale.value), { type: 'unit' }).format(names)
+})
+async function onRestartMcp(): Promise<void> {
+  mcpRestartNote.value = ''
+  const out = await mcpHealth.restartMcp()
+  mcpRestartNote.value = out.ok
+    ? i18n.global.t('label.mcp-restart-done')
+    : out.reason === MCP_RESTART_UNSUPPORTED
+      ? i18n.global.t('label.mcp-restart-unsupported')
+      : i18n.global.t('label.mcp-restart-failed', { reason: out.reason ?? '' })
+}
+async function onConfirmFullRestart(): Promise<void> {
+  mcpConfirmFullRestart.value = false
+  await onRestartBackend()
+}
+
 async function onRestartBackend(): Promise<void> {
   if (backendBusy.value) return
   backendBusy.value = true
@@ -28240,6 +28295,17 @@ function paneIsCommander(p: ActivePane): boolean {
           <span v-if="backendUrl" class="sb-url">· {{ backendUrl }}</span>
         </span>
         <span
+          v-if="backend.status.value === 'connected' && mcpHealth.health.value.state !== 'unknown'"
+          class="sb-item sb-mcp sb-clickable"
+          :class="'sb-mcp-' + mcpHealth.health.value.state"
+          role="button"
+          tabindex="0"
+          :title="mcpLightTitle"
+          :aria-label="mcpLightTitle"
+          @click="togglePopover('backend')"
+          @keydown.enter="togglePopover('backend')"
+        ><span class="sb-dot" />MCP</span>
+        <span
           v-if="panes.length > 0"
           class="sb-item sb-resource sb-clickable"
           role="button"
@@ -28399,6 +28465,32 @@ function paneIsCommander(p: ActivePane): boolean {
       <div class="bp-rows">
         <div class="bp-row"><span class="bp-k">URL</span><span class="bp-v">{{ backendUrl || '—' }}</span></div>
         <div class="bp-row"><span class="bp-k">PID</span><span class="bp-v">{{ backend.pid.value || '—' }}</span></div>
+        <div class="bp-row">
+          <span class="bp-k">MCP</span>
+          <span class="bp-v bp-mcp" :class="'sb-mcp-' + mcpHealth.health.value.state"><span class="sb-dot" /> {{ mcpLightTitle }}</span>
+        </div>
+      </div>
+      <div v-if="backend.status.value === 'connected'" class="bp-mcp-actions">
+        <McpRestartButton
+          :supported="mcpHealth.restartSupported"
+          :restarting="mcpHealth.restarting.value"
+          :busy="backendBusy"
+          :note="mcpRestartNote"
+          @restart="onRestartMcp"
+        />
+        <template v-if="mcpHealth.health.value.state === 'down'">
+          <button
+            v-if="!mcpConfirmFullRestart"
+            class="bp-btn bp-mcp-full"
+            :disabled="backendBusy"
+            @click="mcpConfirmFullRestart = true"
+          >{{ $t('label.mcp-full-restart') }}</button>
+          <div v-else class="bp-mcp-confirm">
+            <div class="bp-mcp-note">{{ $t('label.mcp-full-restart-confirm', { panes: mcpFullRestartPanes }) }}</div>
+            <button class="bp-btn bp-mcp-full" :disabled="backendBusy" @click="onConfirmFullRestart">{{ $t('label.mcp-full-restart-go') }}</button>
+            <button class="bp-btn" @click="mcpConfirmFullRestart = false">{{ $t('label.mcp-cancel') }}</button>
+          </div>
+        </template>
       </div>
       <div class="bp-actions">
         <button class="bp-btn bp-restart" :disabled="backendBusy" @click="onRestartBackend">
@@ -28999,6 +29091,14 @@ function paneIsCommander(p: ActivePane): boolean {
   flex-shrink: 0;
 }
 .sb-backend.sb-connected .sb-dot { background: var(--success-fg); }
+.sb-mcp-ok .sb-dot { background: var(--success-fg); }
+.sb-mcp-degraded .sb-dot { background: var(--warning-fg); }
+.sb-mcp-down .sb-dot { background: var(--danger-fg); }
+.bp-mcp .sb-dot { display: inline-block; vertical-align: middle; }
+.bp-mcp-actions { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bp-mcp-confirm { display: flex; flex-direction: column; gap: 6px; }
+.bp-mcp-first { display: contents; }
+.bp-mcp-note, .bp-mcp-first :deep(.bp-mcp-note) { font-size: 11px; line-height: 1.45; color: var(--text-secondary); white-space: normal; }
 .sb-backend:not(.sb-connected) .sb-dot { background: var(--danger-fg); }
 .sb-pipeline.sb-running { color: var(--accent-fg); }
 .sb-pipeline.sb-completed { color: var(--success-fg); }
@@ -29088,7 +29188,7 @@ function paneIsCommander(p: ActivePane): boolean {
   display: flex;
   gap: 8px;
 }
-.bp-btn {
+.bp-btn, .bp-mcp-first :deep(.bp-btn) {
   flex: 1;
   height: 28px;
   border-radius: 5px;
@@ -29099,8 +29199,8 @@ function paneIsCommander(p: ActivePane): boolean {
   font-size: var(--font-xs);
   transition: background 0.12s, opacity 0.12s;
 }
-.bp-btn:hover:not(:disabled) { background: var(--bg-active, var(--bg-hover)); }
-.bp-btn:disabled { opacity: 0.45; cursor: default; }
+.bp-btn:hover:not(:disabled), .bp-mcp-first :deep(.bp-btn:hover:not(:disabled)) { background: var(--bg-active, var(--bg-hover)); }
+.bp-btn:disabled, .bp-mcp-first :deep(.bp-btn:disabled) { opacity: 0.45; cursor: default; }
 .bp-restart { border-color: var(--accent-focus); color: var(--accent-fg); }
 .bp-stop { border-color: var(--danger-fg); color: var(--danger-fg); }
 .resize-handle {

@@ -53,7 +53,7 @@ describe('SshRemoteDialog', () => {
     await wrapper.get('[data-testid="ssh-host"]').setValue('build-box')
     await wrapper.get('[data-testid="ssh-connect"]').trigger('click')
     await flushPromises()
-    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~', cli: 'terminal' }])
+    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~', cli: 'terminal', useTmux: false }])
     expect(loadSshRemoteRecent().map((r) => r.host)).toEqual(['build-box'])
   })
 
@@ -153,7 +153,7 @@ describe('SshRemoteDialog — remote folder and CLI', () => {
     await flushPromises()
     expect(send).toHaveBeenCalledWith(
       'remote_ssh.connect', { target: { host: 'build-box', user: '', port: 22, keyPath: '' } }, expect.any(Number))
-    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~/app', cli: 'claude' }])
+    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~/app', cli: 'claude', useTmux: false }])
   })
 
   it('discloses the token for a CLI with tools and the lack of tools otherwise', async () => {
@@ -165,5 +165,23 @@ describe('SshRemoteDialog — remote folder and CLI', () => {
     await wrapper.get('[data-testid="ssh-cli"]').setValue('opencode')
     expect(wrapper.get('[data-testid="ssh-tools-note"]').text()).toBe('sshRemote.no-tools-note')
     expect(wrapper.get('[data-testid="ssh-cli-notes"]').text()).toContain('sshRemote.fresh-note')
+  })
+
+  it('runs in tmux only when ticked, for a terminal or a CLI, and says what that costs', async () => {
+    wrapper = mountDialog(async () => connected)
+    const box = wrapper.get('[data-testid="ssh-tmux"]').element as HTMLInputElement
+    expect(box.checked).toBe(false)
+    expect(wrapper.find('[data-testid="ssh-tmux-note"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="ssh-host"]').setValue('build-box')
+    await wrapper.get('[data-testid="ssh-tmux"]').setValue(true)
+    expect(wrapper.get('[data-testid="ssh-tmux-note"]').text()).toBe('sshRemote.tmux-note')
+    await wrapper.get('[data-testid="ssh-connect"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.emitted('connected')?.[0]).toEqual([{ host: 'build-box', user: '', port: 22, keyPath: '', dir: '~', cli: 'terminal', useTmux: true }])
+    // With tmux the resume note gives way to the tmux one.
+    await wrapper.get('[data-testid="ssh-cli"]').setValue('claude')
+    expect(wrapper.find('[data-testid="ssh-resume-note"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="ssh-tmux"]').setValue(false)
+    expect(wrapper.get('[data-testid="ssh-resume-note"]').text()).toBe('sshRemote.resume-note')
   })
 })

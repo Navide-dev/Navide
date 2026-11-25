@@ -34,7 +34,7 @@ const contracts = [
   { key: 'goose', binary: 'goose', permission: '', resume: 'goose session -r --session-id session-123', model: false, effort: null, paste: true, fullScreen: false, silence: false },
   // `--trust-all-tools` is a flag of the `chat` subcommand, and `--v3` pins
   // the harness Navide's Stop hook is written for.
-  { key: 'kiro', binary: 'kiro-cli', command: 'kiro-cli chat --v3', permission: '--trust-all-tools', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
+  { key: 'kiro', binary: 'kiro-cli', command: 'kiro-cli chat --v3', permission: '--trust-all-tools', resume: null, model: true, effort: '--effort high', paste: false, fullScreen: false, silence: false },
   { key: 'devin', binary: 'devin', permission: '--permission-mode dangerous', resume: null, model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'openclaw', binary: 'openclaw tui --local', permission: '', resume: 'openclaw tui --local --session session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },
   { key: 'hermes', binary: 'hermes chat', permission: '--yolo', resume: 'hermes chat --continue session-123', model: false, effort: null, paste: false, fullScreen: false, silence: false },

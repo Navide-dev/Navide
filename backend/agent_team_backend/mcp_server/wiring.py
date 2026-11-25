@@ -192,6 +192,15 @@ def release_pane_token(pane_id: str) -> None:
         log_redaction.remove_secret(token)
 
 
+def revoke_pane_token(pane_id: str) -> None:
+    """Revoke ``pane_id``'s token now, even while the pane is on screen: for
+    a CLI on another machine whose connection ended (remote_ssh.revoke_exited)."""
+    with _PANE_TOKENS_LOCK:
+        token = _PANE_TOKENS.pop(pane_id, None)
+    if token:
+        log_redaction.remove_secret(token)
+
+
 def _pane_has_live_pty(pane_id: str) -> bool:
     """Whether a PTY of this backend still runs with ``pane_id``. The app
     module is only consulted when loaded: without it there are no PTYs."""

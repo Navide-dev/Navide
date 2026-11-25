@@ -24,7 +24,7 @@ describe('CI path filter rules', () => {
   })
 
   it('skips the backend group for a frontend-only change', () => {
-    expect(scopes({ event: 'pull_request', files: ['src/renderer/src/App.vue', 'src/preload/index.ts', 'e2e/app.spec.ts'] }))
+    expect(scopes({ event: 'pull_request', files: ['src/renderer/src/components/ControlPane.vue', 'src/preload/index.ts', 'e2e/app.spec.ts'] }))
       .toEqual({ backend: false, frontend: true })
   })
 

@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_team_backend import pane_log_writer
 from agent_team_backend.terminals import (
     _BUF_CAP,
     _READER_PAUSE_MAX_MS,
@@ -346,6 +347,9 @@ async def test_dropped_output_leaves_one_gap_marker_in_the_log_mirror(tmp_path):
 
         emit.gate.set()
         await _settle(svc, session.id)
+        # The log is written on pane_log_writer's thread: wait for it before
+        # the file closes.
+        assert pane_log_writer.WRITER.drain()
     text = log_path.read_text(encoding="utf-8")
     marker = f"[navide: {dropped} bytes of output dropped]"
     assert text.count("[navide:") == 1
@@ -485,6 +489,7 @@ async def test_resize_barrier_writes_the_gap_marker_too(tmp_path):
         # nothing buffered — that pop rides a debounce timer, so which of the
         # two is on show is a race the drop count itself does not care about.
         assert not svc._out_dropped.get(session.id)
+        assert pane_log_writer.WRITER.drain()  # see the test above
     text = log_path.read_text(encoding="utf-8")
     marker = f"[navide: {dropped} bytes of output dropped]"
     assert text.count("[navide:") == 1

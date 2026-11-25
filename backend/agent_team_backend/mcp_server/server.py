@@ -449,6 +449,10 @@ _UNREGISTERED = (
     "protocol"
 )
 _HOST_TOKEN_REJECTED = "host token rejected"
+_PROBE_TOKEN_REJECTED = "probe token rejected"
+# The main process' health probe (src/main/mcp-health.ts) passes the endpoint's
+# gate to send initialize; it is no caller any tool acts for.
+_PROBE_NOT_A_CALLER = "the health probe credential cannot call tools"
 _EXTERNAL_TOKEN_REJECTED = "external token rejected"
 _EXTERNAL_DISABLED = (
     "external access to this MCP endpoint is disabled — turn it on in Navide's "
@@ -474,8 +478,10 @@ class _Caller:
     """The credential kind that authenticated a /plan-mcp request.
 
     kind is "pane" (pane_id set), "host" (this backend's own CLI wiring with
-    no pane id known at spawn time), or "external" (a client outside Navide's
-    process tree, only accepted while enabled).
+    no pane id known at spawn time), "external" (a client outside Navide's
+    process tree, only accepted while enabled) or "probe" (the main process'
+    health probe: initialize, tools/list and ping only — _resolve_caller
+    refuses it, so no tool runs for it).
     """
 
     kind: str
@@ -527,6 +533,8 @@ def _resolve_caller(ctx: Context) -> _Caller:
     if params is None:
         raise CallerUnknown(_UNWIRED)
     caller = _credential(request)
+    if caller.kind == "probe":
+        raise CallerUnknown(_PROBE_NOT_A_CALLER)
     if caller.kind != "pane":
         return caller
     pane_id = caller.pane_id
@@ -560,6 +568,14 @@ def _credential(request: Any) -> _Caller:
         if not secrets.compare_digest(token, auth.internal_token()):
             raise CallerUnknown(_HOST_TOKEN_REJECTED)
         return _Caller(kind="host")
+    if client == "probe":
+        # The main process' bearer, handed over on stdin at spawn and never
+        # written anywhere (app.set_host_session_token).
+        from agent_team_backend import app as backend_app
+
+        if not token or not backend_app.host_session_token_matches(token):
+            raise CallerUnknown(_PROBE_TOKEN_REJECTED)
+        return _Caller(kind="probe")
     if client == "external":
         if not auth.external_enabled():
             raise CallerUnknown(_EXTERNAL_DISABLED)
@@ -1011,7 +1027,14 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
 # its prompt, and "ok" without the kickoff was read as "delivered" by every
 # caller, who then never learned the pane sat idle with an empty prompt.
 _SPAWN_VERDICT_TIMEOUT_S = 40.0
-_KICKOFF_VERDICT_TIMEOUT_S = 45.0
+# The window answers on every way its injection can end (App.vue, the
+# agent_spawn.kickoff reporter), so the wait is for that event; this deadline
+# only covers a window that went away. It must outlast the window's own budget
+# — up to 90 s for a resumed CLI's prompt (KICKOFF_PROMPT_READY_TIMEOUT_RESUME_MS)
+# plus up to 120 s watching for the echo (KICKOFF_ECHO_WAIT_MS) — or a loaded
+# machine's slow boot is reported before the window has decided (2026-11-26:
+# 45 s, load 88, tasks that arrived reported "failed").
+_KICKOFF_VERDICT_TIMEOUT_S = 240.0
 _pending_spawns: dict[str, asyncio.Future[dict[str, Any]]] = {}
 _pending_kickoffs: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
@@ -1309,12 +1332,21 @@ async def cli_open_agent(
 
     `ok: true` means the pane exists, and `kickoff` says whether the task
     reached it. The call blocks until the window has booted the CLI, waited
-    for its prompt and typed the task (up to ~45s on top of the spawn), then
-    answers `kickoff: "sent"` — our own text was observed landing and being
-    submitted — or `kickoff: "failed"`: the injection could not be verified
-    after a bounded retry, or no verdict arrived in time. A failed kickoff is
-    still `ok: true` (the pane is open; do NOT open it again) and comes with
-    `hint` and the window's reason in `advisories`.
+    for its prompt and typed the task — usually seconds, longer on a loaded
+    machine; the window always answers, and the wait gives up only after 4
+    minutes without a word from it — then answers one of:
+    `kickoff: "sent"` — our own text was observed landing and being submitted.
+    `kickoff: "failed"` — the window saw the task NOT go in (the shell never
+    came up, the pane exited, typing failed after its retries): resend it with
+    cli_send to the returned address.
+    `kickoff: "unverified"` — the task was typed but its arrival could not be
+    confirmed (the submit was not observed, the text may still sit in the
+    composer, or the window never answered). It may well be running: read
+    cli_get_status first and resend only if `ui.kickoff` is not "sent" and
+    `ui.buffer` shows an empty prompt; a blind resend can run the task twice.
+    Every kickoff but "sent" is still `ok: true` (the pane is open; do NOT
+    open it again) and comes with `hint` and the window's reason in
+    `advisories`.
     `kickoff: "blocked-by-prompt"`: the CLI stopped on a launch prompt Navide
     does not answer by itself (only an allowlisted one, such as Claude Code
     asking to add Navide's own skills folder, is answered for you, and logged
@@ -1790,9 +1822,9 @@ async def cli_open_agent(
     else:
         # "unverified" (the window saw its text still sitting in the composer,
         # or could not tell) and the timeout above: the task may well be in.
-        # A blind resend here is what doubles a task, so the caller is told to
-        # look first.
-        result["kickoff"] = "failed"
+        # Reported as such, not as "failed": a caller that reads "failed"
+        # resends, and that is what doubles a task.
+        result["kickoff"] = "unverified"
         result["hint"] = (
             f"the task could not be confirmed as delivered — it may already be "
             f"in the pane. Read cli_get_status(target=\"{result['address']}\") "
@@ -12700,6 +12732,14 @@ class _SdkFailureCapture(logging.Handler):
 logging.getLogger("mcp.server.streamable_http").addHandler(_SdkFailureCapture())
 
 
+# Appended to the errors a CLI sees when the endpoint itself fails, so the
+# agent (and the user reading its output) knows what brings it back.
+RECOVERY_HINT = (
+    "If this keeps happening, restart Navide's MCP from the status bar"
+    " (Backend → Restart MCP; panes keep running), or restart the backend there."
+)
+
+
 def _request_caller_label(caller: _Caller | None) -> str:
     if caller is None:
         return "unknown caller"
@@ -12711,7 +12751,7 @@ def _explained_failure(body: bytes, failure: BaseException, method: str, caller:
     detail = f"{type(failure).__name__}: {failure} (method {method or 'unknown'}; {caller})"
     try:
         document = json.loads(body)
-        document["error"]["message"] = f"{document['error']['message']}: {detail}"
+        document["error"]["message"] = f"{document['error']['message']}: {detail}. {RECOVERY_HINT}"
     except (ValueError, TypeError, KeyError):
         return body
     return json.dumps(document).encode("utf-8")
@@ -12724,14 +12764,16 @@ class _PlanMcpASGI:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         runner = _loop_runner()
         if runner is None:
-            response = PlainTextResponse("plan MCP server not started", status_code=503)
+            response = PlainTextResponse(f"plan MCP server not started. {RECOVERY_HINT}", status_code=503)
             await response(scope, receive, send)
             return
         if _runner_stopped(runner):
             runner = _replace_stopped_runner(runner)
         await runner.ready.wait()
         if runner.task.done():
-            response = PlainTextResponse("plan MCP server failed to start; see the backend log", status_code=503)
+            response = PlainTextResponse(
+                f"plan MCP server failed to start; see the backend log. {RECOVERY_HINT}", status_code=503
+            )
             await response(scope, receive, send)
             return
         manager = runner.manager
@@ -12780,6 +12822,8 @@ class _PlanMcpASGI:
             # A failure the SDK caught is answered with a 5xx whose body names
             # nothing; hold its start until the body can carry the cause.
             nonlocal held
+            if message["type"] == "http.response.start" and scope.get("method") == "POST":
+                _record_initialize(bytes(head), message.get("status", 200), failures)
             if message["type"] == "http.response.start" and message.get("status", 200) >= 500 and failures:
                 held = message
                 return
@@ -12822,6 +12866,20 @@ class _PlanMcpASGI:
 
 
 asgi_app = _PlanMcpASGI()
+
+
+def _record_initialize(head: bytes, status: int, failures: list[BaseException]) -> None:
+    """Count an initialize's outcome for /health and backend.log (mcp_server.health)."""
+    match = _METHOD_RE.search(head)
+    if not match or match.group(1) != b"initialize":
+        return
+    from agent_team_backend.mcp_server import health as mcp_health
+
+    if status < 400:
+        mcp_health.record_initialize(True)
+        return
+    failure = failures[-1] if failures else None
+    mcp_health.record_initialize(False, f"{type(failure).__name__}: {failure}" if failure else f"HTTP {status}")
 
 
 def _start_runner() -> _Runner:

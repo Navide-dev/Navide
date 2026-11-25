@@ -30,18 +30,18 @@ manifest rules the Registry enforces, see
 
 The packages are distributed only as GitHub Release files, not through npm or
 PyPI. Install them from the newest `plugin-packages-*` release,
-[`plugin-packages-1.0.1`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.1)
+[`plugin-packages-1.0.2`](https://github.com/Navide-dev/Navide/releases/tag/plugin-packages-1.0.2)
 (its notes list each file's SHA-256), the same files Navide's own plugins
 build against:
 
 ```bash
-R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.1
-npm install --save-dev $R/navide-plugin-contracts-1.0.1.tgz $R/navide-plugin-sdk-1.0.1.tgz
+R=https://github.com/Navide-dev/Navide/releases/download/plugin-packages-1.0.2
+npm install --save-dev $R/navide-plugin-contracts-1.0.2.tgz $R/navide-plugin-sdk-1.0.2.tgz
 npx navide-plugin
 ```
 
 Before a project exists, run the CLI straight from the release:
-`npx --yes --package $R/navide-plugin-contracts-1.0.1.tgz --package $R/navide-plugin-sdk-1.0.1.tgz navide-plugin init …`
+`npx --yes --package $R/navide-plugin-contracts-1.0.2.tgz --package $R/navide-plugin-sdk-1.0.2.tgz navide-plugin init …`
 (see [Build for Navide](build-for-navide.md#1-five-minutes-to-a-running-plugin)).
 The packages keep one shared 1.x version with a
 [twelve-month compatibility commitment](plugin-development-v2.md#compatibility-commitment-1x);
@@ -62,7 +62,11 @@ npx navide-plugin
 
 The last command prints the usage of every command. The rest of this guide
 writes `navide-plugin`; run it as `npx navide-plugin` (or through a
-`package.json` script).
+`package.json` script) inside a project that installed the tarballs. Outside
+one, `npx navide-plugin` looks the name up on npm, where Navide publishes
+nothing. The `init` templates write a `package.json` that installs them, and
+[From zero to a listing](build-for-navide.md#from-zero-to-a-listing) runs
+every step of this guide in order.
 
 > The Registry repository also contains an older Python `navide-plugin`
 > (`marketplace/registry/registry/cli.py`). It is deprecated for plugin
@@ -101,8 +105,14 @@ acme-hello/
 ├── frontend/main/main.js
 ├── README.md              # shown on your listing page
 ├── artifact-files.json    # the exact files that go into the package
-└── .gitignore             # keeps *.key, *.vsix and *.sig out of Git
+├── package.json           # installs the navide-plugin CLI from the release; never packaged
+└── .gitignore             # keeps node_modules, *.key, *.vsix and *.sig out of Git
 ```
+
+The same files are in the repository as
+[`examples/hello-plugin`](../../examples/hello-plugin/). In the folder,
+`npm install` installs the CLI and `npm run check` / `npm run package` run
+the two commands of the next section.
 
 Edit `manifest.json` — `marketplace.description`, `marketplace.license`,
 `permissions`, views — following FORMAT.md. Keep `permissions` to what the
