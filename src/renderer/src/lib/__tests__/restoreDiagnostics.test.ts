@@ -69,4 +69,17 @@ describe('App.vue wiring', () => {
     expect(gaveUp).toBeGreaterThan(retry)
     expect(gaveUp).toBeLessThan(body.indexOf('workspaceCheckRetries = 0'))
   })
+
+  // A cold launch queues project.peek before the backend is up. When main's
+  // backend-changed broadcast beats init()'s poll, the queue is rejected and
+  // the retry runs on connect — well inside the repeat guard's window of the
+  // failed check. Dropped as a "repeat", the window kept none of its panes and
+  // never applied the saved layout mode (VM 0.2.48, restore=1 windows).
+  it('a retry of a failed workspace check is forced past the repeat guard', () => {
+    const check = functionSource('onWorkspaceCheck')
+    expect(check).toMatch(/if \(currentWorkspace\.value === path\) void onWorkspaceCheck\(path, \{ force: true \}\)/)
+    expect(check).not.toContain('void onWorkspaceCheck(path)')
+    const onConnect = app.slice(app.indexOf('const p = recheckWorkspaceOnConnect'))
+    expect(onConnect.slice(0, 400)).toMatch(/if \(currentWorkspace\.value === p\) void onWorkspaceCheck\(p, \{ force: true \}\)/)
+  })
 })

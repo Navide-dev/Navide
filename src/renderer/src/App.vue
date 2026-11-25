@@ -14723,7 +14723,7 @@ async function onWorkspaceCheck(path: string, opts?: { force?: boolean }): Promi
       workspaceCheckRetries++
       if (backend.status.value === 'connected') {
         window.setTimeout(() => {
-          if (currentWorkspace.value === path) void onWorkspaceCheck(path)
+          if (currentWorkspace.value === path) void onWorkspaceCheck(path, { force: true })
         }, WORKSPACE_CHECK_RETRY_DELAY_MS)
       } else {
         recheckWorkspaceOnConnect = path
@@ -14945,7 +14945,9 @@ watch(
     if (!recheckWorkspaceOnConnect) return
     const p = recheckWorkspaceOnConnect
     recheckWorkspaceOnConnect = ''
-    if (currentWorkspace.value === p) void onWorkspaceCheck(p)
+    // Forced: this retries a check that failed moments ago, and the repeat
+    // guard would otherwise drop it as that check's debounced twin.
+    if (currentWorkspace.value === p) void onWorkspaceCheck(p, { force: true })
   }
 )
 
