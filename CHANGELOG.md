@@ -2,6 +2,25 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- SSH Remote (0.2.49, experimental): when the host has tmux, each SSH pane runs in a tmux session of its own there, named once when the pane opens and kept with the pane. The CLI or shell keeps running while the connection is down, and a reconnect, or opening the pane after Navide restarts, attaches to that same session instead of starting again. Closing the pane ends its session, so nothing is left running on the host. Navide uses a tmux server of its own (`tmux -L navide`, started without a config file), so your own tmux sessions and settings are untouched; in it the status line and prefix key are off, so Ctrl-B reaches the CLI. The tool token reaches the new session through a fifo, never a command line or a file. Without tmux on the host, a pane starts as in 0.2.48 and resumes its CLI's conversation by session id. The launch and reattach scripts are tested against a stand-in `ssh`, `tmux` and CLI that run them for real.
+
+### Changed
+
+- SSH Remote dialog: the note under a CLI now says a reconnect or restart *tries* to reattach, and that with tmux on the host the pane returns to the screen that kept running; without tmux it tries to resume the pane's own conversation and starts a new one if it can't. The user guide (en, zh-TW, ja) says the same. All 11 languages.
+
+### Known limitations
+
+- SSH Remote tmux sessions (0.2.49, experimental): verified only against the stand-in `ssh` and `tmux` in the unit tests, not yet on a real host with tmux.
+- After a reattach, the CLI keeps running but Navide's tools in it stop working: they are tied to the pane's previous connection (its pane id, tool token and tunnel port change on every reconnect and restart). Exit the CLI and close and reopen the pane to get them back.
+- After a reattach the pane shows tmux's current screen; output printed while the connection was down is not in the pane's scrollback.
+- Closing a pane ends its tmux session with one non-interactive ssh call. If that call cannot get in (the host is down, or the key needs a passphrase and no agent holds it), the session stays until its CLI exits; `tmux -L navide ls` on the host lists what is left.
+- Panes opened before 0.2.49 have no tmux session and keep the 0.2.48 behaviour until they are closed and opened again from the dialog.
+- Inside tmux, Codex's session id is reported through the connection that started the session. If that connection drops before Codex writes its session file, the id is not recorded, which matters only when the tmux session is gone as well (the host restarted).
+
 ## [0.2.48] — 2026-11-25
 
 ### Added

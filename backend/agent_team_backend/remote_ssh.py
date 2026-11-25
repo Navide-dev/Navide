@@ -30,6 +30,15 @@ resumes exactly that conversation, never "the latest one in this folder",
 which could belong to someone else. Claude is launched with an id chosen
 here; Codex's id is read on the host from the session file its own process
 holds open and reported back through :data:`SESSION_REPORT`.
+
+A pane whose spec names a ``tmuxSession`` (chosen by the app when the pane is
+first opened, kept across reconnects, rebuilds and restores) runs inside that
+tmux session on the host when the host has tmux (:func:`tmux_script`): a
+reconnect attaches to the session that kept running, so the work in it is not
+interrupted. Navide runs its own tmux server (``tmux -L navide``), so the
+user's own tmux sessions and settings are never touched. Without tmux on the
+host the pane starts as above. Closing the pane ends the session
+(:func:`end_session_argv`).
 """
 
 from __future__ import annotations
@@ -104,6 +113,12 @@ def new_nonce() -> str:
 
 _SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,63}$")
 
+# The tmux session of a pane: chosen by the app, one per pane, and safe to put
+# on a command line unquoted (tmux reserves "." and ":" in targets).
+_TMUX_SESSION_RE = re.compile(r"^navide-[0-9a-f]{16,32}$")
+# Navide's own tmux server socket on the host, apart from the user's.
+TMUX_SOCKET = "navide"
+
 # A user name ssh accepts without quoting; a leading "-" would be an option.
 _USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]{0,63}$")
 # A host name, IPv4 address or ssh config alias. No "@": the user is its own field.
@@ -165,13 +180,19 @@ def ssh_options(target: Mapping[str, Any]) -> list[str]:
 
 def shell_argv(target: Mapping[str, Any], control_path_dir: Path | None = None) -> list[str]:
     """The argv an SSH Remote terminal pane runs: a login shell on the host,
-    in the spec's remote folder when it names one other than home."""
+    in the spec's remote folder when it names one other than home, inside the
+    spec's tmux session when it names one and the host has tmux."""
     argv = [
         "ssh", "-tt",
         *rd.ssh_base_options(control_path_dir),
         *ssh_options(target),
         "--", destination(target),
     ]
+    if target.get("tmuxSession"):
+        # In its tmux session when the host has tmux; the login shell finds it.
+        inner = "exec /bin/sh -c " + shlex.quote(terminal_script({"dir": DEFAULT_DIR, **target}))
+        argv.append(f"exec $SHELL -lc {shlex.quote(inner)}")
+        return argv
     remote_dir = str(target.get("dir") or DEFAULT_DIR)
     if remote_dir != DEFAULT_DIR:
         argv.append(f"cd {_cd_target(remote_dir)} && exec $SHELL -l")
@@ -182,7 +203,8 @@ def parse_spec(payload: Any) -> dict[str, Any]:
     """The validated ``remote`` spec of an SSH pane: ``kind``, the target, the
     remote folder, what runs there, the CLI's session id ("" while unknown)
     and ``resume`` — whether this launch continues an earlier one (a
-    reconnect, rebuild or restore). ``resume`` is never persisted."""
+    reconnect, rebuild or restore). ``tmuxSession`` ("" for none) is the
+    host's tmux session the pane runs in. ``resume`` is never persisted."""
     if not isinstance(payload, Mapping) or payload.get("kind") != "ssh":
         raise SshTargetError("not an ssh remote spec")
     remote_dir = str(payload.get("dir") or DEFAULT_DIR).strip()
@@ -194,9 +216,13 @@ def parse_spec(payload: Any) -> dict[str, Any]:
     session_id = str(payload.get("sessionId") or "")
     if session_id and not _SESSION_ID_RE.match(session_id):
         raise SshTargetError("invalid session id")
+    tmux_session = str(payload.get("tmuxSession") or "")
+    if tmux_session and not _TMUX_SESSION_RE.match(tmux_session):
+        raise SshTargetError("invalid tmux session")
     return {
         "kind": "ssh", **parse_target(payload),
         "dir": remote_dir, "cli": cli, "sessionId": session_id,
+        "tmuxSession": tmux_session,
         "resume": payload.get("resume") is True,
     }
 
@@ -221,13 +247,18 @@ def _osc(text: str) -> str:
     return f"\\033]7737;{text}\\007"
 
 
-def _session_script(cli: str, argv: list[str], session_id: str, resume: bool, nonce: str) -> str:
+def _session_script(
+    cli: str, argv: list[str], session_id: str, resume: bool, nonce: str, out: str = "",
+) -> str:
     """The lines that start ``argv`` resuming ``session_id`` when asked to and
     the CLI still has it, else fresh; a resume that cannot happen prints
-    :data:`RESUME_MISSED`."""
+    :data:`RESUME_MISSED`. ``out`` is where the reports are written: "" for
+    the pane's own terminal, or a shell word naming the ssh connection's
+    terminal from inside tmux, which would swallow them."""
     if not _NONCE_RE.match(nonce):
         raise SshTargetError("invalid nonce")
-    missed = f"printf '{_osc('navide-resume-miss;' + nonce)}'; " if resume else ""
+    to_out = f" > {out}" if out else ""
+    missed = f"printf '{_osc('navide-resume-miss;' + nonce)}'{to_out}; " if resume else ""
     cmd = shlex.join(argv)
     if cli == "claude":
         sid = shlex.quote(session_id)
@@ -260,7 +291,7 @@ def _session_script(cli: str, argv: list[str], session_id: str, resume: bool, no
             "| grep -o 'rollout-[^/ ]*[.]jsonl' | head -n 1); "
             'if [ -n "$f" ]; then '
             "id=$(printf %s \"$f\" | sed -E 's/.*([0-9A-Fa-f-]{36})[.]jsonl$/\\1/'); "
-            f"printf '{report}' \"$id\" > /dev/tty; exit 0; fi; "
+            f"printf '{report}' \"$id\" > {out or '/dev/tty'}; exit 0; fi; "
             "sleep 2; done ) </dev/null >/dev/null 2>&1 & "
         )
         lines.append(f"{missed}{watcher}exec {cmd}")
@@ -274,23 +305,108 @@ def cli_script(spec: Mapping[str, Any], *, pane_id: str, remote_port: int | None
     from .mcp_server import wiring
 
     cli = spec["cli"]
-    parts: list[str] = []
+    token = ""
     if cli in MCP_CLIS:
         if remote_port is None:
             raise SshTargetError("a CLI with Navide tools needs a tunnel port")
         env = wiring.TOKEN_ENV
         request = rd_mod.TOKEN_REQUEST.decode("ascii").replace("\x1b", "\\033").replace("\x07", "\\007")
-        parts.append(f"stty -echo; printf '{request}'; IFS= read -r {env}; stty echo; export {env}; ")
+        token = f"stty -echo; printf '{request}'; IFS= read -r {env}; stty echo; export {env}; "
         argv = rd_mod.cli_argv(cli, rd_mod.mcp_url({"mode": "host"}, remote_port, pane_id))
     else:
         argv = list(CLI_COMMANDS[cli])
+    session_id = str(spec.get("sessionId") or "")
+    resume = bool(spec.get("resume"))
+    plain = token + _cd_script(spec) + _session_script(cli, argv, session_id, resume, nonce)
+    if not spec.get("tmuxSession"):
+        return plain
+    inner = _session_script(cli, argv, session_id, resume, nonce, out='"$o"')
+    return tmux_script(spec, inner, token=token, fallback=plain)
+
+
+def _cd_script(spec: Mapping[str, Any]) -> str:
     folder = shlex.quote(spec["dir"])
-    parts.append(
+    return (
         f"cd {_cd_target(spec['dir'])} || "
         f"{{ printf 'Navide: cannot open the remote folder %s\\r\\n' {folder}; exit 1; }}; "
     )
-    parts.append(_session_script(cli, argv, str(spec.get("sessionId") or ""), bool(spec.get("resume")), nonce))
-    return "".join(parts)
+
+
+def tmux_script(spec: Mapping[str, Any], inner: str, *, token: str, fallback: str) -> str:
+    """The /bin/sh script of a pane that runs in its tmux session.
+
+    The session already there (a reconnect, a rebuild, Navide restarted):
+    attach to it, so what runs in it carries on. Otherwise ``token`` (the
+    lines reading the tool token, "" for none) runs here, a new detached
+    session starts ``inner`` in the remote folder, and this attaches to it.
+    ``inner`` gets three lines through a fifo, never through a command line
+    or a file: this connection's terminal (``$o``, where reports go, since
+    tmux swallows them), the login shell's PATH and the token. On a host
+    without tmux, ``fallback`` (the plain launch) runs instead."""
+    from .mcp_server import wiring
+
+    name = str(spec["tmuxSession"])
+    if not _TMUX_SESSION_RE.match(name):
+        raise SshTargetError("invalid tmux session")
+    tm = f"tmux -L {TMUX_SOCKET}"
+    env = wiring.TOKEN_ENV
+    head = (
+        't=$1; { IFS= read -r o; IFS= read -r p; IFS= read -r k; } < "$t/k"; rm -rf "$t"; '
+        'PATH=$p; export PATH; '
+    )
+    if token:
+        head += f"{env}=$k; export {env}; "
+    head += "k=; "
+    # The session's own server: no status line, no prefix key (Ctrl-B is
+    # the CLI's), no Esc delay, and output that reaches the pane's scrollback.
+    options = "".join(
+        f"{tm} {opt} 2>/dev/null; " for opt in (
+            "set-option -g status off", "set-option -g prefix None", "set-option -g prefix2 None",
+            "set-option -s escape-time 0", "set-option -sa terminal-overrides ',*:smcup@:rmcup@'",
+        )
+    )
+    start = shlex.quote("exec /bin/sh -c " + shlex.quote(head + inner) + " sh ")
+    return (
+        "if command -v tmux >/dev/null 2>&1; then "
+        f"if {tm} has-session -t ={name} 2>/dev/null; then exec {tm} attach-session -t ={name}; fi; "
+        f"{token}{_cd_script(spec)}"
+        "t=$(mktemp -d) && mkfifo \"$t/k\" || { printf 'Navide: cannot start tmux\\r\\n'; exit 1; }; "
+        # Its own server starts with no user config and runs the command
+        # with /bin/sh, whatever the login shell is.
+        f"{tm} -f /dev/null start-server \\; set-option -g default-shell /bin/sh \\; "
+        f"new-session -d -s {name} -c \"$PWD\" {start}\"$t\" "
+        "|| { rm -rf \"$t\"; printf 'Navide: cannot start tmux\\r\\n'; exit 1; }; "
+        f"{options}"
+        "o=$(tty 2>/dev/null) || o=/dev/null; "
+        f"printf '%s\\n' \"$o\" \"$PATH\" \"${{{env}:-}}\" > \"$t/k\"; "
+        f"exec {tm} attach-session -t ={name}; "
+        f"fi; {fallback}"
+    )
+
+
+def terminal_script(spec: Mapping[str, Any]) -> str:
+    """The /bin/sh script of a terminal pane that runs in its tmux session:
+    a login shell there, or, without tmux, here."""
+    fallback = _cd_script(spec) + "exec $SHELL -l"
+    return tmux_script(spec, "exec $SHELL -l", token="", fallback=fallback)
+
+
+def end_session_argv(spec: Mapping[str, Any]) -> list[str]:
+    """One non-interactive call that ends a closed pane's tmux session, so
+    nothing is left running on the host. Its own connection, like the
+    preflight."""
+    name = str(spec.get("tmuxSession") or "")
+    if not _TMUX_SESSION_RE.match(name):
+        raise SshTargetError("invalid tmux session")
+    command = f"tmux -L {TMUX_SOCKET} kill-session -t ={name} 2>/dev/null; true"
+    return [
+        "ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        *rd.ssh_base_options(None),
+        "-o", "ControlPath=none",
+        *ssh_options(spec),
+        "--", destination(spec),
+        f"exec $SHELL -lc {shlex.quote(command)}",
+    ]
 
 
 def cli_pane_argv(

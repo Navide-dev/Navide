@@ -346,6 +346,15 @@ Sessions should publish structured progress back to the Project Intelligence Lay
   an OSC sequence carrying a per-launch nonce, then resumed with
   `codex resume <id>`. A resume that cannot happen starts fresh and reports
   that (`remote_ssh.resume_missed`); never `--continue` or `resume --last`.
+  With tmux on the host, a pane whose spec names a `tmuxSession` (chosen by
+  the renderer when the pane opens, kept on its record) runs in that session
+  of Navide's own tmux server (`tmux -L navide`, started with `-f /dev/null`):
+  a launch that finds the session attaches to it, so a reconnect, rebuild or
+  restore returns to what kept running; otherwise the token is read as above
+  and handed, with the connection's terminal and the login PATH, to the new
+  session through a fifo, never a command line or a file. Without tmux the
+  pane starts as before. Closing the pane sends `remote_ssh.end_session`, one
+  BatchMode ssh call that kills the session.
   SSH panes are recorded (`manual_pane.spawn` with the spec, the id through
   `remote_ssh.set_session`) and restored like other panes, still only to a
   trusted target. The renderer reconnects on ssh's exit 255 with backoff,

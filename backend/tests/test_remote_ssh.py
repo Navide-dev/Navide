@@ -287,7 +287,8 @@ def test_a_trusted_target_opens_a_login_shell_pane(monkeypatch):
     assert created["command"][:2] == ["ssh", "-tt"]
     # Server-only keys never come from the client; the spec marks the pane.
     assert "credential_env" not in created["metadata"]
-    assert created["metadata"][remote_ssh.METADATA_KEY] == {**_SPEC, "dir": "~", "cli": "terminal", "sessionId": ""}
+    assert created["metadata"][remote_ssh.METADATA_KEY] == {
+        **_SPEC, "dir": "~", "cli": "terminal", "sessionId": "", "tmuxSession": ""}
     assert rd.METADATA_KEY not in created["metadata"]
     assert "ANTHROPIC_API_KEY" in rd.spawn_env_remove({"ANTHROPIC_API_KEY": "x"})
 
@@ -512,7 +513,219 @@ def test_manual_pane_spawn_records_an_ssh_spec_without_resume(monkeypatch):
         return sess.sent
 
     asyncio.run(run({**_SPEC, "cli": "claude", "sessionId": "0f0e", "resume": True}))
-    assert recorded and recorded[0]["remote"] == {**_SPEC, "dir": "~", "cli": "claude", "sessionId": "0f0e"}
+    assert recorded and recorded[0]["remote"] == {
+        **_SPEC, "dir": "~", "cli": "claude", "sessionId": "0f0e", "tmuxSession": ""}
     recorded.clear()
     sent = asyncio.run(run({**_SPEC, "dir": "-x"}))
     assert sent[-1]["error"]["code"] == "BAD_REQUEST" and recorded == []
+
+
+# ── tmux sessions on the host (0.2.49) ─────────────────────────────────────
+#
+# The scripts run for real against a fake host: a stand-in `ssh` that runs
+# the remote command locally, a stand-in `tmux` that keeps its sessions as
+# files, and stand-in CLIs that write down how they were started. Nothing
+# real is reached; every value that looks like a secret is built here.
+
+_TMUX = "navide-" + "0123456789abcdef"
+
+
+def _write_exe(path: Path, body: str) -> None:
+    path.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+
+
+@pytest.fixture
+def fake_host(tmp_path):
+    import shutil
+
+    if os.name == "nt" or not shutil.which("sh") or not shutil.which("mkfifo"):
+        pytest.skip("needs a POSIX sh and mkfifo")
+    bin_dir, state, home = tmp_path / "bin", tmp_path / "state", tmp_path / "home"
+    for folder in (bin_dir, state, home, home / "proj"):
+        folder.mkdir()
+    # ssh: skip the options, then run the remote command as the host would.
+    _write_exe(bin_dir / "ssh", (
+        'printf "%s\\n" "$*" >> "$FAKE_STATE/ssh.log"\n'
+        'while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done\n'
+        'shift 2; cd "$HOME" && exec /bin/sh -c "$1"\n'
+    ))
+    # The remote login shell: `-lc`/`-ilc CMD` runs CMD, `-l` is a shell.
+    _write_exe(bin_dir / "loginsh", (
+        'case "$1" in -*c) exec /bin/sh -c "$2";; esac\n'
+        'echo "LOGIN-SHELL $(pwd)" > "$FAKE_STATE/shell.out"\n'
+    ))
+    _write_exe(bin_dir / "tmux", (
+        'printf "%s\\n" "$*" >> "$FAKE_STATE/tmux.log"\n'
+        'while :; do case "$1" in -L|-f) shift 2;; *) break;; esac; done\n'
+        'case "$1" in\n'
+        '  has-session) [ -e "$FAKE_STATE/s-${3#=}" ];;\n'
+        '  start-server)\n'
+        '    while [ "$#" -gt 0 ] && [ "$1" != new-session ]; do shift; done\n'
+        '    [ "$1" = new-session ] || exit 0; shift\n'
+        '    while :; do case "$1" in -d) shift;; -s) n=$2; shift 2;; -c) c=$2; shift 2;; *) break;; esac; done\n'
+        '    : > "$FAKE_STATE/s-$n"\n'
+        '    ( cd "$c" && /bin/sh -c "$1" > "$FAKE_STATE/inner.out" 2>&1; rm -f "$FAKE_STATE/s-$n" ) </dev/null &\n'
+        '    ;;\n'
+        '  attach-session) echo "ATTACHED ${3#=}";;\n'
+        '  kill-session) rm -f "$FAKE_STATE/s-${3#=}";;\n'
+        'esac\n'
+    ))
+    _write_exe(bin_dir / "claude", (
+        'printf "%s\\n" "$@" > "$FAKE_STATE/claude.argv"\n'
+        'printf "%s" "${NAVIDE_MCP_TOKEN:-}" > "$FAKE_STATE/claude.token"\n'
+        'pwd > "$FAKE_STATE/claude.pwd"\n'
+    ))
+    env = {
+        "PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(home), "SHELL": str(bin_dir / "loginsh"),
+        "FAKE_STATE": str(state), "TMPDIR": str(tmp_path),
+    }
+    return {"bin": bin_dir, "state": state, "home": home, "env": env}
+
+
+def _run_on_host(host: dict[str, Any], argv: list[str], stdin: bytes = b"") -> bytes:
+    import subprocess
+
+    done = subprocess.run(argv, input=stdin, capture_output=True, env=host["env"], timeout=20)
+    return done.stdout
+
+
+def _wait_for(path: Path) -> str:
+    import time
+
+    deadline = time.monotonic() + 10
+    while not path.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _tmux_claude(**extra: Any) -> dict[str, Any]:
+    return _cli_spec(dir="~/proj", sessionId="0f0e", tmuxSession=_TMUX, **extra)
+
+
+def _claude_argv(spec: dict[str, Any]) -> list[str]:
+    return remote_ssh.cli_pane_argv(spec, pane_id="p1", local_port=1234, remote_port=45000, nonce=_NONCE)
+
+
+def test_a_tmux_session_name_is_kept_and_checked():
+    assert remote_ssh.record_spec(_tmux_claude(resume=True))["tmuxSession"] == _TMUX
+    for bad in ("navide-x", "work", "navide-0123456789abcdef;rm", "navide-0123456789ABCDEF"):
+        with pytest.raises(remote_ssh.SshTargetError):
+            remote_ssh.parse_spec({**_SPEC, "tmuxSession": bad})
+
+
+def test_a_claude_pane_starts_in_its_own_tmux_session_with_the_token_off_the_command_line(fake_host):
+    token = "tok-" + os.urandom(6).hex()
+    out = _run_on_host(fake_host, _claude_argv(_tmux_claude()), (token + "\n").encode())
+    state = fake_host["state"]
+    assert rd.TOKEN_REQUEST in out and f"ATTACHED {_TMUX}".encode() in out
+    argv = _wait_for(state / "claude.argv").splitlines()
+    assert "--session-id" in argv and argv[argv.index("--session-id") + 1] == "0f0e"
+    assert "--mcp-config" in argv and "--resume" not in argv
+    assert _wait_for(state / "claude.token") == token
+    assert Path(_wait_for(state / "claude.pwd").strip()).resolve() == (fake_host["home"] / "proj").resolve()
+    tmux_log = (state / "tmux.log").read_text(encoding="utf-8")
+    assert f"-L navide -f /dev/null start-server" in tmux_log and f"new-session -d -s {_TMUX}" in tmux_log
+    # The token went through the fifo only: on no command line, in no file.
+    assert token not in tmux_log and token not in (state / "ssh.log").read_text(encoding="utf-8")
+    assert not list(Path(fake_host["env"]["TMPDIR"]).glob("tmp*/k"))
+
+
+def test_a_reconnect_attaches_to_the_session_that_kept_running(fake_host):
+    state = fake_host["state"]
+    (state / f"s-{_TMUX}").touch()  # the CLI is still running in its session
+    out = _run_on_host(fake_host, _claude_argv(_tmux_claude(resume=True)))
+    assert f"ATTACHED {_TMUX}".encode() in out
+    # Nothing restarted, nothing asked for a token, nothing said "missed".
+    assert rd.TOKEN_REQUEST not in out and remote_ssh.RESUME_MISSED not in out
+    assert not (state / "claude.argv").exists()
+    assert "new-session" not in (state / "tmux.log").read_text(encoding="utf-8")
+
+
+def test_a_session_gone_with_the_host_resumes_the_conversation_in_a_new_one(fake_host):
+    transcript = fake_host["home"] / ".claude" / "projects" / "-proj"
+    transcript.mkdir(parents=True)
+    (transcript / "0f0e.jsonl").write_text("{}\n", encoding="utf-8")
+    out = _run_on_host(fake_host, _claude_argv(_tmux_claude(resume=True)), b"t\n")
+    assert f"ATTACHED {_TMUX}".encode() in out
+    argv = _wait_for(fake_host["state"] / "claude.argv").splitlines()
+    assert argv[argv.index("--resume") + 1] == "0f0e"
+
+
+def test_without_tmux_on_the_host_the_pane_starts_as_before(fake_host):
+    if Path("/usr/bin/tmux").exists() or Path("/bin/tmux").exists():
+        pytest.skip("this host has tmux on the base PATH")
+    (fake_host["bin"] / "tmux").unlink()
+    out = _run_on_host(fake_host, _claude_argv(_tmux_claude()), b"t\n")
+    assert b"ATTACHED" not in out
+    argv = _wait_for(fake_host["state"] / "claude.argv").splitlines()
+    assert argv[argv.index("--session-id") + 1] == "0f0e"
+
+
+def test_a_terminal_pane_runs_a_login_shell_in_its_session(fake_host):
+    spec = remote_ssh.parse_spec({**_SPEC, "dir": "~/proj", "tmuxSession": _TMUX})
+    out = _run_on_host(fake_host, remote_ssh.shell_argv(spec))
+    assert f"ATTACHED {_TMUX}".encode() in out
+    shell = _wait_for(fake_host["state"] / "shell.out")
+    assert shell.startswith("LOGIN-SHELL ") and shell.strip().endswith("/proj")
+
+
+def test_closing_the_pane_ends_its_session(fake_host):
+    state = fake_host["state"]
+    (state / f"s-{_TMUX}").touch()
+    argv = remote_ssh.end_session_argv(_tmux_claude())
+    assert "BatchMode=yes" in argv and "ControlPath=none" in argv and "ForwardAgent=no" in argv
+    _run_on_host(fake_host, argv)
+    assert not (state / f"s-{_TMUX}").exists()
+    assert f"-L navide kill-session -t ={_TMUX}" in (state / "tmux.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("cli", ["claude", "codex", "opencode"])
+def test_every_tmux_script_is_valid_sh_and_reports_to_the_connection(cli):
+    import shutil
+    import subprocess
+
+    if not shutil.which("sh"):
+        pytest.skip("no sh")
+    spec = _cli_spec(cli=cli, sessionId="abc-1", resume=True, dir="~/a b", tmuxSession=_TMUX)
+    script = remote_ssh.cli_script(spec, pane_id="p1", remote_port=45000 if cli != "opencode" else None, nonce=_NONCE)
+    assert subprocess.run(["sh", "-n"], input=script.encode()).returncode == 0
+    # Inside tmux the reports go to the ssh connection's terminal.
+    if cli != "opencode":
+        assert "navide-resume-miss" in script and '> "$o"' in script
+    terminal = remote_ssh.terminal_script(remote_ssh.parse_spec({**_SPEC, "tmuxSession": _TMUX}))
+    assert subprocess.run(["sh", "-n"], input=terminal.encode()).returncode == 0
+
+
+class _EndSock:
+    def __init__(self) -> None:
+        self.sent: list[dict[str, Any]] = []
+
+    async def send_json(self, msg: dict[str, Any]) -> None:
+        self.sent.append(msg)
+
+
+def test_end_session_reaches_only_a_trusted_target(monkeypatch):
+    calls: list[list[str]] = []
+
+    async def settings() -> dict[str, Any]:
+        return _TRUSTED
+
+    async def run(argv: list[str]) -> tuple[int, str, str]:
+        calls.append(argv)
+        return 0, "", ""
+
+    monkeypatch.setattr(remote_devcontainer_ws, "_settings", settings)
+    monkeypatch.setattr(remote_devcontainer_ws, "_run_ssh", run)
+
+    def send(remote: dict[str, Any]) -> dict[str, Any]:
+        sock = _EndSock()
+        asyncio.run(remote_devcontainer_ws.remote_ssh_end_session(sock, "m", "remote_ssh.end_session", {"remote": remote}))
+        return sock.sent[-1]
+
+    reply = send({**_SPEC, "cli": "claude", "tmuxSession": _TMUX})
+    assert reply["ok"] is True and reply["payload"] == {"ended": True}
+    assert calls[-1][-1].endswith(f"kill-session -t ={_TMUX} 2>/dev/null; true'")
+    assert send({**_SPEC, "host": "other-box", "tmuxSession": _TMUX})["error"]["code"] == "REMOTE_UNTRUSTED"
+    assert send(dict(_SPEC))["error"]["code"] == "BAD_REQUEST"
+    assert len(calls) == 1
