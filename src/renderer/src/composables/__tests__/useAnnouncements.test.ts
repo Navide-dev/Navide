@@ -2,7 +2,7 @@
 // Announcements centre feed: how the two sources (curated release notes and the
 // live updater state) merge, how read state is persisted and bounded, and how a
 // fresh install is baselined so it isn't greeted by every historical entry.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import type { UpdateState } from '../../../../shared/updater'
 import type { QuotaIncidentNotice } from '../useAnnouncements'
@@ -33,6 +33,12 @@ function updateState(patch: Partial<UpdateState> = {}) {
 }
 
 describe('useAnnouncements', () => {
+  // The first cold import transforms the whole i18n graph, which alone can pass
+  // the 5s test timeout on a loaded machine; pay it once here instead.
+  beforeAll(async () => {
+    await load()
+  }, 60_000)
+
   beforeEach(() => {
     store.clear()
     ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
