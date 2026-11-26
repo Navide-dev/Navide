@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Iterator
@@ -12,7 +13,12 @@ from typing import Iterator
 from .cli_risk_observers import DNS_TTL, MIB100, DiskSample, ExpectedAddresses
 from .cli_risk_ranges import SharedRangeStore
 from .db import Database
+from .guard.engine import redact as _redact_secrets
+from .log_redaction import redact as _redact_token_params
 from .ui_settings import UiSettingsStore
+
+log = logging.getLogger(__name__)
+_COMPONENT = "cli_risk_records"
 
 
 def iso(value: float) -> str:
@@ -21,6 +27,44 @@ def iso(value: float) -> str:
 
 def identity(*parts: str) -> str:
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:32]
+
+
+def redact_command(text: str) -> str:
+    """A process command line as it may be stored: credential values (flags,
+    NAME=value pairs, Bearer, token shapes, URL logins, ``?t=``) masked; the
+    program, its other arguments, hosts and ports kept."""
+    return _redact_secrets(_redact_token_params(text))
+
+
+def _masked_process(process: dict) -> dict:
+    command = process.get("command")
+    return {**process, "command": redact_command(command)} if isinstance(command, str) else process
+
+
+def stored(category: str, value: dict) -> dict:
+    """The copy of a record written to navide.db. Only the command lines of a
+    network signal's processes differ; the in-memory record is left as is."""
+    data = value.get("data") if category == "signals" else None
+    if not isinstance(data, dict) or not (data.get("local") or data.get("listener")):
+        return value
+    data = dict(data)
+    if isinstance(data.get("local"), list):
+        data["local"] = [_masked_process(p) if isinstance(p, dict) else p for p in data["local"]]
+    if isinstance(data.get("listener"), dict):
+        data["listener"] = _masked_process(data["listener"])
+    return {**value, "data": data}
+
+
+def _mask_stored_commands(cur) -> None:
+    """Schema step 1: rewrite the signal rows earlier releases stored with
+    verbatim command lines; nothing else in a row changes."""
+    rows = cur.execute("SELECT key, data FROM cli_risk_records WHERE category='signals'").fetchall()
+    for row in rows:
+        value = json.loads(row["data"])
+        masked = stored("signals", value)
+        if masked is not value:
+            cur.execute("UPDATE cli_risk_records SET data=? WHERE category='signals' AND key=?",
+                        (json.dumps(masked, separators=(",", ":")), row["key"]))
 
 
 HISTORY_KEEP = 10  # distinct observations kept per network signal
@@ -77,6 +121,10 @@ class CliRiskStore:
             cur.execute("CREATE TABLE IF NOT EXISTS cli_risk_records ("
                         "category TEXT NOT NULL, key TEXT NOT NULL, data TEXT NOT NULL, "
                         "PRIMARY KEY(category, key))")
+        try:
+            db.migrate(_COMPONENT, 1, _mask_stored_commands)
+        except Exception:  # noqa: BLE001 - masking old rows must never block startup
+            log.warning("cli risk: masking stored command lines failed; skipped", exc_info=True)
         # In-memory changes of the observation in progress, applied when its
         # savepoint is released (None outside an observation).
         self._staged: list[dict[str, dict[str, dict]]] | None = None
@@ -142,7 +190,7 @@ class CliRiskStore:
                     cur.execute(
                         "INSERT INTO cli_risk_records(category,key,data) VALUES(?,?,?) "
                         "ON CONFLICT(category,key) DO UPDATE SET data=excluded.data",
-                        (category, key, json.dumps(value, separators=(",", ":"))),
+                        (category, key, json.dumps(stored(category, value), separators=(",", ":"))),
                     )
             if allowed is not None:
                 vendor, ip = allowed
