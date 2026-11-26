@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time
 import unicodedata
@@ -108,6 +109,11 @@ def default_profiles_root() -> Path:
 # enumerating it (and the startup promotion reads its credentials once —
 # see credential_vault.promote_profile_home_secrets).
 PROFILE_HOME_DIRNAME = "home"
+
+# Dropped into a deleted slot's ``.deleted-*`` archive when removing it failed
+# (a locked or unwritable file), so a later sweep finishes the job. Archives
+# without it predate the purge and are left for the user to decide on.
+PURGE_PENDING_MARKER = ".navide-purge-pending"
 
 
 def profile_config_homes(agent_key: str, root: Path | None = None) -> list[Path]:
@@ -424,8 +430,11 @@ class CliProfilesStore:
             return doc["defaultNames"]
 
     def delete(self, profile_id: str) -> dict[str, Any]:
-        """Unregister the profile. The home dir is renamed aside, NEVER
-        removed — it can hold the user's login credentials."""
+        """Unregister the profile and remove its slot dir — it holds the
+        account's login files and transcripts. The dir is first renamed aside
+        (frees the path at once, as before) and then purged; a purge that
+        fails leaves the archive marked for ``purge_pending_archives``."""
+        self.purge_pending_archives()
         with self._lock:
             doc = self._read()
             profile = next(
@@ -456,7 +465,70 @@ class CliProfilesStore:
                 home.rename(target)
             except OSError as err:
                 log.warning("could not archive profile home %s: %s", home, err)
+            else:
+                self._purge_archive(profile, target)
         return {"profiles": doc["profiles"], "defaults": doc["defaults"]}
+
+    def _is_purgeable_archive(self, agent_key: str, profile_id: str, path: Path) -> bool:
+        """Only a real (non-symlink) ``<root>/<agent>/<id>.deleted-*`` dir of
+        a supported agent, whose agent dir is not a link out of the root. The
+        built-in Default slot (the user's own CLI home) never qualifies."""
+        if (
+            agent_key not in SUPPORTED_AGENT_KEYS
+            or not profile_id
+            or profile_id == "__default__"
+            or profile_id.startswith(".")
+            or any(sep in profile_id for sep in ("/", "\\"))
+            or not path.name.startswith(f"{profile_id}.deleted-")
+        ):
+            return False
+        agent_dir = self._profiles_root / agent_key
+        if Path(canonical_path_str(path.parent)) != agent_dir:
+            return False
+        real_root = os.path.realpath(self._profiles_root)
+        if os.path.realpath(agent_dir) != os.path.join(real_root, agent_key):
+            return False
+        return path.is_dir() and not path.is_symlink()
+
+    def _purge_archive(self, profile: dict[str, Any], archive: Path) -> bool:
+        agent_key = str(profile.get("agentKey") or "")
+        if not self._is_purgeable_archive(agent_key, str(profile.get("id") or ""), archive):
+            log.warning("left deleted profile home %s in place (not a managed slot)", archive)
+            return False
+        try:
+            # Symlinks inside are unlinked, never followed.
+            shutil.rmtree(archive)
+            return True
+        except OSError as err:
+            log.warning("could not remove deleted profile home %s: %s", archive, err)
+        try:
+            (archive / PURGE_PENDING_MARKER).touch()
+        except OSError as err:
+            log.warning("could not mark %s for a later purge: %s", archive, err)
+        return False
+
+    def purge_pending_archives(self) -> int:
+        """Retry removing the archives an earlier delete could not purge.
+        Archives without the pending marker are never touched. Returns how
+        many were removed."""
+        removed = 0
+        for agent_key in SUPPORTED_AGENT_KEYS:
+            agent_dir = self._profiles_root / agent_key
+            try:
+                entries = list(os.scandir(agent_dir))
+            except OSError:
+                continue
+            for entry in entries:
+                name = entry.name
+                if ".deleted-" not in name:
+                    continue
+                archive = Path(entry.path)
+                profile_id = name.split(".deleted-", 1)[0]
+                if not (archive / PURGE_PENDING_MARKER).is_file():
+                    continue
+                if self._purge_archive({"agentKey": agent_key, "id": profile_id}, archive):
+                    removed += 1
+        return removed
 
     def set_default(self, agent_key: str, profile_id: str | None) -> dict[str, Any]:
         self._validate_agent_key(agent_key)

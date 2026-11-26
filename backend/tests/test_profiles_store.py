@@ -133,23 +133,116 @@ def test_rename_unknown_raises(tmp_path: Path) -> None:
         store.rename("nope1234", "X")
 
 
-def test_delete_archives_home_dir_never_removes(tmp_path: Path) -> None:
+def _archives(home: Path, profile_id: str) -> list[Path]:
+    return [
+        p for p in home.parent.iterdir() if p.name.startswith(f"{profile_id}.deleted-")
+    ]
+
+
+def test_delete_purges_home_dir(tmp_path: Path) -> None:
+    """Deleting an account removes its slot dir for real: no login file or
+    transcript may stay behind in a .deleted-* copy."""
     store = _store(tmp_path)
     profile = store.create(agent_key="claude", name="Work")
     home = store.ensure_home(profile)
     (home / ".credentials.json").write_text("{}", encoding="utf-8")
+    (home / "projects" / "p").mkdir(parents=True)
+    (home / "projects" / "p" / "s.jsonl").write_text("{}\n", encoding="utf-8")
 
     doc = store.delete(profile["id"])
 
     assert doc["profiles"] == []
     assert not home.exists()
-    archived = [
-        p for p in home.parent.iterdir()
-        if p.name.startswith(f"{profile['id']}.deleted-")
-    ]
+    assert _archives(home, profile["id"]) == []
+
+
+def test_delete_falls_back_to_archive_when_purge_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A locked or unwritable file must not fail the delete: the slot stays
+    renamed aside (the old behavior) and a later sweep removes it."""
+    store = _store(tmp_path)
+    profile = store.create(agent_key="claude", name="Work")
+    home = store.ensure_home(profile)
+    (home / ".credentials.json").write_text("{}", encoding="utf-8")
+
+    def locked(*_a: object, **_k: object) -> None:
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(profiles_mod.shutil, "rmtree", locked)
+    doc = store.delete(profile["id"])
+
+    assert doc["profiles"] == []
+    assert not home.exists()
+    archived = _archives(home, profile["id"])
     assert len(archived) == 1
-    # Content survives the archive rename.
-    assert (archived[0] / ".credentials.json").read_text(encoding="utf-8") == "{}"
+    assert (archived[0] / profiles_mod.PURGE_PENDING_MARKER).exists()
+
+    monkeypatch.undo()
+    assert store.purge_pending_archives() == 1
+    assert _archives(home, profile["id"]) == []
+
+
+def test_purge_sweep_leaves_pre_existing_archives(tmp_path: Path) -> None:
+    """Archives made before this fix carry no pending marker and stay put —
+    whether to remove them is the user's call."""
+    store = _store(tmp_path)
+    old = tmp_path / "cli-profiles" / "claude" / "abc12345.deleted-1"
+    old.mkdir(parents=True)
+    (old / ".credentials.json").write_text("{}", encoding="utf-8")
+
+    assert store.purge_pending_archives() == 0
+    assert (old / ".credentials.json").exists()
+
+
+def test_delete_purge_never_follows_symlinks(tmp_path: Path) -> None:
+    """A link inside the slot (e.g. to the user's real CLI home) is removed
+    as a link; what it points at is untouched."""
+    store = _store(tmp_path)
+    native = tmp_path / "real-home" / ".claude"
+    native.mkdir(parents=True)
+    (native / ".credentials.json").write_text("{}", encoding="utf-8")
+    profile = store.create(agent_key="claude", name="Work")
+    home = store.ensure_home(profile)
+    (home / "linked").symlink_to(native, target_is_directory=True)
+
+    store.delete(profile["id"])
+
+    assert not home.exists()
+    assert (native / ".credentials.json").exists()
+
+
+def test_delete_never_purges_a_symlinked_slot(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    native = tmp_path / "real-home" / ".codex"
+    native.mkdir(parents=True)
+    (native / "auth.json").write_text("{}", encoding="utf-8")
+    profile = store.create(agent_key="codex", name="Work")
+    home = store.home_path(profile)
+    home.parent.mkdir(parents=True)
+    home.symlink_to(native, target_is_directory=True)
+
+    store.delete(profile["id"])
+
+    assert (native / "auth.json").exists()
+
+
+def test_delete_never_purges_through_a_symlinked_agent_dir(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "cli-profiles").mkdir()
+    (tmp_path / "cli-profiles" / "claude").symlink_to(elsewhere, target_is_directory=True)
+    profile = store.create(agent_key="claude", name="Work")
+    home = store.ensure_home(profile)
+    (home / ".credentials.json").write_text("{}", encoding="utf-8")
+
+    store.delete(profile["id"])
+
+    # Falls back to the archive rename; nothing outside the root is purged.
+    archived = _archives(home, profile["id"])
+    assert len(archived) == 1
+    assert (archived[0] / ".credentials.json").exists()
 
 
 def test_delete_clears_default(tmp_path: Path) -> None:
@@ -176,19 +269,14 @@ def test_delete_archive_name_avoids_same_instant_collision(
     monkeypatch.setattr(profiles_mod.time, "time_ns", lambda: 111)
     collider = home.with_name(f"{home.name}.deleted-111")
     collider.mkdir(parents=True)
+    (collider / "keep").write_text("old", encoding="utf-8")
 
     store.delete(profile["id"])
 
     assert not home.exists()
-    archived = [
-        p for p in home.parent.iterdir()
-        if p.name.startswith(f"{profile['id']}.deleted-")
-    ]
-    # Both the pre-existing collider and the freshly archived home survive.
-    assert len(archived) == 2
-    with_creds = [p for p in archived if (p / ".credentials.json").exists()]
-    assert len(with_creds) == 1
-    assert (with_creds[0] / ".credentials.json").read_text(encoding="utf-8") == "secret"
+    # The pre-existing collider survives untouched; the new one is purged.
+    assert _archives(home, profile["id"]) == [collider]
+    assert (collider / "keep").read_text(encoding="utf-8") == "old"
 
 
 def test_delete_unknown_raises(tmp_path: Path) -> None:
