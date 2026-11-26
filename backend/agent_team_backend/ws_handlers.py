@@ -6187,8 +6187,16 @@ async def p2p_mobile_state(session: "Session", msg_id: str, msg_type: str, paylo
 
 @handler("p2p.mobile.offer")
 async def p2p_mobile_offer(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Show a QR code. It grants nothing: a phone that scans it still waits for
-    somebody here to compare six digits and press "Trust this phone"."""
+    """Show a QR code. It grants nothing by itself: a phone that scans it still
+    waits for somebody here to compare six digits and press "Trust this phone".
+
+    It still needs a window confirmation, like ``p2p.pair.start``: the reply
+    carries the one-time code, and an agent that could mint one could hand it
+    to a phone of somebody else's choosing and leave a request on screen that
+    looks like the user's own.
+    """
+    if not await _confirmed(session, msg_id, msg_type, payload):
+        return
     reply = await server_link.create_mobile_offer()
     await _send_mobile_reply(session, msg_id, msg_type, reply, "the QR code could not be created")
 

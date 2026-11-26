@@ -307,8 +307,17 @@ async def test_state_without_a_server_says_so(monkeypatch) -> None:
     monkeypatch.setattr(server_link, "_link", None)
     reply = await _call("p2p.mobile.state", {})
     assert reply["payload"]["configured"] is False
-    offer = await _call("p2p.mobile.offer", {})
+    offer = await _call("p2p.mobile.offer", {"confirm": _confirmation("p2p.mobile.offer", "")})
     assert offer["error"]["code"] == "P2P_NOT_CONFIGURED"
+
+
+async def test_a_pairing_code_needs_a_window_confirmation(monkeypatch) -> None:
+    monkeypatch.setattr(server_link, "_link", None)
+    refused = await _call("p2p.mobile.offer", {})
+    assert refused["error"]["code"] == "CONFIRMATION_REQUIRED"
+    # A confirmation minted for another action does not open this one.
+    wrong = await _call("p2p.mobile.offer", {"confirm": _confirmation("p2p.mobile.trust", "")})
+    assert wrong["error"]["code"] == "CONFIRMATION_REQUIRED"
 
 
 # ---- the roster -----------------------------------------------------------------

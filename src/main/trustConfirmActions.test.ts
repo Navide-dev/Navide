@@ -38,8 +38,9 @@ describe('trust:confirm action list', () => {
     expect(actions()).toContain('plugins.agent_request.finish')
   })
 
-  it('mints confirmations for trusting, declining and removing a phone', () => {
+  it('mints confirmations for pairing, trusting, declining and removing a phone', () => {
     expect(actions()).toEqual(expect.arrayContaining([
+      'p2p.mobile.offer',
       'p2p.mobile.trust',
       'p2p.mobile.reject',
       'p2p.mobile.remove',

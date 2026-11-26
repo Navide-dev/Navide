@@ -5688,7 +5688,9 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'p2p.trust.unblock',
   'p2p.pair.start',
   'p2p.pair.confirm',
-  // Trusting, declining or removing a phone; bound to the request or phone id.
+  // Showing a phone pairing code (no device yet), then trusting, declining or
+  // removing a phone; bound to the request or phone id.
+  'p2p.mobile.offer',
   'p2p.mobile.trust',
   'p2p.mobile.reject',
   'p2p.mobile.remove',

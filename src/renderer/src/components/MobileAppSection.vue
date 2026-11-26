@@ -102,7 +102,8 @@ async function addPhone(): Promise<void> {
   busy.value = 'offer'
   actionError.value = ''
   try {
-    const resp = await props.backend.send<{ qr: string; expiresAt: number }>('p2p.mobile.offer', {})
+    const confirm = await window.agentTeam?.trustConfirm('p2p.mobile.offer', '')
+    const resp = await props.backend.send<{ qr: string; expiresAt: number }>('p2p.mobile.offer', { confirm })
     if (!resp.ok || !resp.payload?.qr) {
       actionError.value = resp.error?.message || t('settings.p2p.mobile.err-generic')
       return
