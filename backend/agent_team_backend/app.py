@@ -2848,6 +2848,13 @@ async def _start_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("legacy CLI profile home migration failed: %s", err)
 
+    # Finish removing deleted-account slot dirs an earlier delete could not
+    # purge (a file was locked). Only archives it marked are touched.
+    try:
+        await asyncio.to_thread(cli_profiles_store.purge_pending_archives)
+    except Exception as err:  # noqa: BLE001
+        log.warning("purging deleted profile homes failed: %s", err)
+
     # One-time promotion of credentials still living in legacy per-profile
     # isolated homes into their slots (+ the live location for the active
     # account). Idempotent; background task — credential I/O must never block
