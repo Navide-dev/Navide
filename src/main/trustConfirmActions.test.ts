@@ -38,6 +38,14 @@ describe('trust:confirm action list', () => {
     expect(actions()).toContain('plugins.agent_request.finish')
   })
 
+  it('mints confirmations for trusting, declining and removing a phone', () => {
+    expect(actions()).toEqual(expect.arrayContaining([
+      'p2p.mobile.trust',
+      'p2p.mobile.reject',
+      'p2p.mobile.remove',
+    ]))
+  })
+
   it('is only reachable from an app window', () => {
     const handler = source.slice(source.indexOf("ipcMain.handle('trust:confirm'"))
     const body = handler.slice(0, handler.indexOf('\n})'))

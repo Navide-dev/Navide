@@ -7466,6 +7466,33 @@
         "paused": "Désactivé",
         "paused-body": "Cet appareil ne communique pas avec le réseau. Votre compte et vos paramètres sont conservés.",
         "server": "Serveur"
+      },
+      "mobile": {
+        "title": "App mobile",
+        "intro": "Associez un téléphone à cette machine pour suivre vos panes depuis l’app Navide.",
+        "sees-title": "Ce que ce téléphone peut voir",
+        "sees": "Les noms des panes, la CLI qui tourne dans chacun, leur état, s’ils vous attendent (une autorisation ou une question) et le nom de l’espace de travail. Jamais la sortie du terminal, les chemins de fichiers, les identifiants ni les clés d’API.",
+        "add": "Ajouter un téléphone",
+        "scan": "Ouvrez l’app Navide sur votre téléphone et scannez ce code.",
+        "expires-in": "Expire dans {time}",
+        "expired": "Ce code a expiré. Créez-en un nouveau pour associer un téléphone.",
+        "new-code": "Nouveau code",
+        "qr-label": "Code QR d’association",
+        "request-title": "{device} souhaite se connecter",
+        "unnamed-phone": "Un téléphone",
+        "code-label": "Code d’association",
+        "compare": "Vérifiez que le téléphone affiche les mêmes six chiffres.",
+        "trust": "Faire confiance à ce téléphone",
+        "decline": "Refuser",
+        "trusted-title": "Téléphones de confiance",
+        "none": "Aucun téléphone pour l’instant.",
+        "last-seen": "Dernière connexion {time}",
+        "never-seen": "Pas encore connecté",
+        "remove": "Retirer ce téléphone",
+        "remove-hint": "Un téléphone retiré ne voit plus cette machine immédiatement. Vous pouvez l’associer à nouveau à tout moment.",
+        "not-configured": "Aucun serveur Navide Cloud n’est configuré sur cette machine, il n’est donc pas encore possible d’associer un téléphone.",
+        "unreachable": "Navide Cloud est injoignable pour le moment : les téléphones ne peuvent ni s’associer ni se connecter. {reason}",
+        "err-generic": "L’opération n’a pas abouti."
       }
     },
     "cliAgents": {

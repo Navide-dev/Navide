@@ -7466,6 +7466,33 @@
         "paused": "已關閉",
         "paused-body": "這台裝置沒有在跟網路通訊。帳號與設定都保留著。",
         "server": "伺服器"
+      },
+      "mobile": {
+        "title": "行動 App",
+        "intro": "把手機和這台電腦配對，就能在 Navide App 上關注各個分格。",
+        "sees-title": "這台手機看得到什麼",
+        "sees": "分格名稱、每個分格跑的是哪個 CLI、它的狀態、是否在等你（核准或提問），以及工作區名稱。絕不包含終端機輸出、檔案路徑、憑證或 API 金鑰。",
+        "add": "新增手機",
+        "scan": "在手機上打開 Navide App，掃描這個 QR Code。",
+        "expires-in": "{time} 後失效",
+        "expired": "這個 QR Code 已失效。要配對手機請重新產生一個。",
+        "new-code": "重新產生",
+        "qr-label": "配對 QR Code",
+        "request-title": "{device} 想要連線",
+        "unnamed-phone": "一台手機",
+        "code-label": "配對碼",
+        "compare": "確認手機上顯示的是同樣這六位數字。",
+        "trust": "信任這台手機",
+        "decline": "拒絕",
+        "trusted-title": "已信任的手機",
+        "none": "還沒有手機。",
+        "last-seen": "最後連線：{time}",
+        "never-seen": "尚未連線",
+        "remove": "移除這台手機",
+        "remove-hint": "移除後，這台手機會立刻看不到這台電腦。之後隨時可以再配對。",
+        "not-configured": "這台電腦還沒有設定 Navide Cloud 伺服器，所以還不能配對手機。",
+        "unreachable": "目前連不上 Navide Cloud，手機暫時無法配對或連線。{reason}",
+        "err-generic": "這個動作沒有完成。"
       }
     },
     "cliAgents": {

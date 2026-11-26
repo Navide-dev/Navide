@@ -6102,6 +6102,133 @@ async def p2p_pair_confirm(session: "Session", msg_id: str, msg_type: str, paylo
     await session.send_json(make_response(msg_id, msg_type, reply.get("payload") or {}))
 
 
+# ---- mobile pairing ----------------------------------------------------------
+#
+# The "Mobile App" section of the account window. Trust, reject and remove change
+# who can see this machine, so each carries a window confirmation bound to the
+# request or phone it names, exactly like p2p.pair.confirm.
+
+
+async def _send_mobile_reply(
+    session: "Session",
+    msg_id: str,
+    msg_type: str,
+    reply: dict | None,
+    fallback: str,
+) -> None:
+    """One link reply as this handler's answer, in the p2p handlers' error style."""
+    if reply is None:
+        await session.send_json(
+            make_error(msg_id, msg_type, "P2P_NOT_CONFIGURED", "no navide-server is configured")
+        )
+        return
+    if not reply.get("ok"):
+        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        await session.send_json(
+            make_error(
+                msg_id,
+                msg_type,
+                str(error.get("code") or "P2P_MOBILE_FAILED"),
+                str(error.get("message") or fallback),
+            )
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, reply.get("payload") or {}))
+
+
+@handler("p2p.mobile.state")
+async def p2p_mobile_state(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The live QR offer, phones waiting for an answer, and trusted phones.
+
+    Trusted phones come from this machine's own list, so the section still shows
+    them while the link is down; ``lastSeenAt`` is filled in only when the server
+    answered, and ``reachable`` says whether it did.
+    """
+    from . import mobile_pairing
+
+    offer = mobile_pairing.active_offer()
+    requests = [r.to_dict() for r in mobile_pairing.pending_requests()]
+    phones = await asyncio.to_thread(mobile_pairing.load_trusted)
+    reply = await server_link.list_mobile_devices()
+    seen: dict[str, Any] = {}
+    reachable = bool(reply and reply.get("ok"))
+    link_error = ""
+    if reachable:
+        body = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
+        for row in body.get("devices") or []:
+            if isinstance(row, dict) and row.get("phoneId"):
+                seen[str(row["phoneId"])] = row.get("lastSeenAt")
+    elif reply is not None:
+        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        link_error = str(error.get("message") or "")
+    await session.send_json(
+        make_response(
+            msg_id,
+            msg_type,
+            {
+                "configured": reply is not None,
+                "reachable": reachable,
+                "linkError": link_error,
+                "offer": {"expiresAt": offer.expires_at} if offer else None,
+                "requests": requests,
+                "phones": [
+                    {
+                        "phoneId": p.get("phoneId"),
+                        "deviceName": p.get("deviceName") or "",
+                        "pairedAt": p.get("pairedAt"),
+                        "lastSeenAt": seen.get(str(p.get("phoneId"))),
+                    }
+                    for p in phones
+                ],
+            },
+        )
+    )
+
+
+@handler("p2p.mobile.offer")
+async def p2p_mobile_offer(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Show a QR code. It grants nothing: a phone that scans it still waits for
+    somebody here to compare six digits and press "Trust this phone"."""
+    reply = await server_link.create_mobile_offer()
+    await _send_mobile_reply(session, msg_id, msg_type, reply, "the QR code could not be created")
+
+
+@handler("p2p.mobile.trust")
+async def p2p_mobile_trust(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    request_id = str(payload.get("requestId") or "").strip()
+    if not request_id:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "requestId is required"))
+        return
+    if not await _confirmed(session, msg_id, msg_type, payload, device_id=request_id):
+        return
+    reply = await server_link.approve_mobile_pair(request_id)
+    await _send_mobile_reply(session, msg_id, msg_type, reply, "that phone could not be trusted")
+
+
+@handler("p2p.mobile.reject")
+async def p2p_mobile_reject(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    request_id = str(payload.get("requestId") or "").strip()
+    if not request_id:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "requestId is required"))
+        return
+    if not await _confirmed(session, msg_id, msg_type, payload, device_id=request_id):
+        return
+    reply = await server_link.reject_mobile_pair(request_id)
+    await _send_mobile_reply(session, msg_id, msg_type, reply, "that phone request could not be declined")
+
+
+@handler("p2p.mobile.remove")
+async def p2p_mobile_remove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    phone_id = str(payload.get("phoneId") or "").strip()
+    if not phone_id:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "phoneId is required"))
+        return
+    if not await _confirmed(session, msg_id, msg_type, payload, device_id=phone_id):
+        return
+    reply = await server_link.revoke_mobile_device(phone_id)
+    await _send_mobile_reply(session, msg_id, msg_type, reply, "that phone could not be removed")
+
+
 @handler("p2p.trust.device.defer")
 @outlives_requester
 async def p2p_trust_device_defer(
@@ -13383,8 +13510,14 @@ async def agent_msg_set_busy(session: "Session", msg_id: str, msg_type: str, pay
     # older build looks like; an empty string would blank the last one we had.
     raw_status = payload.get("status")
     display_status = None if raw_status is None else str(raw_status)
+    # Absent on an older window, like `status`. Anything but the two known
+    # words reads as "waiting on neither".
+    raw_kind = payload.get("awaiting_kind")
+    awaiting_kind = (
+        None if raw_kind is None else (raw_kind if raw_kind in ("permission", "question") else "")
+    )
     changed = bool(pane_id) and agent_messaging.set_busy(
-        pane_id, bool(payload.get("busy")), display_status
+        pane_id, bool(payload.get("busy")), display_status, awaiting_kind
     )
     if changed:
         server_link.roster_changed()

@@ -20,6 +20,7 @@ import { usePairingState, failureKey } from '../composables/usePairingState'
 import NavideCloudMark from './NavideCloudMark.vue'
 import { relativeTime } from '../lib/relativeTime'
 import PaneGitChip, { type PaneGit } from './PaneGitChip.vue'
+import MobileAppSection from './MobileAppSection.vue'
 import { dockWindowLabelKey } from '../lib/dockWindow'
 import type { useBackend } from '../composables/useBackend'
 
@@ -2416,6 +2417,8 @@ onUnmounted(() => {
           </div>
           <p class="hint">{{ t('settings.p2p.trust.blocked-hint') }}</p>
         </section>
+
+        <MobileAppSection v-if="signedIn" :backend="backend" />
 
         <button class="btn ghost wide" :disabled="busy" @click="signOut">
           <!-- Signing out of an account and removing a pasted token are two

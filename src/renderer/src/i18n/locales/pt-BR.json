@@ -7466,6 +7466,33 @@
         "paused": "Desativado",
         "paused-body": "Este dispositivo não está se comunicando com a rede. Sua conta e suas configurações são mantidas.",
         "server": "Servidor"
+      },
+      "mobile": {
+        "title": "App móvel",
+        "intro": "Pareie um celular com este computador para acompanhar seus panes pelo app Navide.",
+        "sees-title": "O que este celular pode ver",
+        "sees": "Nomes dos panes, qual CLI roda em cada um, o status, se está esperando por você (uma permissão ou uma pergunta) e o nome do workspace. Nunca a saída do terminal, caminhos de arquivos, credenciais ou chaves de API.",
+        "add": "Adicionar celular",
+        "scan": "Abra o app Navide no celular e escaneie este código.",
+        "expires-in": "Expira em {time}",
+        "expired": "Este código expirou. Gere um novo para parear um celular.",
+        "new-code": "Novo código",
+        "qr-label": "QR code de pareamento",
+        "request-title": "{device} quer se conectar",
+        "unnamed-phone": "Um celular",
+        "code-label": "Código de pareamento",
+        "compare": "Confira se o celular mostra os mesmos seis dígitos.",
+        "trust": "Confiar neste celular",
+        "decline": "Recusar",
+        "trusted-title": "Celulares confiáveis",
+        "none": "Nenhum celular ainda.",
+        "last-seen": "Última conexão {time}",
+        "never-seen": "Ainda não conectado",
+        "remove": "Remover este celular",
+        "remove-hint": "Um celular removido deixa de ver este computador na hora. Você pode pareá-lo de novo quando quiser.",
+        "not-configured": "Nenhum servidor Navide Cloud está configurado neste computador, então ainda não é possível parear um celular.",
+        "unreachable": "Não foi possível acessar o Navide Cloud agora, então os celulares não podem parear nem se conectar. {reason}",
+        "err-generic": "Não deu certo."
       }
     },
     "cliAgents": {

@@ -7466,6 +7466,33 @@
         "paused": "已关闭",
         "paused-body": "这台设备没有在跟网络通信。账号与设置都保留着。",
         "server": "服务器"
+      },
+      "mobile": {
+        "title": "移动 App",
+        "intro": "将手机与这台电脑配对，即可在 Navide App 中查看你的分格。",
+        "sees-title": "这台手机可以看到的内容",
+        "sees": "分格名称、每个分格运行的 CLI、状态、是否在等你处理（核准或提问）以及工作区名称。不会包含终端输出、文件路径、凭证或 API 密钥。",
+        "add": "添加手机",
+        "scan": "在手机上打开 Navide App，扫描这个二维码。",
+        "expires-in": "{time} 后过期",
+        "expired": "这个二维码已过期。请生成新的二维码来配对手机。",
+        "new-code": "生成新二维码",
+        "qr-label": "配对二维码",
+        "request-title": "{device} 想要连接",
+        "unnamed-phone": "一台手机",
+        "code-label": "配对码",
+        "compare": "请确认手机上显示同样的六位数字。",
+        "trust": "信任这台手机",
+        "decline": "拒绝",
+        "trusted-title": "已信任的手机",
+        "none": "还没有手机。",
+        "last-seen": "最近连接：{time}",
+        "never-seen": "尚未连接",
+        "remove": "移除这台手机",
+        "remove-hint": "移除后，这台手机会立刻看不到这台电脑。之后随时可以重新配对。",
+        "not-configured": "这台电脑尚未设置 Navide Cloud 服务器，所以还不能配对手机。",
+        "unreachable": "目前连不上 Navide Cloud，手机暂时无法配对或连接。{reason}",
+        "err-generic": "操作没有完成。"
       }
     },
     "cliAgents": {

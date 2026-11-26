@@ -67,6 +67,7 @@ from . import (
     device_pairing,
     device_signing,
     device_trust,
+    mobile_pairing,
     org_peers,
     osplat,
     pane_policy,
@@ -649,6 +650,10 @@ def _session_payload(entry: agent_messaging.RegisteredPane) -> dict[str, Any]:
         payload["surface"] = entry.surface
     if entry.window_kind:
         payload["windowKind"] = entry.window_kind
+    # What an awaiting pane waits on, for a paired phone: only while the pane
+    # is awaiting, so a stale word can never outlive the prompt it named.
+    if entry.awaiting_kind and payload["status"] == "awaiting":
+        payload["awaitingKind"] = entry.awaiting_kind
     return payload
 
 
@@ -1283,6 +1288,9 @@ class ServerLink:
             from . import share_feedback
 
             self._spawn(share_feedback.on_pushed(message.get("payload")))
+            return
+        if msg_type == "mobile.pair.request":
+            self._spawn(self._on_mobile_pair_request(message.get("payload")))
             return
         log.debug("navide-server event %r is not wired yet; ignoring it", msg_type)
 
@@ -4378,6 +4386,112 @@ class ServerLink:
         self._cancel_exchange(device_id)
         await self._send_pair_frame(device_id, device_pairing.PAIR_REVOKED)
 
+    # ---- mobile pairing ------------------------------------------------------
+    #
+    # The client half only: what this machine sends and what it expects back.
+    # The six digits and the approval signature are ``mobile_pairing``'s.
+
+    async def _announce_mobile_changed(self) -> None:
+        """Tell every window the phone list or a phone request changed; the
+        account view re-reads ``p2p.mobile.state``."""
+        from . import app
+        from .ipc import make_event
+
+        await app.broadcast(make_event("p2p.mobile.changed", {}))
+
+    async def create_mobile_offer(self) -> dict[str, Any]:
+        """Mint a QR offer and register its code hash, or say why not."""
+        if self._ws is None or not self._authenticated:
+            return self._unavailable()
+        offer = mobile_pairing.create_offer()
+        reply = await self._carry(
+            "mobile.offer.create",
+            {"codeHash": offer.code_hash, "expiresAt": int(offer.expires_at)},
+        )
+        if not reply.get("ok"):
+            mobile_pairing.cancel_offer(offer)
+            return reply
+        key = await asyncio.to_thread(mobile_pairing.desktop_key_raw)
+        return {
+            "ok": True,
+            "payload": {
+                "qr": mobile_pairing.offer_text(self._device_id, offer, key),
+                "expiresAt": offer.expires_at,
+            },
+        }
+
+    async def _on_mobile_pair_request(self, payload: Any) -> None:
+        """A phone redeemed a code. Ignored unless it matches the live offer."""
+        try:
+            key = await asyncio.to_thread(mobile_pairing.desktop_key_raw)
+            request = mobile_pairing.receive_request(payload, key)
+        except Exception as err:  # noqa: BLE001 - a spawned task's error is otherwise lost
+            log.warning("handling a phone pairing request failed: %s", err)
+            return
+        if request is not None:
+            await self._announce_mobile_changed()
+
+    async def approve_mobile_pair(self, request_id: str) -> dict[str, Any]:
+        request = mobile_pairing.get_request(request_id)
+        if request is None:
+            return {"ok": False, "error": {"code": "MOBILE_REQUEST_GONE",
+                                           "message": "that phone request is no longer waiting"}}
+        if self._ws is None or not self._authenticated:
+            return self._unavailable()
+        try:
+            signature = await asyncio.to_thread(
+                mobile_pairing.sign_approval,
+                self._device_id,
+                request.phone_key,
+                request.phone_nonce,
+            )
+        except device_signing.SigningError as err:
+            return {"ok": False, "error": {"code": "SIGNING_FAILED", "message": str(err)}}
+        reply = await self._carry(
+            "mobile.pair.approve",
+            {
+                "requestId": request.request_id,
+                "phoneKey": request.phone_key,
+                "phoneNonce": request.phone_nonce,
+                "signature": signature,
+            },
+        )
+        if not reply.get("ok"):
+            return reply
+        body = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
+        phone_id = str(body.get("phoneId") or "")
+        if not phone_id:
+            return {"ok": False, "error": {"code": "MOBILE_BAD_REPLY",
+                                           "message": "the server did not name the paired phone"}}
+        mobile_pairing.take_request(request_id)
+        await asyncio.to_thread(
+            mobile_pairing.add_trusted, phone_id, request.device_name, request.phone_key
+        )
+        await self._announce_mobile_changed()
+        return {"ok": True, "payload": {"phoneId": phone_id}}
+
+    async def reject_mobile_pair(self, request_id: str) -> dict[str, Any]:
+        """Decline. Dropped here first: declining is this side's decision, and
+        the phone is told when the link can carry it."""
+        request = mobile_pairing.take_request(request_id)
+        if request is None:
+            return {"ok": True, "payload": {}}
+        await self._announce_mobile_changed()
+        return await self._carry("mobile.pair.reject", {"requestId": request_id})
+
+    async def list_mobile_devices(self) -> dict[str, Any]:
+        return await self._carry("mobile.devices.list", {})
+
+    async def revoke_mobile_device(self, phone_id: str) -> dict[str, Any]:
+        """Remove a phone. Kept in the local list until the server confirms, so
+        this screen never shows a phone as gone that can still connect."""
+        reply = await self._carry("mobile.devices.revoke", {"phoneId": phone_id})
+        if not reply.get("ok"):
+            return reply
+        await asyncio.to_thread(mobile_pairing.remove_trusted, phone_id)
+        await self._announce_mobile_changed()
+        return {"ok": True, "payload": {}}
+
     def pairing_rows(self) -> list[dict[str, Any]]:
         """The in-flight exchanges, as the account view draws them."""
         our_key = device_signing.public_key()
@@ -5578,6 +5692,28 @@ async def revoke_pairing(device_id: str) -> None:
     """Tell a device we unpaired. Silent with no link: there is nobody to tell."""
     if _link is not None:
         await _link.revoke_pairing(device_id)
+
+
+# Mobile pairing. None with no server configured, like the pairing above;
+# otherwise a reply frame, the server's or a local one naming the link state.
+async def create_mobile_offer() -> dict[str, Any] | None:
+    return None if _link is None else await _link.create_mobile_offer()
+
+
+async def approve_mobile_pair(request_id: str) -> dict[str, Any] | None:
+    return None if _link is None else await _link.approve_mobile_pair(request_id)
+
+
+async def reject_mobile_pair(request_id: str) -> dict[str, Any] | None:
+    return None if _link is None else await _link.reject_mobile_pair(request_id)
+
+
+async def list_mobile_devices() -> dict[str, Any] | None:
+    return None if _link is None else await _link.list_mobile_devices()
+
+
+async def revoke_mobile_device(phone_id: str) -> dict[str, Any] | None:
+    return None if _link is None else await _link.revoke_mobile_device(phone_id)
 
 
 def own_member_id() -> str:

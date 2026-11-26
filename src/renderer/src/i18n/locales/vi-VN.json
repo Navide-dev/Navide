@@ -7466,6 +7466,33 @@
         "paused": "Đã tắt",
         "paused-body": "Thiết bị này không giao tiếp với mạng. Tài khoản và cài đặt của bạn được giữ lại.",
         "server": "Máy chủ"
+      },
+      "mobile": {
+        "title": "Ứng dụng di động",
+        "intro": "Ghép nối điện thoại với máy này để theo dõi các pane trong ứng dụng Navide.",
+        "sees-title": "Điện thoại này thấy được gì",
+        "sees": "Tên các pane, CLI đang chạy trong từng pane, trạng thái, pane đó có đang chờ bạn không (phê duyệt hoặc câu hỏi) và tên workspace. Không bao giờ có đầu ra terminal, đường dẫn tệp, thông tin đăng nhập hay khóa API.",
+        "add": "Thêm điện thoại",
+        "scan": "Mở ứng dụng Navide trên điện thoại và quét mã này.",
+        "expires-in": "Hết hạn sau {time}",
+        "expired": "Mã này đã hết hạn. Hãy tạo mã mới để ghép nối điện thoại.",
+        "new-code": "Mã mới",
+        "qr-label": "Mã QR ghép nối",
+        "request-title": "{device} muốn kết nối",
+        "unnamed-phone": "Một điện thoại",
+        "code-label": "Mã ghép nối",
+        "compare": "Kiểm tra điện thoại có hiển thị đúng sáu chữ số này không.",
+        "trust": "Tin cậy điện thoại này",
+        "decline": "Từ chối",
+        "trusted-title": "Điện thoại đã tin cậy",
+        "none": "Chưa có điện thoại nào.",
+        "last-seen": "Kết nối lần cuối {time}",
+        "never-seen": "Chưa kết nối",
+        "remove": "Gỡ điện thoại này",
+        "remove-hint": "Điện thoại bị gỡ sẽ không còn thấy máy này ngay lập tức. Bạn có thể ghép nối lại bất cứ lúc nào.",
+        "not-configured": "Máy này chưa thiết lập máy chủ Navide Cloud nên chưa thể ghép nối điện thoại.",
+        "unreachable": "Hiện không kết nối được Navide Cloud nên điện thoại chưa thể ghép nối hoặc kết nối. {reason}",
+        "err-generic": "Thao tác chưa thành công."
       }
     },
     "cliAgents": {

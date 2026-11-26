@@ -2830,12 +2830,12 @@ function paneDisplayStatus(pane: ActivePane): DisplayStatus | '' {
  *
  *  Deduped on the pair: only changes cross the wire. */
 const paneBusyReported = new Map<string, string>()
-function reportPaneBusy(paneId: string, busy: boolean, status: string): void {
-  const mark = `${busy}\u0000${status}`
+function reportPaneBusy(paneId: string, busy: boolean, status: string, awaitingKind = ''): void {
+  const mark = `${busy}\u0000${status}\u0000${awaitingKind}`
   if (paneBusyReported.get(paneId) === mark) return
   paneBusyReported.set(paneId, mark)
   backend
-    .send('agent_msg.set_busy', { pane_id: paneId, busy, status })
+    .send('agent_msg.set_busy', { pane_id: paneId, busy, status, awaiting_kind: awaitingKind })
     .catch(() => { /* advisory only */ })
   persistPaneTurnState(paneId, status)
 }
@@ -2846,7 +2846,9 @@ function reportPaneBusy(paneId: string, busy: boolean, status: string): void {
 function syncPaneBusy(): void {
   for (const pane of panes.value) {
     if (!pane.messagingName) continue
-    reportPaneBusy(pane.id, !isPaneIdleForMessaging(pane.id), paneDisplayStatus(pane))
+    // What an awaiting pane waits on (permission or question), for a paired phone.
+    const awaitingKind = (paneRefs[pane.id]?.awaitingKind as string | null | undefined) ?? ''
+    reportPaneBusy(pane.id, !isPaneIdleForMessaging(pane.id), paneDisplayStatus(pane), awaitingKind)
   }
 }
 

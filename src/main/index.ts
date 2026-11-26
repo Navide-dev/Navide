@@ -5688,6 +5688,10 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'p2p.trust.unblock',
   'p2p.pair.start',
   'p2p.pair.confirm',
+  // Trusting, declining or removing a phone; bound to the request or phone id.
+  'p2p.mobile.trust',
+  'p2p.mobile.reject',
+  'p2p.mobile.remove',
   // Writes an allow rule for a remote sender: a policy edit by another name.
   'p2p.access_requests.approve',
   // Destroys every pairing on this machine, so it is exactly the kind of act

@@ -7466,6 +7466,33 @@
         "paused": "Aus",
         "paused-body": "Dieses Gerät kommuniziert nicht mit dem Netzwerk. Ihr Konto und Ihre Einstellungen bleiben erhalten.",
         "server": "Server"
+      },
+      "mobile": {
+        "title": "Mobile App",
+        "intro": "Koppeln Sie ein Smartphone mit diesem Rechner, um Ihre Bereiche in der Navide-App zu verfolgen.",
+        "sees-title": "Was dieses Smartphone sieht",
+        "sees": "Bereichsnamen, welche CLI in jedem Bereich läuft, ihren Status, ob sie auf Sie wartet (Freigabe oder Frage) und den Namen des Arbeitsbereichs. Niemals Terminalausgaben, Dateipfade, Zugangsdaten oder API-Schlüssel.",
+        "add": "Smartphone hinzufügen",
+        "scan": "Öffnen Sie die Navide-App auf Ihrem Smartphone und scannen Sie diesen Code.",
+        "expires-in": "Läuft ab in {time}",
+        "expired": "Dieser Code ist abgelaufen. Erstellen Sie einen neuen, um ein Smartphone zu koppeln.",
+        "new-code": "Neuer Code",
+        "qr-label": "QR-Code zum Koppeln",
+        "request-title": "{device} möchte sich verbinden",
+        "unnamed-phone": "Ein Smartphone",
+        "code-label": "Kopplungscode",
+        "compare": "Prüfen Sie, ob das Smartphone dieselben sechs Ziffern zeigt.",
+        "trust": "Diesem Smartphone vertrauen",
+        "decline": "Ablehnen",
+        "trusted-title": "Vertrauenswürdige Smartphones",
+        "none": "Noch keine Smartphones.",
+        "last-seen": "Zuletzt verbunden {time}",
+        "never-seen": "Noch nicht verbunden",
+        "remove": "Dieses Smartphone entfernen",
+        "remove-hint": "Ein entferntes Smartphone sieht diesen Rechner sofort nicht mehr. Sie können es jederzeit erneut koppeln.",
+        "not-configured": "Auf diesem Rechner ist kein Navide-Cloud-Server eingerichtet, daher kann noch kein Smartphone gekoppelt werden.",
+        "unreachable": "Navide Cloud ist gerade nicht erreichbar, daher können Smartphones weder koppeln noch sich verbinden. {reason}",
+        "err-generic": "Das hat nicht geklappt."
       }
     },
     "cliAgents": {

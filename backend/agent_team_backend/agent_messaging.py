@@ -82,6 +82,10 @@ class RegisteredPane:
     #: not idle either — and collapsing them is what made the network view call a
     #: dead pane "waiting".
     display_status: str = ""
+    #: What an "awaiting" pane is waiting on, from the owning window: a
+    #: "permission" prompt or a "question". Empty when it waits on neither, or
+    #: when the window is a build that does not report it.
+    awaiting_kind: str = ""
     #: Pane id of the pane that opened this one (a SPAWN block or
     #: cli_open_agent), mirrored from the owning window's `spawnedBy`. Empty for
     #: a pane nobody opened, and for a window on a build that predates this
@@ -333,6 +337,7 @@ def register(
         # A re-register is a rename or a reconnect, not a state change.
         busy=previous.busy if previous else False,
         display_status=previous.display_status if previous else "",
+        awaiting_kind=previous.awaiting_kind if previous else "",
         # Read from the caller every time instead of being carried over: a
         # window re-mirrors its panes on reconnect, and whether a placeholder
         # has been opened since is exactly what that re-mirror is reporting.
@@ -603,7 +608,12 @@ def owner(pane_id: str) -> Any | None:
     return _OWNERS.get(pane_id)
 
 
-def set_busy(pane_id: str, busy: bool, display_status: str | None = None) -> bool:
+def set_busy(
+    pane_id: str,
+    busy: bool,
+    display_status: str | None = None,
+    awaiting_kind: str | None = None,
+) -> bool:
     """Record what a pane is doing. Returns whether anything changed.
 
     Both facts arrive together because the window derives them in one tick from
@@ -624,6 +634,10 @@ def set_busy(pane_id: str, busy: bool, display_status: str | None = None) -> boo
         changed = True
     if display_status is not None and entry.display_status != display_status:
         entry.display_status = display_status
+        changed = True
+    # Same "None means not reported" rule as the status word.
+    if awaiting_kind is not None and entry.awaiting_kind != awaiting_kind:
+        entry.awaiting_kind = awaiting_kind
         changed = True
     if changed:
         _notify_pane("status", pane_id)

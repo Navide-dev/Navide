@@ -7466,6 +7466,33 @@
         "paused": "Off",
         "paused-body": "This device is not talking to the network. Your account and settings are kept.",
         "server": "Server"
+      },
+      "mobile": {
+        "title": "Mobile App",
+        "intro": "Pair a phone with this machine to follow your panes from the Navide app.",
+        "sees-title": "What this phone can see",
+        "sees": "Pane names, which CLI runs in each pane, its status, whether it is waiting for you (a permission or a question) and the workspace name. Never terminal output, file paths, credentials or API keys.",
+        "add": "Add Phone",
+        "scan": "Open the Navide app on your phone and scan this code.",
+        "expires-in": "Expires in {time}",
+        "expired": "This code expired. Make a new one to pair a phone.",
+        "new-code": "New Code",
+        "qr-label": "Pairing QR code",
+        "request-title": "{device} wants to connect",
+        "unnamed-phone": "A phone",
+        "code-label": "Pairing code",
+        "compare": "Check that the phone shows these same six digits.",
+        "trust": "Trust This Phone",
+        "decline": "Decline",
+        "trusted-title": "Trusted phones",
+        "none": "No phones yet.",
+        "last-seen": "Last connected {time}",
+        "never-seen": "Not connected yet",
+        "remove": "Remove This Phone",
+        "remove-hint": "A removed phone stops seeing this machine at once. You can pair it again any time.",
+        "not-configured": "No Navide Cloud server is set up on this machine, so a phone cannot be paired yet.",
+        "unreachable": "Navide Cloud cannot be reached right now, so phones cannot pair or connect. {reason}",
+        "err-generic": "That did not go through."
       }
     },
     "cliAgents": {
