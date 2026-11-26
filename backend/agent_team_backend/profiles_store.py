@@ -432,8 +432,10 @@ class CliProfilesStore:
     def delete(self, profile_id: str) -> dict[str, Any]:
         """Unregister the profile and remove its slot dir — it holds the
         account's login files and transcripts. The dir is first renamed aside
-        (frees the path at once, as before) and then purged; a purge that
-        fails leaves the archive marked for ``purge_pending_archives``."""
+        (frees the path at once, as before) and then purged. When the rename
+        is refused (Windows: a file in it is open) the slot is purged in
+        place. Whatever cannot be removed is marked for
+        ``purge_pending_archives``."""
         self.purge_pending_archives()
         with self._lock:
             doc = self._read()
@@ -465,21 +467,26 @@ class CliProfilesStore:
                 home.rename(target)
             except OSError as err:
                 log.warning("could not archive profile home %s: %s", home, err)
+                self._purge_archive(profile, home)
             else:
                 self._purge_archive(profile, target)
         return {"profiles": doc["profiles"], "defaults": doc["defaults"]}
 
     def _is_purgeable_archive(self, agent_key: str, profile_id: str, path: Path) -> bool:
         """Only a real (non-symlink) ``<root>/<agent>/<id>.deleted-*`` dir of
-        a supported agent, whose agent dir is not a link out of the root. The
-        built-in Default slot (the user's own CLI home) never qualifies."""
+        a supported agent — or the slot ``<root>/<agent>/<id>`` itself when
+        its rename was refused; callers check that id is unregistered — whose
+        agent dir is not a link out of the root. The built-in Default slot
+        (the user's own CLI home) never qualifies."""
         if (
             agent_key not in SUPPORTED_AGENT_KEYS
             or not profile_id
             or profile_id == "__default__"
             or profile_id.startswith(".")
             or any(sep in profile_id for sep in ("/", "\\"))
-            or not path.name.startswith(f"{profile_id}.deleted-")
+            or not (
+                path.name == profile_id or path.name.startswith(f"{profile_id}.deleted-")
+            )
         ):
             return False
         agent_dir = self._profiles_root / agent_key
@@ -495,12 +502,18 @@ class CliProfilesStore:
         if not self._is_purgeable_archive(agent_key, str(profile.get("id") or ""), archive):
             log.warning("left deleted profile home %s in place (not a managed slot)", archive)
             return False
+        failed: list[str] = []
+        # Symlinks inside are unlinked, never followed. A file that cannot go
+        # (open on Windows) is skipped; everything else is still removed.
         try:
-            # Symlinks inside are unlinked, never followed.
-            shutil.rmtree(archive)
-            return True
+            shutil.rmtree(archive, onexc=lambda _fn, path, _err: failed.append(path))
         except OSError as err:
-            log.warning("could not remove deleted profile home %s: %s", archive, err)
+            failed.append(str(err))
+        if not os.path.lexists(archive):
+            return True
+        log.warning(
+            "could not remove %d item(s) of deleted profile home %s", len(failed), archive
+        )
         try:
             (archive / PURGE_PENDING_MARKER).touch()
         except OSError as err:
@@ -508,9 +521,10 @@ class CliProfilesStore:
         return False
 
     def purge_pending_archives(self) -> int:
-        """Retry removing the archives an earlier delete could not purge.
-        Archives without the pending marker are never touched. Returns how
-        many were removed."""
+        """Retry removing the archives an earlier delete could not purge, and
+        the marked slots whose rename was refused, if their id is still not
+        registered. Anything without the pending marker is never touched.
+        Returns how many were removed."""
         removed = 0
         for agent_key in SUPPORTED_AGENT_KEYS:
             agent_dir = self._profiles_root / agent_key
@@ -520,14 +534,23 @@ class CliProfilesStore:
                 continue
             for entry in entries:
                 name = entry.name
-                if ".deleted-" not in name:
-                    continue
                 archive = Path(entry.path)
                 profile_id = name.split(".deleted-", 1)[0]
                 if not (archive / PURGE_PENDING_MARKER).is_file():
                     continue
-                if self._purge_archive({"agentKey": agent_key, "id": profile_id}, archive):
-                    removed += 1
+                target = {"agentKey": agent_key, "id": profile_id}
+                if ".deleted-" in name:
+                    if self._purge_archive(target, archive):
+                        removed += 1
+                    continue
+                # A slot still at its own path: the lock keeps a create from
+                # registering the id between the check and the purge.
+                with self._lock:
+                    registered = any(
+                        p.get("id") == profile_id for p in self._read()["profiles"]
+                    )
+                    if not registered and self._purge_archive(target, archive):
+                        removed += 1
         return removed
 
     def set_default(self, agent_key: str, profile_id: str | None) -> dict[str, Any]:

@@ -183,6 +183,69 @@ def test_delete_falls_back_to_archive_when_purge_fails(
     assert _archives(home, profile["id"]) == []
 
 
+def test_delete_purges_in_place_when_rename_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows: an open file makes the slot rename fail (WinError 5). The
+    delete still removes everything it can in place, marks what is left, and
+    a later sweep finishes it once the file is free."""
+    store = _store(tmp_path)
+    profile = store.create(agent_key="claude", name="Work")
+    home = store.ensure_home(profile)
+    (home / ".credentials.json").write_text("{}", encoding="utf-8")
+    (home / "projects" / "p").mkdir(parents=True)
+    (home / "projects" / "p" / "s.jsonl").write_text("{}\n", encoding="utf-8")
+    (home / "locked.bin").write_text("x", encoding="utf-8")
+
+    def refuse_rename(self: Path, target: object) -> Path:
+        raise PermissionError(5, "Access is denied")
+
+    real_unlink = os.unlink
+
+    def unlink(path: object, *args: object, **kwargs: object) -> None:
+        if str(path).endswith("locked.bin"):
+            raise PermissionError(5, "Access is denied")
+        real_unlink(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "rename", refuse_rename)
+    monkeypatch.setattr(os, "unlink", unlink)
+    doc = store.delete(profile["id"])
+
+    assert doc["profiles"] == []
+    assert _archives(home, profile["id"]) == []
+    assert not (home / ".credentials.json").exists()
+    assert not (home / "projects").exists()
+    assert (home / "locked.bin").exists()
+    assert (home / profiles_mod.PURGE_PENDING_MARKER).is_file()
+
+    monkeypatch.undo()
+    assert store.purge_pending_archives() == 1
+    assert not home.exists()
+
+
+def test_purge_sweep_skips_a_marked_slot_that_is_registered_again(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    profile = store.create(agent_key="claude", name="Work")
+    home = store.ensure_home(profile)
+    (home / ".credentials.json").write_text("{}", encoding="utf-8")
+    (home / profiles_mod.PURGE_PENDING_MARKER).touch()
+
+    assert store.purge_pending_archives() == 0
+    assert (home / ".credentials.json").exists()
+
+
+def test_purge_sweep_leaves_unmarked_unregistered_slots(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    orphan = tmp_path / "cli-profiles" / "claude" / "abc12345"
+    orphan.mkdir(parents=True)
+    (orphan / ".credentials.json").write_text("{}", encoding="utf-8")
+
+    assert store.purge_pending_archives() == 0
+    assert (orphan / ".credentials.json").exists()
+
+
 def test_purge_sweep_leaves_pre_existing_archives(tmp_path: Path) -> None:
     """Archives made before this fix carry no pending marker and stay put —
     whether to remove them is the user's call."""
