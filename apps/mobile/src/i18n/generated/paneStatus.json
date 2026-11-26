@@ -1,0 +1,123 @@
+{
+  "de-DE": {
+    "running": "läuft",
+    "idle": "im Leerlauf",
+    "awaiting": "wartet",
+    "starting": "startet",
+    "stopped": "gestoppt",
+    "exited": "beendet",
+    "error": "Fehler",
+    "waiting": "nicht geöffnet",
+    "disconnected": "getrennt"
+  },
+  "en-US": {
+    "running": "running",
+    "idle": "idle",
+    "awaiting": "awaiting",
+    "starting": "starting",
+    "stopped": "stopped",
+    "exited": "exited",
+    "error": "error",
+    "waiting": "not opened",
+    "disconnected": "disconnected"
+  },
+  "es-ES": {
+    "running": "en ejecución",
+    "idle": "inactivo",
+    "awaiting": "esperando",
+    "starting": "arrancando",
+    "stopped": "detenido",
+    "exited": "finalizado",
+    "error": "error",
+    "waiting": "sin abrir",
+    "disconnected": "desconectado"
+  },
+  "fr-FR": {
+    "running": "en cours",
+    "idle": "inactif",
+    "awaiting": "en attente",
+    "starting": "démarrage",
+    "stopped": "arrêté",
+    "exited": "terminé",
+    "error": "erreur",
+    "waiting": "non ouvert",
+    "disconnected": "déconnecté"
+  },
+  "ja-JP": {
+    "running": "実行中",
+    "idle": "待機中",
+    "awaiting": "応答待ち",
+    "starting": "起動中",
+    "stopped": "停止済み",
+    "exited": "終了済み",
+    "error": "エラー",
+    "waiting": "未起動",
+    "disconnected": "切断済み"
+  },
+  "ko-KR": {
+    "running": "실행 중",
+    "idle": "유휴",
+    "awaiting": "응답 대기",
+    "starting": "시작 중",
+    "stopped": "중지됨",
+    "exited": "종료됨",
+    "error": "오류",
+    "waiting": "열리지 않음",
+    "disconnected": "연결 끊김"
+  },
+  "pt-BR": {
+    "running": "em execução",
+    "idle": "ocioso",
+    "awaiting": "aguardando",
+    "starting": "iniciando",
+    "stopped": "parado",
+    "exited": "encerrado",
+    "error": "erro",
+    "waiting": "não aberto",
+    "disconnected": "desconectado"
+  },
+  "ru-RU": {
+    "running": "работает",
+    "idle": "простаивает",
+    "awaiting": "ждёт",
+    "starting": "запускается",
+    "stopped": "остановлен",
+    "exited": "завершён",
+    "error": "ошибка",
+    "waiting": "не открыт",
+    "disconnected": "отключён"
+  },
+  "vi-VN": {
+    "running": "đang chạy",
+    "idle": "rảnh",
+    "awaiting": "đang chờ",
+    "starting": "đang khởi động",
+    "stopped": "đã dừng",
+    "exited": "đã thoát",
+    "error": "lỗi",
+    "waiting": "chưa mở",
+    "disconnected": "mất kết nối"
+  },
+  "zh-CN": {
+    "running": "运行中",
+    "idle": "闲置",
+    "awaiting": "等待回应",
+    "starting": "启动中",
+    "stopped": "已停止",
+    "exited": "已结束",
+    "error": "错误",
+    "waiting": "尚未打开",
+    "disconnected": "连接中断"
+  },
+  "zh-TW": {
+    "running": "執行中",
+    "idle": "閒置",
+    "awaiting": "等待回應",
+    "starting": "啟動中",
+    "stopped": "已停止",
+    "exited": "已結束",
+    "error": "錯誤",
+    "waiting": "尚未開啟",
+    "disconnected": "連線中斷"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "tabs": { "panes": "Panes", "notifications": "Notifications", "settings": "Settings" },
+  "pairing": {
+    "title": "Pair with your computer",
+    "intro": "On your computer, open Navide, go to Account → Mobile App and choose Add phone. Then scan the code shown there.",
+    "scan": "Scan pairing code",
+    "demo": "Use demo computer",
+    "cameraNeeded": "Navide needs the camera to scan the pairing code.",
+    "allowCamera": "Allow camera",
+    "notNavideCode": "This is not a Navide pairing code.",
+    "cancel": "Cancel",
+    "connecting": "Contacting your computer…",
+    "waitingTitle": "Confirm on your computer",
+    "waitingBody": "Check that your computer shows the same six digits, then choose Trust this phone there.",
+    "done": "Paired with {name}",
+    "tryAgain": "Try again",
+    "error": {
+      "rate-limited": "Too many attempts. Please wait a few minutes and try again.",
+      "invalid-code": "This pairing code is not valid. Create a new one on your computer.",
+      "expired": "This pairing code has expired. Create a new one on your computer.",
+      "rejected": "Your computer declined this phone.",
+      "bad-approval": "The confirmation did not come from the computer you scanned. Pair again.",
+      "network": "Could not reach the server. Check your connection and try again."
+    }
+  },
+  "panes": {
+    "empty": "No panes are open on your computers.",
+    "state": { "busy": "Working", "attention": "Waiting for you", "idle": "Idle", "offline": "Offline" },
+    "needsApproval": "Needs your approval",
+    "hasQuestion": "Has a question for you"
+  },
+  "connection": {
+    "connecting": "Connecting…",
+    "reconnecting": "Reconnecting…",
+    "offline": "Offline"
+  },
+  "notifications": {
+    "empty": "Nothing yet. You will see here when a pane finishes or needs you.",
+    "done": "{pane} finished",
+    "approval": "{pane} needs your approval",
+    "question": "{pane} has a question",
+    "where": "{workspace} on {device}",
+    "openWhileRunning": "Notifications appear while the app is open."
+  },
+  "settings": {
+    "pairedWith": "Paired computers",
+    "unpair": "Unpair this phone",
+    "unpairHint": "To remove this phone from a computer, use Account → Mobile App on that computer.",
+    "revoked": "This phone was removed on your computer. Pair again to continue.",
+    "demoRevoke": "Simulate removal (demo)",
+    "demoMode": "Demo mode: showing fictional panes, not your computers.",
+    "version": "Version {version}"
+  }
+}

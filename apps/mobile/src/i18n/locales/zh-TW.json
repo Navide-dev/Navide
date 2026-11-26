@@ -1,0 +1,54 @@
+{
+  "tabs": { "panes": "分格", "notifications": "通知", "settings": "設定" },
+  "pairing": {
+    "title": "和電腦配對",
+    "intro": "在電腦上打開 Navide，到「帳號 → 行動 App」選「新增手機」，再掃描畫面上的配對碼。",
+    "scan": "掃描配對碼",
+    "demo": "使用示範電腦",
+    "cameraNeeded": "Navide 需要使用相機來掃描配對碼。",
+    "allowCamera": "允許使用相機",
+    "notNavideCode": "這不是 Navide 的配對碼。",
+    "cancel": "取消",
+    "connecting": "正在聯絡你的電腦…",
+    "waitingTitle": "請在電腦上確認",
+    "waitingBody": "確認電腦上顯示同樣的六位數字，再在電腦上選「信任這台手機」。",
+    "done": "已和 {name} 配對",
+    "tryAgain": "再試一次",
+    "error": {
+      "rate-limited": "嘗試太多次，請稍後再試。",
+      "invalid-code": "這組配對碼無效，請在電腦上重新產生。",
+      "expired": "這組配對碼已過期，請在電腦上重新產生。",
+      "rejected": "電腦沒有信任這台手機。",
+      "bad-approval": "確認訊息不是來自你掃描的那台電腦，請重新配對。",
+      "network": "連不上伺服器，請檢查網路後再試。"
+    }
+  },
+  "panes": {
+    "empty": "你的電腦目前沒有開啟的分格。",
+    "state": { "busy": "工作中", "attention": "等你處理", "idle": "閒置", "offline": "離線" },
+    "needsApproval": "需要你核准",
+    "hasQuestion": "有問題要問你"
+  },
+  "connection": {
+    "connecting": "連線中…",
+    "reconnecting": "重新連線中…",
+    "offline": "離線"
+  },
+  "notifications": {
+    "empty": "目前沒有通知。分格完成或需要你處理時，會顯示在這裡。",
+    "done": "{pane} 已完成",
+    "approval": "{pane} 需要你核准",
+    "question": "{pane} 有問題要問你",
+    "where": "{device} 上的 {workspace}",
+    "openWhileRunning": "App 開著時會顯示通知。"
+  },
+  "settings": {
+    "pairedWith": "已配對的電腦",
+    "unpair": "解除這台手機的配對",
+    "unpairHint": "要從電腦移除這台手機，請在那台電腦的「帳號 → 行動 App」操作。",
+    "revoked": "這台手機已在電腦上被移除，重新配對後就能繼續使用。",
+    "demoRevoke": "模擬被移除（示範）",
+    "demoMode": "示範模式：顯示的是虛構的分格，不是你的電腦。",
+    "version": "版本 {version}"
+  }
+}
