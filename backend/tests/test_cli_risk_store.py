@@ -237,3 +237,91 @@ def test_a_sweep_that_does_not_commit_leaves_no_trace(store):
         assert {value["pane"] for value in CliRiskStore(reopened).records["signals"].values()} == {"before"}
     finally:
         reopened.close()
+
+
+# Fake credentials are assembled at run time so no literal secret lands in git.
+_KEY = "sk-" + "ant" + "x" * 24
+_GH = "ghp" + "_" + "y" * 30
+_PW = "hun" + "ter" + "2pass"
+_T = "z" * 16
+
+
+def _secret_details():
+    return {("127.0.0.1", 5173): {
+        "local": [{"pid": 10, "name": "claude", "command": f"claude --api-key {_KEY} --model x"},
+                  {"pid": 11, "name": "env", "command": f"env GITHUB_TOKEN={_GH} gh api"}],
+        "listener": {"status": "resolved", "pid": 8812, "name": "node",
+                     "command": f"node mcp-remote http://127.0.0.1:8000/mcp?t={_T} --password {_PW}"},
+    }}
+
+
+def _stored_signals(db):
+    with db.transaction() as cur:
+        rows = cur.execute("SELECT data FROM cli_risk_records WHERE category='signals'").fetchall()
+    return [row["data"] for row in rows]
+
+
+def test_process_command_lines_are_masked_before_reaching_the_database(store):
+    store.apply_network("pane", "test", "successful", {("127.0.0.1", 5173): 1},
+                        ExpectedAddresses("successful", frozenset({"192.0.2.1"}), 100), 100,
+                        details=_secret_details())
+    raw = "".join(_stored_signals(store.db))
+    for secret in (_KEY, _GH, _PW, _T):
+        assert secret not in raw
+    # What risk judgement and the dialog rely on is kept as written.
+    assert "127.0.0.1" in raw and "5173" in raw and "mcp-remote" in raw and "--api-key" in raw
+    # The live view this session shows is the one it showed before.
+    shown = signals(store, 100)[0]
+    assert shown["ip"] == "127.0.0.1" and shown["port"] == 5173 and shown["severity"] == "yellow"
+    assert shown["local"][0]["command"] == f"claude --api-key {_KEY} --model x"
+    # After a restart the masked copy is what is read back, same signal otherwise
+    # (``stale`` is set because a new backend has no current observation yet).
+    again = signals(CliRiskStore(store.db), 100)[0]
+    assert {k: v for k, v in again.items() if k not in ("local", "listener", "stale")} == \
+        {k: v for k, v in shown.items() if k not in ("local", "listener", "stale")}
+    assert [p["pid"] for p in again["local"]] == [10, 11] and again["listener"]["pid"] == 8812
+    assert _KEY not in again["local"][0]["command"] and "--model x" in again["local"][0]["command"]
+
+
+def test_migration_masks_command_lines_already_stored(tmp_path):
+    import json
+
+    db = Database(tmp_path / "navide.db")
+    first = CliRiskStore(db)
+    first.apply_network("pane", "test", "successful", {("127.0.0.1", 5173): 1},
+                        ExpectedAddresses("successful", frozenset({"192.0.2.1"}), 100), 100)
+    # A row written by a release that stored the command line verbatim.
+    with db.transaction() as cur:
+        row = cur.execute("SELECT key, data FROM cli_risk_records WHERE category='signals'").fetchone()
+        value = json.loads(row["data"])
+        value["data"].update(_secret_details()[("127.0.0.1", 5173)])
+        cur.execute("UPDATE cli_risk_records SET data=? WHERE category='signals' AND key=?",
+                    (json.dumps(value), row["key"]))
+        cur.execute("DELETE FROM schema_meta WHERE key LIKE '%cli_risk_records%'")
+    before = json.loads(_stored_signals(db)[0])
+    migrated = CliRiskStore(db)
+    after = json.loads(_stored_signals(db)[0])
+    for secret in (_KEY, _GH, _PW, _T):
+        assert secret not in json.dumps(after)
+    assert {k: v for k, v in after["data"].items() if k not in ("local", "listener")} == \
+        {k: v for k, v in before["data"].items() if k not in ("local", "listener")}
+    assert {k: v for k, v in after.items() if k != "data"} == {k: v for k, v in before.items() if k != "data"}
+    assert migrated.snapshot()["signals"]
+    db.close()
+
+
+def test_a_failed_migration_does_not_stop_the_store(tmp_path, monkeypatch):
+    db = Database(tmp_path / "navide.db")
+
+    real = db.migrate
+
+    def broken(component, *args, **kwargs):
+        if component == "cli_risk_records":
+            raise RuntimeError("migration broke")
+        return real(component, *args, **kwargs)
+
+    monkeypatch.setattr(db, "migrate", broken)
+    store = CliRiskStore(db)
+    network(store)
+    assert signals(store)
+    db.close()
