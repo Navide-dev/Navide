@@ -720,6 +720,19 @@
       "detecting-session": "取得 Session ID 中",
       "ready": "就緒",
       "failed": "設定失敗"
+    },
+    "rich": {
+      "group": "輸出檢視",
+      "terminal": "終端",
+      "rich": "美化",
+      "terminal-title": "顯示原始終端",
+      "rich-title": "以美化格式顯示 agent 的回覆",
+      "unsupported": "這個分格無法使用美化檢視：它的回覆不是從這台電腦上的對話紀錄讀取的。",
+      "empty": "顯示這個視窗開啟後的回覆；切回終端可看完整歷史。",
+      "copy": "複製",
+      "copied": "已複製",
+      "you": "你",
+      "truncated": "…（內容過長已截斷，完整內容請切回終端）"
     }
   },
   "action": {

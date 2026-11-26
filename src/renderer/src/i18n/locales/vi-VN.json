@@ -720,6 +720,19 @@
       "detecting-session": "đang phát hiện ID session",
       "ready": "sẵn sàng",
       "failed": "thiết lập không thành công"
+    },
+    "rich": {
+      "group": "Chế độ xem đầu ra",
+      "terminal": "Terminal",
+      "rich": "Định dạng",
+      "terminal-title": "Hiển thị terminal gốc",
+      "rich-title": "Hiển thị câu trả lời của agent có định dạng",
+      "unsupported": "Không dùng được chế độ định dạng cho ô này: câu trả lời của nó không được đọc từ nhật ký hội thoại trên máy tính này.",
+      "empty": "Hiển thị các câu trả lời kể từ khi mở cửa sổ này. Chuyển về Terminal để xem toàn bộ lịch sử.",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "you": "Bạn",
+      "truncated": "…(đã cắt bớt — chuyển về Terminal để xem toàn bộ câu trả lời)"
     }
   },
   "action": {
