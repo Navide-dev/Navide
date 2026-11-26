@@ -53,6 +53,21 @@ describe('RichOutputView', () => {
     expect(openExternal).toHaveBeenCalledWith('https://example.com/a')
   })
 
+  it('opens a middle-clicked link externally too, never as a new window', () => {
+    const openExternal = vi.fn().mockResolvedValue({ ok: true })
+    ;(window as { agentTeam?: unknown }).agentTeam = { openExternal }
+    const w = view([{ id: 1, prompt: '', reply: '[docs](https://example.com/b)' }])
+    const ev = new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
+    w.find('a').element.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    expect(openExternal).toHaveBeenCalledWith('https://example.com/b')
+  })
+
+  it('says when a reply was cut', () => {
+    const w = view([{ id: 1, prompt: '', reply: 'long', truncated: true }, { id: 2, prompt: '', reply: 'short' }])
+    expect(w.findAll('[data-testid="rich-truncated"]')).toHaveLength(1)
+  })
+
   it('copies a code block\'s raw text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })

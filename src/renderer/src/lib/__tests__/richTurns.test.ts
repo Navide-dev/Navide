@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import DOMPurify from 'dompurify'
-import { applyActivity, isSafeLinkHref, markdownToHtml, renderMarkdown, resetSanitizerProbe, RICH_TURNS_MAX, sanitizerWorks, type RichTurn } from '../richTurns'
+import {
+  acceptsRichTurns, applyActivity, isSafeLinkHref, markdownToHtml, renderMarkdown, resetSanitizerProbe, RICH_HIGHLIGHT_MAX_CHARS,
+  RICH_PANE_MAX_CHARS, RICH_TURN_MAX_CHARS, RICH_TURNS_MAX, sanitizerWorks, type RichTurn,
+} from '../richTurns'
 
 const labels = { copy: 'Copy' }
 
@@ -28,6 +31,25 @@ describe('applyActivity', () => {
     applyActivity(turns, { event_type: 'turn_complete', text: 'one' })
     applyActivity(turns, { event_type: 'turn_complete', text: 'two' })
     expect(turns.map((t) => t.reply)).toEqual(['one', 'two'])
+  })
+
+  it('cuts an overlong reply and marks it truncated', () => {
+    const turns: RichTurn[] = []
+    applyActivity(turns, { event_type: 'turn_complete', text: 'x'.repeat(RICH_TURN_MAX_CHARS + 10) })
+    expect(turns[0].reply).toHaveLength(RICH_TURN_MAX_CHARS)
+    expect(turns[0].truncated).toBe(true)
+    applyActivity(turns, { event_type: 'turn_complete', text: 'short' })
+    expect(turns[1].truncated).toBe(false)
+  })
+
+  it('drops the oldest turns once a pane holds more than RICH_PANE_MAX_CHARS', () => {
+    const turns: RichTurn[] = []
+    const n = Math.ceil(RICH_PANE_MAX_CHARS / RICH_TURN_MAX_CHARS) + 3
+    for (let i = 0; i < n; i++) applyActivity(turns, { event_type: 'turn_complete', text: String(i).padEnd(RICH_TURN_MAX_CHARS, '.') })
+    const total = turns.reduce((sum, t) => sum + t.reply.length, 0)
+    expect(total).toBeLessThanOrEqual(RICH_PANE_MAX_CHARS)
+    expect(turns[turns.length - 1].reply.startsWith(String(n - 1))).toBe(true)
+    expect(turns[0].reply.startsWith('0')).toBe(false)
   })
 
   it('keeps only the latest RICH_TURNS_MAX turns', () => {
@@ -58,6 +80,14 @@ describe('markdownToHtml', () => {
     expect(html).toContain('data-code="0"')
     expect(html).toContain('>Copy</button>')
     expect(codes).toEqual([src])
+  })
+
+  it('escapes but does not highlight an overlong code block', () => {
+    const code = 'const a = 1 < 2\n'.repeat(Math.ceil(RICH_HIGHLIGHT_MAX_CHARS / 16) + 1)
+    const { html, codes } = markdownToHtml('```ts\n' + code + '```\n', labels)
+    expect(html).not.toContain('hljs-keyword')
+    expect(html).toContain('1 &lt; 2')
+    expect(codes[0].length).toBeGreaterThan(RICH_HIGHLIGHT_MAX_CHARS)
   })
 
   it('escapes code in an unknown language', () => {
@@ -130,5 +160,14 @@ describe('renderMarkdown', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe('acceptsRichTurns', () => {
+  it('keeps turns only for a held, non-sign-in pane', () => {
+    expect(acceptsRichTurns({ isLogin: false })).toBe(true)
+    expect(acceptsRichTurns({})).toBe(true)
+    expect(acceptsRichTurns({ isLogin: true })).toBe(false)
+    expect(acceptsRichTurns(undefined)).toBe(false)
   })
 })

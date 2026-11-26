@@ -731,7 +731,8 @@
       "empty": "Affiche les réponses depuis l’ouverture de cette fenêtre. Revenez au Terminal pour tout l’historique.",
       "copy": "Copier",
       "copied": "Copié",
-      "you": "Vous"
+      "you": "Vous",
+      "truncated": "…(coupé ici : revenez au Terminal pour la réponse complète)"
     }
   },
   "action": {

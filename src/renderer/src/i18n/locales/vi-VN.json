@@ -731,7 +731,8 @@
       "empty": "Hiển thị các câu trả lời kể từ khi mở cửa sổ này. Chuyển về Terminal để xem toàn bộ lịch sử.",
       "copy": "Sao chép",
       "copied": "Đã sao chép",
-      "you": "Bạn"
+      "you": "Bạn",
+      "truncated": "…(đã cắt bớt — chuyển về Terminal để xem toàn bộ câu trả lời)"
     }
   },
   "action": {

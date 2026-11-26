@@ -36,6 +36,12 @@ export const RICH_OUTPUT_VENDORS: ReadonlySet<string> = new Set([
 
 /** Turns kept per pane; older ones stay in the terminal. */
 export const RICH_TURNS_MAX = 50
+/** A longer reply is cut here and marked truncated. */
+export const RICH_TURN_MAX_CHARS = 100_000
+/** Per pane, all kept turns together; the oldest go first past this. */
+export const RICH_PANE_MAX_CHARS = 1_500_000
+/** Code blocks longer than this are escaped but not highlighted. */
+export const RICH_HIGHLIGHT_MAX_CHARS = 20_000
 
 /** Same set as the backend's _USER_PROMPT_DETAILS. */
 const USER_PROMPT_DETAILS = new Set(['user', 'prompt', 'user_message'])
@@ -44,6 +50,8 @@ export interface RichTurn {
   id: number
   prompt: string
   reply: string
+  /** The reply was cut at RICH_TURN_MAX_CHARS; the terminal has all of it. */
+  truncated?: boolean
 }
 
 export interface ActivityLike {
@@ -55,24 +63,38 @@ export interface ActivityLike {
 
 let nextTurnId = 1
 
+/** Whether a pane's turns may be kept: only a pane this window holds, and
+ *  never a sign-in pane — its replies can quote its sign-in, the same text
+ *  cli_get_status withholds (login_panes.is_login_pane on the backend). */
+export function acceptsRichTurns(pane: { isLogin?: boolean } | undefined): boolean {
+  return !!pane && !pane.isLogin
+}
+
 /** Fold one `agent.activity` event into the pane's turn list, in place.
  *  Returns true when the list changed. Events without text (hook events,
  *  tool calls) are ignored. */
 export function applyActivity(turns: RichTurn[], ev: ActivityLike): boolean {
-  const text = typeof ev.text === 'string' ? ev.text : ''
-  if (!text.trim()) return false
+  const raw = typeof ev.text === 'string' ? ev.text : ''
+  if (!raw.trim()) return false
+  const truncated = raw.length > RICH_TURN_MAX_CHARS
+  const text = truncated ? raw.slice(0, RICH_TURN_MAX_CHARS) : raw
   const last = turns[turns.length - 1]
   if (ev.event_type === 'agent_active' && USER_PROMPT_DETAILS.has(String(ev.detail ?? ''))) {
     turns.push({ id: nextTurnId++, prompt: text, reply: '' })
   } else if (ev.event_type === 'turn_complete') {
     // The same turn end can be reported twice (e.g. a resumed reader).
     if (last && last.reply === text) return false
-    if (last && !last.reply) last.reply = text
-    else turns.push({ id: nextTurnId++, prompt: '', reply: text })
+    if (last && !last.reply) Object.assign(last, { reply: text, truncated })
+    else turns.push({ id: nextTurnId++, prompt: '', reply: text, truncated })
   } else {
     return false
   }
   if (turns.length > RICH_TURNS_MAX) turns.splice(0, turns.length - RICH_TURNS_MAX)
+  let total = turns.reduce((n, t) => n + t.prompt.length + t.reply.length, 0)
+  while (total > RICH_PANE_MAX_CHARS && turns.length > 1) {
+    const dropped = turns.shift()!
+    total -= dropped.prompt.length + dropped.reply.length
+  }
   return true
 }
 
@@ -124,7 +146,7 @@ export function markdownToHtml(src: string, labels: RenderLabels): RenderedMarkd
       },
       code({ text, lang }: Tokens.Code): string {
         const language = (lang ?? '').trim().split(/\s+/)[0]?.toLowerCase() ?? ''
-        const known = language && hljs.getLanguage(language)
+        const known = language && text.length <= RICH_HIGHLIGHT_MAX_CHARS && hljs.getLanguage(language)
         const body = known
           ? hljs.highlight(text, { language, ignoreIllegals: true }).value
           : escapeHtml(text)

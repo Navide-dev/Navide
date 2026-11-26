@@ -6,7 +6,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown, isSafeLinkHref, type RenderedMarkdown, type RichTurn } from '../lib/richTurns'
 
-const props = defineProps<{ turns: RichTurn[] }>()
+const props = defineProps<{ turns: readonly RichTurn[] }>()
 const { t } = useI18n()
 
 // Per turn, the reply it was last rendered from: a turn's reply is filled in
@@ -50,16 +50,25 @@ watch(
   { immediate: true }
 )
 
+/** Never navigate the window or open a new one: an http(s) link opens in the
+ *  browser. True when the event was on a link. */
+function openLink(e: MouseEvent): boolean {
+  const link = (e.target as HTMLElement | null)?.closest('a')
+  if (!link) return false
+  e.preventDefault()
+  const href = link.getAttribute('href') ?? ''
+  if (isSafeLinkHref(href)) void window.agentTeam?.openExternal?.(href)
+  return true
+}
+
+function onAuxClick(e: MouseEvent): void {
+  // Middle-click: opened externally like a click, never as a new window.
+  if (e.button === 1) openLink(e)
+}
+
 async function onClick(e: MouseEvent, out: RenderedMarkdown | null): Promise<void> {
+  if (openLink(e)) return
   const target = e.target as HTMLElement | null
-  const link = target?.closest('a')
-  if (link) {
-    // Never navigate the window: an http(s) link opens in the browser.
-    e.preventDefault()
-    const href = link.getAttribute('href') ?? ''
-    if (isSafeLinkHref(href)) void window.agentTeam?.openExternal?.(href)
-    return
-  }
   const button = target?.closest<HTMLButtonElement>('button.rich-copy')
   if (!button || !out) return
   const code = out.codes[Number(button.dataset.code)]
@@ -85,7 +94,8 @@ async function onClick(e: MouseEvent, out: RenderedMarkdown | null): Promise<voi
           <span class="rich-prompt-text">{{ item.turn.prompt }}</span>
         </div>
         <!-- v-html: escaped by markdownToHtml, sanitized by DOMPurify (renderMarkdown fails closed) -->
-        <div v-if="item.out" class="rich-reply" data-testid="rich-reply" @click="onClick($event, item.out)" v-html="item.out.html"></div>
+        <div v-if="item.out" class="rich-reply" data-testid="rich-reply" @click="onClick($event, item.out)" @auxclick="onAuxClick" v-html="item.out.html"></div>
+        <p v-if="item.turn.truncated" class="rich-truncated" data-testid="rich-truncated">{{ $t('pane.rich.truncated') }}</p>
       </section>
     </template>
   </div>
@@ -112,6 +122,11 @@ async function onClick(e: MouseEvent, out: RenderedMarkdown | null): Promise<voi
   font-size: var(--font-xs);
 }
 .rich-note { margin: 0 0 12px; }
+.rich-truncated {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
 .rich-turn {
   max-width: 880px;
   margin: 0 auto 20px;

@@ -50,6 +50,7 @@ import { channelsKey, useChannels, type ChannelAgentRequest } from './composable
 import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
 import { createRichTurns, richTurnsKey } from './composables/useRichTurns'
+import { acceptsRichTurns } from './lib/richTurns'
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { agentVendorLabel, isAgentVendor } from './lib/agentIdentity'
@@ -569,7 +570,10 @@ const agentConsole = createAgentConsole(backend, useSchedulerJobs(backend), {
   },
 })
 provide(agentConsoleKey, agentConsole)
-provide(richTurnsKey, createRichTurns(backend))
+const richTurns = createRichTurns(backend, {
+  accepts: (paneId) => acceptsRichTurns(panes.value.find((p) => p.id === paneId)),
+})
+provide(richTurnsKey, richTurns)
 // Warn and error diagnostics also go to the backend's on-disk error ledger,
 // which outlives a reload and is what ui_diagnostics returns as `persisted`.
 setDiagnosticSink((entry) => {
@@ -9725,6 +9729,7 @@ async function onKill(paneId: string, opts: { markRemoved?: boolean, force?: boo
     if (v.paneId === paneId) issueHandoffs.value.set(k, { ...v, state: 'pane-gone' })
   })
   delete paneRefs[paneId]
+  richTurns.forget(paneId)
   unregisterPaneMessaging(paneId)
   // Only a real close parks a chat-channel binding (kept dormant for the chat to wake
   // back or unlink); rebuild and idle-reclaim keep the seat, and workspace close /
@@ -22883,6 +22888,7 @@ function handleGroupDetached(groupId: string): void {
   for (const p of panes.value) {
     if ((p.runGroupId ?? '') === groupId) {
       delete paneRefs[p.id]
+      richTurns.forget(p.id)
       // Keep the persisted name: the pane re-registers in the child window.
       unregisterPaneMessaging(p.id, { keepPersisted: true })
       // The pane leaves THIS window: its pending-badge and mute entries here
@@ -24330,6 +24336,7 @@ function dropWorkspacePanes(path: string): void {
   for (const p of panes.value) {
     if (normWs(p.workspacePath) !== normWs(path)) continue
     delete paneRefs[p.id]
+    richTurns.forget(p.id)
     // Keep the persisted name: the pane re-registers where it comes back.
     unregisterPaneMessaging(p.id, { keepPersisted: true })
     // Its pending-badge and mute entries here would otherwise keep counting

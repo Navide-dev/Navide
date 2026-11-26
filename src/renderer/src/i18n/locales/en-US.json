@@ -731,7 +731,8 @@
       "empty": "Shows replies since this window opened. Switch back to Terminal for the full history.",
       "copy": "Copy",
       "copied": "Copied",
-      "you": "You"
+      "you": "You",
+      "truncated": "…(cut here — switch back to Terminal for the full reply)"
     }
   },
   "action": {

@@ -549,7 +549,7 @@ const richSupported = computed(
   () => !!richTurns && !props.remote && !props.sshRemote && RICH_OUTPUT_VENDORS.has(props.agentKey ?? '')
 )
 const richMode = ref(false)
-const richTurnList = computed(() => richTurns?.turnsFor(props.paneId).value ?? [])
+const richTurnList = computed(() => richTurns?.turnsFor(props.paneId) ?? [])
 const richTop = ref(0)
 let richHeaderObserver: ResizeObserver | null = null
 watch(

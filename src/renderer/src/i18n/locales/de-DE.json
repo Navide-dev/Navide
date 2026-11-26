@@ -731,7 +731,8 @@
       "empty": "Zeigt Antworten, seit dieses Fenster geöffnet wurde. Den vollständigen Verlauf siehst du im Terminal.",
       "copy": "Kopieren",
       "copied": "Kopiert",
-      "you": "Du"
+      "you": "Du",
+      "truncated": "…(hier gekürzt – die vollständige Antwort siehst du im Terminal)"
     }
   },
   "action": {

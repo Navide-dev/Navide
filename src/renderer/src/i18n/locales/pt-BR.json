@@ -731,7 +731,8 @@
       "empty": "Mostra as respostas desde que esta janela foi aberta. Volte ao Terminal para ver o histórico completo.",
       "copy": "Copiar",
       "copied": "Copiado",
-      "you": "Você"
+      "you": "Você",
+      "truncated": "…(cortado aqui: volte ao Terminal para ver a resposta completa)"
     }
   },
   "action": {
