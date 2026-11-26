@@ -7492,7 +7492,9 @@
         "remove-hint": "A removed phone stops seeing this machine at once. You can pair it again any time.",
         "not-configured": "No Navide Cloud server is set up on this machine, so a phone cannot be paired yet.",
         "unreachable": "Navide Cloud cannot be reached right now, so phones cannot pair or connect. {reason}",
-        "err-generic": "That did not go through."
+        "err-generic": "That did not go through.",
+        "save-failed": "Navide Cloud trusts this phone, but it could not be saved on this machine. Try saving again, or decline to take the approval back.",
+        "retry-save": "Save Again"
       }
     },
     "cliAgents": {

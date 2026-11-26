@@ -7492,7 +7492,9 @@
         "remove-hint": "移除後，這台手機會立刻看不到這台電腦。之後隨時可以再配對。",
         "not-configured": "這台電腦還沒有設定 Navide Cloud 伺服器，所以還不能配對手機。",
         "unreachable": "目前連不上 Navide Cloud，手機暫時無法配對或連線。{reason}",
-        "err-generic": "這個動作沒有完成。"
+        "err-generic": "這個動作沒有完成。",
+        "save-failed": "Navide Cloud 已經信任這台手機，但這台電腦沒能存下來。可以再存一次，或按「拒絕」撤回這次信任。",
+        "retry-save": "再存一次"
       }
     },
     "cliAgents": {

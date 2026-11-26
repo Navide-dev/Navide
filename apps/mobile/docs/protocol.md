@@ -9,7 +9,14 @@ What the phone sends and expects. JSON text frames over one WebSocket.
    `desktopKey` is the desktop's Ed25519 public key (base64url). The code is
    single use and expires within minutes. The QR carries no credential.
 2. The phone sends
-   `{type:"mobile.pair.redeem", code, desktopId, phoneKey, phoneNonce, deviceName}`.
+   `{type:"mobile.pair.redeem", codeHash, proof, desktopId, phoneKey, phoneNonce, deviceName}`.
+   The pairing code itself never leaves the phone: `codeHash` is the hex
+   SHA-256 of the code, and `proof` is
+   `base64url(HMAC-SHA256(key = code, "navide/mobile-proof/v1" ‖ phoneKey ‖ phoneNonce))`.
+   The desktop also registers only the hash, so the server stores hashes and
+   never sees the code. The desktop recomputes `proof` from the code it made
+   and drops a request whose proof does not match, so a request that did not
+   come from a phone that scanned the QR code never reaches the screen.
    Replies: `{type:"mobile.pair.pending"}`, or
    `{type:"error", code:"rate_limited"|"invalid_code"|"expired"}`.
 3. Both screens show six digits:
@@ -36,6 +43,12 @@ What the phone sends and expects. JSON text frames over one WebSocket.
   immediately when the app returns to the foreground.
 - Removal on the desktop: `{type:"mobile.revoked"}` or close code 4401. The
   app deletes its stored credential and returns to the pairing screen.
+
+## TODO (v2)
+
+- Bind the approval signature to `phoneId` and an `expiresAt` as well
+  (`navide/mobile-approval/v2`). This changes the phone, the desktop and the
+  server together, so it ships as one protocol version bump.
 
 ## Not in v1
 

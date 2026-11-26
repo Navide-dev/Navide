@@ -7492,7 +7492,9 @@
         "remove-hint": "移除后，这台手机会立刻看不到这台电脑。之后随时可以重新配对。",
         "not-configured": "这台电脑尚未设置 Navide Cloud 服务器，所以还不能配对手机。",
         "unreachable": "目前连不上 Navide Cloud，手机暂时无法配对或连接。{reason}",
-        "err-generic": "操作没有完成。"
+        "err-generic": "操作没有完成。",
+        "save-failed": "Navide Cloud 已信任这台手机，但这台电脑没能保存。可以再保存一次，或点“拒绝”撤回这次信任。",
+        "retry-save": "再保存一次"
       }
     },
     "cliAgents": {

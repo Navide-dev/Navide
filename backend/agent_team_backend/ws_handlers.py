@@ -6207,7 +6207,13 @@ async def p2p_mobile_trust(session: "Session", msg_id: str, msg_type: str, paylo
     if not request_id:
         await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "requestId is required"))
         return
-    if not await _confirmed(session, msg_id, msg_type, payload, device_id=request_id):
+    from . import mobile_pairing
+
+    # Bound to the key behind the card as well as its id, so a confirmation
+    # minted for the phone on screen cannot approve a different key.
+    request = mobile_pairing.get_request(request_id)
+    subject = mobile_pairing.phone_key_hash(request.phone_key) if request else ""
+    if not await _confirmed(session, msg_id, msg_type, payload, device_id=request_id, subject=subject):
         return
     reply = await server_link.approve_mobile_pair(request_id)
     await _send_mobile_reply(session, msg_id, msg_type, reply, "that phone could not be trusted")

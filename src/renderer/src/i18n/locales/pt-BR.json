@@ -7492,7 +7492,9 @@
         "remove-hint": "Um celular removido deixa de ver este computador na hora. Você pode pareá-lo de novo quando quiser.",
         "not-configured": "Nenhum servidor Navide Cloud está configurado neste computador, então ainda não é possível parear um celular.",
         "unreachable": "Não foi possível acessar o Navide Cloud agora, então os celulares não podem parear nem se conectar. {reason}",
-        "err-generic": "Não deu certo."
+        "err-generic": "Não deu certo.",
+        "save-failed": "O Navide Cloud confia neste celular, mas não foi possível salvá-lo neste computador. Salve de novo ou recuse para desfazer a aprovação.",
+        "retry-save": "Salvar de novo"
       }
     },
     "cliAgents": {

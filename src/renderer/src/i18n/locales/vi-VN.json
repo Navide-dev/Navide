@@ -7492,7 +7492,9 @@
         "remove-hint": "Điện thoại bị gỡ sẽ không còn thấy máy này ngay lập tức. Bạn có thể ghép nối lại bất cứ lúc nào.",
         "not-configured": "Máy này chưa thiết lập máy chủ Navide Cloud nên chưa thể ghép nối điện thoại.",
         "unreachable": "Hiện không kết nối được Navide Cloud nên điện thoại chưa thể ghép nối hoặc kết nối. {reason}",
-        "err-generic": "Thao tác chưa thành công."
+        "err-generic": "Thao tác chưa thành công.",
+        "save-failed": "Navide Cloud đã tin cậy điện thoại này nhưng máy này chưa lưu được. Hãy lưu lại, hoặc từ chối để thu hồi lần tin cậy này.",
+        "retry-save": "Lưu lại"
       }
     },
     "cliAgents": {

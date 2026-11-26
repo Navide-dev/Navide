@@ -20,6 +20,9 @@ interface PhoneRequest {
   requestId: string
   deviceName: string
   code: string
+  phoneKeyHash: string
+  /** Approved on the server, but saving it here failed: Trust retries the save. */
+  saveFailed: boolean
   expiresAt: number
 }
 interface TrustedPhone {
@@ -122,16 +125,20 @@ async function addPhone(): Promise<void> {
 async function decide(
   action: 'p2p.mobile.trust' | 'p2p.mobile.reject' | 'p2p.mobile.remove',
   id: string,
+  subject = '',
 ): Promise<void> {
   if (busy.value) return
   busy.value = `${action}:${id}`
   actionError.value = ''
   try {
-    const confirm = await window.agentTeam?.trustConfirm(action, id)
+    const confirm = await window.agentTeam?.trustConfirm(action, id, subject)
     const payload = action === 'p2p.mobile.remove' ? { phoneId: id, confirm } : { requestId: id, confirm }
     const resp = await props.backend.send(action, payload)
     if (!resp.ok) {
-      actionError.value = resp.error?.message || t('settings.p2p.mobile.err-generic')
+      actionError.value =
+        resp.error?.code === 'MOBILE_SAVE_FAILED'
+          ? t('settings.p2p.mobile.save-failed')
+          : resp.error?.message || t('settings.p2p.mobile.err-generic')
     } else if (action !== 'p2p.mobile.remove') {
       qrText.value = ''
     }
@@ -189,9 +196,14 @@ onUnmounted(() => {
         <p class="pair-label">{{ t('settings.p2p.mobile.code-label') }}</p>
         <p class="pair-code">{{ req.code }}</p>
         <p class="req-what">{{ t('settings.p2p.mobile.compare') }}</p>
+        <p v-if="req.saveFailed" class="hint" data-mobile-save-failed>{{ t('settings.p2p.mobile.save-failed') }}</p>
         <div class="req-acts">
-          <button class="btn small" :disabled="!!busy" @click="decide('p2p.mobile.trust', req.requestId)">
-            {{ t('settings.p2p.mobile.trust') }}
+          <button
+            class="btn small"
+            :disabled="!!busy"
+            @click="decide('p2p.mobile.trust', req.requestId, req.phoneKeyHash)"
+          >
+            {{ t(req.saveFailed ? 'settings.p2p.mobile.retry-save' : 'settings.p2p.mobile.trust') }}
           </button>
           <button
             class="btn ghost small danger"

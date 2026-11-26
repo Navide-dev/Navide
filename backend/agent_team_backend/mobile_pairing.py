@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import secrets
@@ -44,6 +45,7 @@ OFFER_TTL_S = 300.0
 REQUEST_TTL_S = 300.0
 
 _SAS_DOMAIN = b"navide/mobile-pair/v1"
+_PROOF_DOMAIN = b"navide/mobile-proof/v1"
 _APPROVAL_DOMAIN = "navide/mobile-approval/v1"
 _KEY_LEN = 32
 _MAX_NAME = 80
@@ -72,12 +74,17 @@ class PairRequest:
     code: str
     received_at: float
     expires_at: float
+    #: Set once the server accepted the approval but saving the phone here
+    #: failed: trusting again only retries the save, declining revokes it.
+    phone_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "requestId": self.request_id,
             "deviceName": self.device_name,
             "code": self.code,
+            "phoneKeyHash": phone_key_hash(self.phone_key),
+            "saveFailed": bool(self.phone_id),
             "receivedAt": self.received_at,
             "expiresAt": self.expires_at,
         }
@@ -102,6 +109,27 @@ def from_b64url(text: str) -> bytes:
 
 def code_hash(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def phone_key_hash(phone_key: str) -> str:
+    """What a "Trust" confirmation is bound to, so one minted for this phone
+    cannot approve a different key arriving under the same request id."""
+    return hashlib.sha256(phone_key.encode("utf-8")).hexdigest()
+
+
+def code_proof(code: str, phone_key: str, phone_nonce: str) -> str:
+    """Proof that the requester read the QR code, without sending the code.
+
+    HMAC keyed by the one-time code over the phone's key and nonce. Only this
+    machine (which made the code) and the phone (which scanned it) can compute
+    it, so a request made up anywhere in between is dropped.
+    """
+    digest = hmac.new(
+        code.encode("utf-8"),
+        _PROOF_DOMAIN + from_b64url(phone_key) + phone_nonce.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    return b64url(digest)
 
 
 def pairing_code(
@@ -154,7 +182,10 @@ def _purge(now: float) -> None:
     global _offer
     if _offer is not None and _offer.expires_at <= now:
         _offer = None
-    for request_id in [r for r, req in _requests.items() if req.expires_at <= now]:
+    # An approved request whose save failed stays until somebody retries or
+    # declines it: expiring it would leave the server trusting a phone this
+    # machine no longer lists.
+    for request_id in [r for r, req in _requests.items() if req.expires_at <= now and not req.phone_id]:
         _requests.pop(request_id, None)
 
 
@@ -207,7 +238,9 @@ def receive_request(payload: Any, desktop_key: bytes) -> PairRequest | None:
     """A phone redeemed a code. Kept only when it matches the live offer.
 
     The offer is single use: the first matching request consumes it, so a
-    second phone holding the same photo of the screen gets nothing.
+    second phone holding the same photo of the screen gets nothing. The
+    request must also carry ``code_proof`` for its own key and nonce: the code
+    hash alone is what the relay holds, and is not proof of a scan.
     """
     global _offer
     if not isinstance(payload, dict):
@@ -216,9 +249,12 @@ def receive_request(payload: Any, desktop_key: bytes) -> PairRequest | None:
     hashed = str(payload.get("codeHash") or "")
     phone_key = payload.get("phoneKey")
     phone_nonce = payload.get("phoneNonce")
+    proof = payload.get("proof")
     if not request_id or not hashed or not _valid_phone_key(phone_key):
         return None
     if not isinstance(phone_nonce, str) or not phone_nonce:
+        return None
+    if not isinstance(proof, str) or not proof:
         return None
     device_name = str(payload.get("deviceName") or "").strip()[:_MAX_NAME]
     now = time.time()
@@ -226,6 +262,12 @@ def receive_request(payload: Any, desktop_key: bytes) -> PairRequest | None:
         _purge(now)
         offer = _offer
         if offer is None or not secrets.compare_digest(offer.code_hash, hashed):
+            return None
+        if not hmac.compare_digest(code_proof(offer.code, phone_key, phone_nonce), proof):
+            return None
+        # A request id already waiting is never replaced: a second request
+        # under the same id would swap the key behind a card already on screen.
+        if request_id in _requests:
             return None
         _offer = None
         request = PairRequest(

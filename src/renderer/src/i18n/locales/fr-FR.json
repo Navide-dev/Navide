@@ -7492,7 +7492,9 @@
         "remove-hint": "Un téléphone retiré ne voit plus cette machine immédiatement. Vous pouvez l’associer à nouveau à tout moment.",
         "not-configured": "Aucun serveur Navide Cloud n’est configuré sur cette machine, il n’est donc pas encore possible d’associer un téléphone.",
         "unreachable": "Navide Cloud est injoignable pour le moment : les téléphones ne peuvent ni s’associer ni se connecter. {reason}",
-        "err-generic": "L’opération n’a pas abouti."
+        "err-generic": "L’opération n’a pas abouti.",
+        "save-failed": "Navide Cloud fait confiance à ce téléphone, mais il n’a pas pu être enregistré sur cette machine. Réessayez, ou refusez pour retirer l’approbation.",
+        "retry-save": "Enregistrer à nouveau"
       }
     },
     "cliAgents": {

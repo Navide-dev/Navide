@@ -7492,7 +7492,9 @@
         "remove-hint": "Ein entferntes Smartphone sieht diesen Rechner sofort nicht mehr. Sie können es jederzeit erneut koppeln.",
         "not-configured": "Auf diesem Rechner ist kein Navide-Cloud-Server eingerichtet, daher kann noch kein Smartphone gekoppelt werden.",
         "unreachable": "Navide Cloud ist gerade nicht erreichbar, daher können Smartphones weder koppeln noch sich verbinden. {reason}",
-        "err-generic": "Das hat nicht geklappt."
+        "err-generic": "Das hat nicht geklappt.",
+        "save-failed": "Navide Cloud vertraut diesem Smartphone, aber es konnte auf diesem Rechner nicht gespeichert werden. Speichern Sie erneut oder lehnen Sie ab, um die Freigabe zurückzunehmen.",
+        "retry-save": "Erneut speichern"
       }
     },
     "cliAgents": {

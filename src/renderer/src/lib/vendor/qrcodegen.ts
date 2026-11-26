@@ -20,6 +20,9 @@
  *   out of or in connection with the Software or the use or other dealings in the
  *   Software.
  * 
+ * Upstream: github.com/nayuki/QR-Code-generator, typescript-javascript/qrcodegen.ts
+ * at commit 9a217d443937f60cc56c1458c39a211d7f2d3af5 (blob e2ef90b2eede8b3c).
+ *
  * Vendored into Navide unmodified except: the three `namespace` declarations are
  * `export namespace` so the file is an ES module the renderer can import.
  */

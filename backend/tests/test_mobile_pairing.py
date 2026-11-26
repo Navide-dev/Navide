@@ -94,6 +94,9 @@ def test_the_qr_text_is_what_the_phone_parses() -> None:
 # ---- offers and requests ------------------------------------------------------
 
 
+PROOF_VECTOR = "jGKtwg-i10QOa8Gjvuz2b5wPYccyYdz44ECVwOsuRTM"
+
+
 def _scan(offer: mobile_pairing.Offer, **overrides: Any) -> dict[str, Any]:
     payload = {
         "requestId": "req-1",
@@ -103,7 +106,40 @@ def _scan(offer: mobile_pairing.Offer, **overrides: Any) -> dict[str, Any]:
         "deviceName": "Pixel",
     }
     payload.update(overrides)
+    if "proof" not in overrides:
+        payload["proof"] = mobile_pairing.code_proof(offer.code, payload["phoneKey"], payload["phoneNonce"])
     return payload
+
+
+def test_the_proof_matches_the_shared_test_vector() -> None:
+    # Shared with apps/mobile sas.test.ts.
+    assert mobile_pairing.code_proof(
+        "one-time-code", mobile_pairing.b64url(bytes(range(32, 64))), "phone-nonce"
+    ) == PROOF_VECTOR
+
+
+def test_a_request_without_a_valid_proof_is_dropped() -> None:
+    """Holding the code hash, which the relay does, is not proof of a scan."""
+    offer = mobile_pairing.create_offer()
+    key = mobile_pairing.desktop_key_raw()
+    assert mobile_pairing.receive_request(_scan(offer, proof=""), key) is None
+    forged = mobile_pairing.code_proof("some-other-code", _phone_key(), "phone-nonce")
+    assert mobile_pairing.receive_request(_scan(offer, proof=forged), key) is None
+    # A proof for another key does not carry over to this one.
+    other = mobile_pairing.code_proof(offer.code, mobile_pairing.b64url(bytes(32)), "phone-nonce")
+    assert mobile_pairing.receive_request(_scan(offer, proof=other), key) is None
+    assert mobile_pairing.active_offer() is offer
+    assert mobile_pairing.receive_request(_scan(offer), key) is not None
+
+
+def test_a_waiting_request_id_is_never_replaced() -> None:
+    key = mobile_pairing.desktop_key_raw()
+    first = mobile_pairing.receive_request(_scan(mobile_pairing.create_offer()), key)
+    assert first is not None
+    second_offer = mobile_pairing.create_offer()
+    other_key = mobile_pairing.b64url(bytes(range(64, 96)))
+    assert mobile_pairing.receive_request(_scan(second_offer, phoneKey=other_key), key) is None
+    assert mobile_pairing.get_request("req-1").phone_key == first.phone_key
 
 
 def test_a_request_for_the_live_offer_is_kept_with_its_digits() -> None:
@@ -130,7 +166,7 @@ def test_requests_that_do_not_match_are_ignored() -> None:
     offer = mobile_pairing.create_offer()
     key = mobile_pairing.desktop_key_raw()
     assert mobile_pairing.receive_request(_scan(offer, codeHash="0" * 64), key) is None
-    assert mobile_pairing.receive_request(_scan(offer, phoneKey="short"), key) is None
+    assert mobile_pairing.receive_request(_scan(offer, phoneKey="short", proof="x"), key) is None
     assert mobile_pairing.receive_request(_scan(offer, phoneNonce=""), key) is None
     assert mobile_pairing.receive_request("nope", key) is None
     assert mobile_pairing.active_offer() is offer
@@ -249,10 +285,10 @@ class _Socket:
         self.sent.append(payload)
 
 
-def _confirmation(action: str, device_id: str) -> dict[str, str]:
+def _confirmation(action: str, device_id: str, subject: str = "") -> dict[str, str]:
     nonce = uuid.uuid4().hex
     expires = str(time.time() + 30)
-    payload = "\x00".join(("navide/trust-confirm/v2", nonce, expires, action, device_id, ""))
+    payload = "\x00".join(("navide/trust-confirm/v2", nonce, expires, action, device_id, subject))
     return {
         "nonce": nonce,
         "expires": expires,
@@ -280,13 +316,69 @@ async def test_trust_changes_need_a_confirmation_for_that_id(link, action, field
 
 
 async def test_trust_through_the_handler(link) -> None:
-    await link._on_mobile_pair_request(_scan(mobile_pairing.create_offer()))
+    scan = _scan(mobile_pairing.create_offer())
+    await link._on_mobile_pair_request(scan)
     link.replies["mobile.pair.approve"] = {"ok": True, "payload": {"phoneId": "ph-1"}}
+    subject = mobile_pairing.phone_key_hash(scan["phoneKey"])
     reply = await _call(
         "p2p.mobile.trust",
-        {"requestId": "req-1", "confirm": _confirmation("p2p.mobile.trust", "req-1")},
+        {"requestId": "req-1", "confirm": _confirmation("p2p.mobile.trust", "req-1", subject)},
     )
     assert reply["ok"] is True and reply["payload"] == {"phoneId": "ph-1"}
+
+
+async def test_a_trust_confirmation_is_bound_to_the_phone_key(link) -> None:
+    await link._on_mobile_pair_request(_scan(mobile_pairing.create_offer()))
+    for subject in ("", mobile_pairing.phone_key_hash(mobile_pairing.b64url(bytes(32)))):
+        reply = await _call(
+            "p2p.mobile.trust",
+            {"requestId": "req-1", "confirm": _confirmation("p2p.mobile.trust", "req-1", subject)},
+        )
+        assert reply["error"]["code"] == "CONFIRMATION_REQUIRED"
+    assert link.sent == []
+
+
+async def test_a_failed_save_can_be_retried_without_asking_the_server_again(link, monkeypatch) -> None:
+    await link._on_mobile_pair_request(_scan(mobile_pairing.create_offer()))
+    link.replies["mobile.pair.approve"] = {"ok": True, "payload": {"phoneId": "ph-1"}}
+    real_add = mobile_pairing.add_trusted
+
+    def broken_add(*_args: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(mobile_pairing, "add_trusted", broken_add)
+    reply = await link.approve_mobile_pair("req-1")
+    assert reply["error"]["code"] == "MOBILE_SAVE_FAILED"
+    [waiting] = mobile_pairing.pending_requests()
+    assert waiting.to_dict()["saveFailed"] is True
+    # It does not expire while the server trusts the phone.
+    waiting.expires_at = 0
+    assert mobile_pairing.get_request("req-1") is waiting
+
+    monkeypatch.setattr(mobile_pairing, "add_trusted", real_add)
+    approvals = len([m for m, _ in link.sent if m == "mobile.pair.approve"])
+    assert (await link.approve_mobile_pair("req-1"))["ok"] is True
+    assert len([m for m, _ in link.sent if m == "mobile.pair.approve"]) == approvals
+    assert [p["phoneId"] for p in mobile_pairing.load_trusted()] == ["ph-1"]
+    assert mobile_pairing.pending_requests() == []
+
+
+async def test_declining_a_phone_that_failed_to_save_revokes_it(link, monkeypatch) -> None:
+    await link._on_mobile_pair_request(_scan(mobile_pairing.create_offer()))
+    link.replies["mobile.pair.approve"] = {"ok": True, "payload": {"phoneId": "ph-1"}}
+
+    def broken_add(*_args: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(mobile_pairing, "add_trusted", broken_add)
+    await link.approve_mobile_pair("req-1")
+    link.replies["mobile.devices.revoke"] = {"ok": False, "error": {"code": "LINK_OFFLINE", "message": "down"}}
+    assert (await link.reject_mobile_pair("req-1"))["ok"] is False
+    assert mobile_pairing.get_request("req-1") is not None
+    link.replies.pop("mobile.devices.revoke")
+    assert (await link.reject_mobile_pair("req-1"))["ok"] is True
+    assert link.sent[-1] == ("mobile.devices.revoke", {"phoneId": "ph-1"})
+    assert mobile_pairing.pending_requests() == []
 
 
 async def test_state_merges_last_seen_from_the_server(link) -> None:

@@ -4436,6 +4436,9 @@ class ServerLink:
         if request is None:
             return {"ok": False, "error": {"code": "MOBILE_REQUEST_GONE",
                                            "message": "that phone request is no longer waiting"}}
+        if request.phone_id:
+            # The server already trusts this phone; only saving it here failed.
+            return await self._save_mobile_phone(request, request.phone_id)
         if self._ws is None or not self._authenticated:
             return self._unavailable()
         try:
@@ -4463,19 +4466,46 @@ class ServerLink:
         if not phone_id:
             return {"ok": False, "error": {"code": "MOBILE_BAD_REPLY",
                                            "message": "the server did not name the paired phone"}}
-        mobile_pairing.take_request(request_id)
-        await asyncio.to_thread(
-            mobile_pairing.add_trusted, phone_id, request.device_name, request.phone_key
-        )
+        request.phone_id = phone_id
+        return await self._save_mobile_phone(request, phone_id)
+
+    async def _save_mobile_phone(
+        self, request: mobile_pairing.PairRequest, phone_id: str
+    ) -> dict[str, Any]:
+        """Record an approved phone here. A failed write keeps the request (now
+        marked as approved) so the window can retry the save, or decline it,
+        which revokes the phone on the server: the two sides never silently
+        disagree about whether it is trusted."""
+        try:
+            await asyncio.to_thread(
+                mobile_pairing.add_trusted, phone_id, request.device_name, request.phone_key
+            )
+        except OSError as err:
+            log.warning("saving a trusted phone failed: %s", err)
+            await self._announce_mobile_changed()
+            return {"ok": False, "error": {"code": "MOBILE_SAVE_FAILED",
+                                           "message": "the phone could not be saved on this machine"}}
+        mobile_pairing.take_request(request.request_id)
         await self._announce_mobile_changed()
         return {"ok": True, "payload": {"phoneId": phone_id}}
 
     async def reject_mobile_pair(self, request_id: str) -> dict[str, Any]:
         """Decline. Dropped here first: declining is this side's decision, and
         the phone is told when the link can carry it."""
-        request = mobile_pairing.take_request(request_id)
+        request = mobile_pairing.get_request(request_id)
         if request is None:
             return {"ok": True, "payload": {}}
+        if request.phone_id:
+            # Approved on the server but never saved here: declining now
+            # means taking that approval back, and the card stays until the
+            # server agrees.
+            reply = await self._carry("mobile.devices.revoke", {"phoneId": request.phone_id})
+            if not reply.get("ok"):
+                return reply
+            mobile_pairing.take_request(request_id)
+            await self._announce_mobile_changed()
+            return reply
+        mobile_pairing.take_request(request_id)
         await self._announce_mobile_changed()
         return await self._carry("mobile.pair.reject", {"requestId": request_id})
 

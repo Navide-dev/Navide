@@ -1,10 +1,11 @@
-import { pairingCode, approvalMessage } from '../features/pairing/sas.ts'
+import { approvalMessage, codeHash, codeProof, pairingCode } from '../features/pairing/sas.ts'
 import type { PairOffer } from '../features/pairing/offer.ts'
 import { verify, type PhoneKeys } from '../identity/keys.ts'
 import { newNonce, type Credential } from '../identity/store.ts'
 import { pickPaneSummary, type DesktopRoster } from '../types/pane.ts'
 import { reconnectDelay } from './backoff.ts'
 import { Emitter } from './emitter.ts'
+import { isAllowedServerUrl } from './serverUrl.ts'
 import { PairError, type PairSession, type Transport, type TransportEvent } from './transport.ts'
 
 /**
@@ -60,7 +61,11 @@ export class ServerTransport implements Transport {
   private heartbeat: ReturnType<typeof setInterval> | null = null
   private lastFrameAt = 0
 
-  constructor(private readonly url: string) {}
+  constructor(private readonly url: string) {
+    if (!isAllowedServerUrl(url, typeof __DEV__ !== 'undefined' && __DEV__)) {
+      throw new Error('the Navide server address must use wss://')
+    }
+  }
 
   subscribe(listener: (event: TransportEvent) => void): () => void {
     return this.emitter.subscribe(listener)
@@ -78,7 +83,8 @@ export class ServerTransport implements Transport {
         ws.send(
           JSON.stringify({
             type: 'mobile.pair.redeem',
-            code: offer.code,
+            codeHash: codeHash(offer.code),
+            proof: codeProof(offer.code, keys.publicKey, phoneNonce),
             desktopId: offer.desktopId,
             phoneKey: keys.publicKey,
             phoneNonce,

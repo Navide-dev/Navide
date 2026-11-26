@@ -7492,7 +7492,9 @@
         "remove-hint": "Un teléfono quitado deja de ver este equipo al instante. Puedes volver a vincularlo cuando quieras.",
         "not-configured": "Este equipo no tiene configurado un servidor de Navide Cloud, así que todavía no se puede vincular un teléfono.",
         "unreachable": "No se puede acceder a Navide Cloud en este momento, así que los teléfonos no pueden vincularse ni conectarse. {reason}",
-        "err-generic": "No se pudo completar."
+        "err-generic": "No se pudo completar.",
+        "save-failed": "Navide Cloud confía en este teléfono, pero no se pudo guardar en este equipo. Vuelve a guardarlo o recházalo para retirar la aprobación.",
+        "retry-save": "Guardar de nuevo"
       }
     },
     "cliAgents": {
