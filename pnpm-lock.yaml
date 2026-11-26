@@ -57,7 +57,7 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0
       dompurify:
-        specifier: 3.4.17
+        specifier: ^3.4.17
         version: 3.4.17
       electron-updater:
         specifier: ^6.8.11
