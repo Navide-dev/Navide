@@ -56,11 +56,60 @@ pnpm test           # node:test unit tests
 pnpm sync:locales   # after desktop pane status strings change
 ```
 
-The default transport is a mock with fictional panes; "Use demo computer"
-on the pairing screen pairs with it, and Settings has a "Simulate removal"
-button. The real server is used only when both
-`EXPO_PUBLIC_NAVIDE_TRANSPORT=server` and `EXPO_PUBLIC_NAVIDE_SERVER_URL`
-are set.
+### Demo mode
+
+The default transport is a mock with fictional panes and no network; the
+real server is used only when both `EXPO_PUBLIC_NAVIDE_TRANSPORT=server` and
+`EXPO_PUBLIC_NAVIDE_SERVER_URL` are set.
+
+1. `pnpm install` once, then `pnpm start`.
+2. Open the app in Expo Go or a simulator (press `i` or `a` in the Expo
+   terminal, or scan its QR code with a phone).
+3. On the pairing screen choose **Use demo computer**. After about four
+   seconds the demo computer "trusts" the phone and the pane overview opens.
+4. Pane states rotate every six seconds, which produces in-app
+   notifications.
+
+The mock also exercises the error screens: a pairing offer whose code is
+`rate-limited`, `expired` or `rejected` fails the matching way (see
+`src/connection/mockTransport.ts`).
+
+## Manual test checklist
+
+### Phone (demo mode)
+
+- [ ] First launch shows "Pair with your computer"; "Scan pairing code" asks
+      for camera access, and declining it leaves a way back.
+- [ ] Scanning any non-Navide QR code says "This is not a Navide pairing code".
+- [ ] "Use demo computer" shows six digits as `123 456`, then opens the
+      overview by itself.
+- [ ] The overview groups panes by workspace; a pane waiting for you has a
+      coloured border, says "Needs your approval" or "Has a question for you",
+      and is listed first in its workspace.
+- [ ] Within a minute a banner appears for "finished", "needs your approval"
+      and "has a question"; tapping it opens Notifications. The tab shows a
+      count.
+- [ ] Settings lists "Studio Mac". "Simulate removal" returns to the pairing
+      screen with the removal notice; reopening the app stays unpaired.
+- [ ] "Unpair this phone" also returns to pairing, and the next launch stays
+      unpaired.
+- [ ] Light and dark mode are both readable; system language zh-TW shows
+      Traditional Chinese, anything else unsupported falls back to English.
+
+### Desktop (Account → Mobile App)
+
+- [ ] Signed out: the section is not shown. Signed in with no server
+      configured: it says no server is set up.
+- [ ] "Add Phone" shows a QR code with a countdown from 5:00; it expires at
+      0:00 and "New Code" makes a fresh one.
+- [ ] The section explains what the phone can see, and nothing on the page
+      says "restrict" or "limit".
+- [ ] Trust, Decline and Remove each go through and update the list; with
+      the server unreachable each shows an error instead of silently doing
+      nothing.
+
+End-to-end pairing with a real phone needs the server side, which is not
+available yet.
 
 Push notifications are not part of this step; `Transport.registerPushToken`
 marks where they will plug in.
