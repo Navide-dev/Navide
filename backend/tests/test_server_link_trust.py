@@ -35,10 +35,14 @@ from agent_team_backend import (
     trust_store,
 )
 
-from .test_server_link import (  # noqa: F401 - broadcasts is a fixture
+from .test_server_link import (  # noqa: F401 - broadcasts and _clean_registry are fixtures
     ALLOW_ALL_POLICY,
     CONNECT_TIMEOUT_S,
     _CONFIRM_KEY,
+    # Autouse there, so imported to apply here too: every test below registers
+    # panes in the process-wide messaging registry, and a "p1" left behind
+    # keeps a later test's release_pane_token("p1") from revoking anything.
+    _clean_registry,
     _confirmation,
     _ws_session,
     PEER,
