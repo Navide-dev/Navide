@@ -15,6 +15,10 @@ export type PairErrorCode =
   | 'rate-limited'
   | 'invalid-code'
   | 'expired'
+  /** The request was not answered on the computer in time. */
+  | 'timed-out'
+  /** The computer the code came from is not online right now. */
+  | 'desktop-offline'
   | 'rejected'
   | 'bad-approval'
   | 'network'

@@ -5,6 +5,7 @@ import { newNonce, type Credential } from '../identity/store.ts'
 import { pickPaneSummary, type DesktopRoster } from '../types/pane.ts'
 import { reconnectDelay } from './backoff.ts'
 import { Emitter } from './emitter.ts'
+import { pairErrorCode } from './pairErrors.ts'
 import { isAllowedServerUrl } from './serverUrl.ts'
 import { PairError, type PairSession, type Transport, type TransportEvent } from './transport.ts'
 
@@ -19,12 +20,6 @@ const STALE_MS = 50_000
 const CLOSE_REVOKED = 4401
 
 type Frame = Record<string, unknown> & { type?: string }
-
-const PAIR_ERRORS: Record<string, PairError['code']> = {
-  rate_limited: 'rate-limited',
-  invalid_code: 'invalid-code',
-  expired: 'expired',
-}
 
 function parseFrame(data: unknown): Frame | null {
   if (typeof data !== 'string') return null
@@ -75,6 +70,7 @@ export class ServerTransport implements Transport {
     const phoneNonce = newNonce()
     const ws = new WebSocket(this.url)
     let settle: { resolve: (c: Credential) => void; reject: (e: PairError) => void } | null = null
+    let accepted = false
     const approved = new Promise<Credential>((resolve, reject) => (settle = { resolve, reject }))
     approved.catch(() => {})
 
@@ -100,9 +96,11 @@ export class ServerTransport implements Transport {
       ws.onmessage = (msg) => {
         const f = parseFrame(msg.data)
         if (!f) return
-        if (f.type === 'mobile.pair.pending') resolve()
-        else if (f.type === 'error') {
-          const err = new PairError(PAIR_ERRORS[String(f.code)] ?? 'network')
+        if (f.type === 'mobile.pair.pending') {
+          accepted = true
+          resolve()
+        } else if (f.type === 'error') {
+          const err = new PairError(pairErrorCode(f.code, accepted))
           reject(err)
           settle?.reject(err)
           ws.close()

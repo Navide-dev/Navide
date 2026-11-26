@@ -1,5 +1,9 @@
 {
-  "tabs": { "panes": "分格", "notifications": "通知", "settings": "設定" },
+  "tabs": {
+    "panes": "分格",
+    "notifications": "通知",
+    "settings": "設定"
+  },
   "pairing": {
     "title": "和電腦配對",
     "intro": "在電腦上打開 Navide，到「帳號 → 行動 App」選「新增手機」，再掃描畫面上的配對碼。",
@@ -20,12 +24,19 @@
       "expired": "這組配對碼已過期，請在電腦上重新產生。",
       "rejected": "電腦沒有信任這台手機。",
       "bad-approval": "確認訊息不是來自你掃描的那台電腦，請重新配對。",
-      "network": "連不上伺服器，請檢查網路後再試。"
+      "network": "連不上伺服器，請檢查網路後再試。",
+      "desktop-offline": "電腦目前離線，請在電腦上打開 Navide 後再試一次。",
+      "timed-out": "配對逾時，請重新掃碼。"
     }
   },
   "panes": {
     "empty": "你的電腦目前沒有開啟的分格。",
-    "state": { "busy": "工作中", "attention": "等你處理", "idle": "閒置", "offline": "離線" },
+    "state": {
+      "busy": "工作中",
+      "attention": "等你處理",
+      "idle": "閒置",
+      "offline": "離線"
+    },
     "needsApproval": "需要你核准",
     "hasQuestion": "有問題要問你"
   },

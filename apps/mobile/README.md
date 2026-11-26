@@ -71,7 +71,8 @@ real server is used only when both `EXPO_PUBLIC_NAVIDE_TRANSPORT=server` and
    notifications.
 
 The mock also exercises the error screens: a pairing offer whose code is
-`rate-limited`, `expired` or `rejected` fails the matching way (see
+`rate-limited`, `expired`, `desktop-offline`, `timed-out` or `rejected`
+fails the matching way (see
 `src/connection/mockTransport.ts`).
 
 ## Manual test checklist

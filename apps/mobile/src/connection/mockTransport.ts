@@ -11,8 +11,8 @@ import { PairError, type PairSession, type Transport, type TransportEvent } from
  * approved a few seconds after the code is shown, and pane states rotate so
  * the overview and the in-app notifications have something to show.
  *
- * Offer codes "rate-limited", "expired" and "rejected" exercise the error
- * screens.
+ * Offer codes "rate-limited", "expired", "desktop-offline", "timed-out" and
+ * "rejected" exercise the error screens.
  */
 export const MOCK_OFFER: PairOffer = {
   desktopId: 'mock-desktop',
@@ -52,10 +52,12 @@ export class MockTransport implements Transport {
     await delay(400)
     if (offer.code === 'rate-limited') throw new PairError('rate-limited')
     if (offer.code === 'expired') throw new PairError('expired')
+    if (offer.code === 'desktop-offline') throw new PairError('desktop-offline')
     let timer: ReturnType<typeof setTimeout> | undefined
     const approved = new Promise<Credential>((resolve, reject) => {
       timer = setTimeout(() => {
         if (offer.code === 'rejected') return reject(new PairError('rejected'))
+        if (offer.code === 'timed-out') return reject(new PairError('timed-out'))
         resolve({
           phoneId: 'mock-phone',
           token: 'mock',

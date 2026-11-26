@@ -1,5 +1,9 @@
 {
-  "tabs": { "panes": "Panes", "notifications": "Notifications", "settings": "Settings" },
+  "tabs": {
+    "panes": "Panes",
+    "notifications": "Notifications",
+    "settings": "Settings"
+  },
   "pairing": {
     "title": "Pair with your computer",
     "intro": "On your computer, open Navide, go to Account → Mobile App and choose Add phone. Then scan the code shown there.",
@@ -20,12 +24,19 @@
       "expired": "This pairing code has expired. Create a new one on your computer.",
       "rejected": "Your computer declined this phone.",
       "bad-approval": "The confirmation did not come from the computer you scanned. Pair again.",
-      "network": "Could not reach the server. Check your connection and try again."
+      "network": "Could not reach the server. Check your connection and try again.",
+      "desktop-offline": "Your computer is offline right now. Open Navide on it and try again.",
+      "timed-out": "Pairing timed out. Scan the code again."
     }
   },
   "panes": {
     "empty": "No panes are open on your computers.",
-    "state": { "busy": "Working", "attention": "Waiting for you", "idle": "Idle", "offline": "Offline" },
+    "state": {
+      "busy": "Working",
+      "attention": "Waiting for you",
+      "idle": "Idle",
+      "offline": "Offline"
+    },
     "needsApproval": "Needs your approval",
     "hasQuestion": "Has a question for you"
   },

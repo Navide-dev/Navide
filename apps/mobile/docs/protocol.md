@@ -18,7 +18,10 @@ What the phone sends and expects. JSON text frames over one WebSocket.
    and drops a request whose proof does not match, so a request that did not
    come from a phone that scanned the QR code never reaches the screen.
    Replies: `{type:"mobile.pair.pending"}`, or
-   `{type:"error", code:"rate_limited"|"invalid_code"|"expired"}`.
+   `{type:"error", code}` with `code` one of `rate_limited` (too many
+   attempts), `invalid_code`, `expired` (the code is stale) or
+   `desktop_offline` (the computer is not online; shown as such, not as a
+   network error).
 3. Both screens show six digits:
    `sha256("navide/mobile-pair/v1" ‖ desktopKey ‖ phoneKey ‖ desktopNonce ‖ phoneNonce)`,
    first four bytes as a big-endian integer, mod 1,000,000. The desktop key
@@ -29,7 +32,9 @@ What the phone sends and expects. JSON text frames over one WebSocket.
    `signature` is the desktop's Ed25519 signature over
    `"navide/mobile-approval/v1\n<desktopId>\n<phoneKey>\n<phoneNonce>"`.
    The phone verifies it with the key from the QR before storing anything.
-   A declined request arrives as `{type:"mobile.pair.rejected"}`.
+   A declined request arrives as `{type:"mobile.pair.rejected"}`. A request
+   nobody answers within five minutes ends with `{type:"error", code:"expired"}`
+   after `pending`, which the app shows as a timeout ("scan the code again").
 
 ## Session
 
@@ -37,8 +42,9 @@ What the phone sends and expects. JSON text frames over one WebSocket.
 - `{type:"mobile.roster", desktops:[{deviceId, deviceName, panes:[PaneSummary]}]}`
   — a full snapshot on every change. `PaneSummary` is exactly
   `{name, agentKey, status, awaitingKind, workspace}`; the app ignores any
-  other field.
-- `{type:"ping"}` every 20 s. A connection with no frame for 50 s is treated
+  other field. While a computer is offline its panes arrive with status
+  `disconnected`, shown as Offline.
+- `{type:"ping"}` every 20 s, answered with `{type:"pong"}`. A connection with no frame for 50 s is treated
   as dead. Reconnects back off from 1 s to 30 s with jitter, and reconnect
   immediately when the app returns to the foreground.
 - Removal on the desktop: `{type:"mobile.revoked"}` or close code 4401. The
