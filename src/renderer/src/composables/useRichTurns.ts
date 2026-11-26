@@ -4,7 +4,7 @@
  * `agent.activity` from the start so a pane switched to the rich view later
  * still shows the turns since the window opened.
  */
-import { shallowReactive, shallowRef, triggerRef, type InjectionKey, type ShallowRef } from 'vue'
+import { shallowReactive, shallowRef, type InjectionKey, type ShallowRef } from 'vue'
 import type { useBackend } from './useBackend'
 import { applyActivity, type ActivityLike, type RichTurn } from '../lib/richTurns'
 
@@ -36,7 +36,10 @@ export function createRichTurns(backend: Backend, opts: RichTurnsOptions) {
     const paneId = typeof ev?.pane_id === 'string' ? ev.pane_id : ''
     if (!paneId || typeof ev?.text !== 'string' || !ev.text || !opts.accepts(paneId)) return
     const r = refFor(paneId)
-    if (applyActivity(r.value, ev as ActivityLike)) triggerRef(r)
+    // A new array per change: a view reads it through a computed, which only
+    // notifies when the value it returns is a different one.
+    const next = r.value.slice()
+    if (applyActivity(next, ev as ActivityLike)) r.value = next
   })
 
   return {

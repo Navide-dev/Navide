@@ -77,6 +77,22 @@ describe('TerminalPane – rich output toggle', () => {
     expect(terminalMocks.fit).not.toHaveBeenCalled()
   })
 
+  it('updates an open view as the pane\'s turn goes on', async () => {
+    const pane = mountPane({ agentKey: 'claude' })
+    wrapper = pane.wrapper
+    await wrapper.find('[data-testid="rich-toggle-rich"]').trigger('click')
+    pane.emit({ pane_id: 'pane-1', event_type: 'agent_active', detail: 'user', text: 'first ask' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="rich-prompt"]').text()).toContain('first ask')
+    pane.emit({ pane_id: 'pane-1', event_type: 'turn_complete', text: 'first reply' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.find('[data-testid="rich-reply"]').text()).toContain('first reply')
+    pane.emit({ pane_id: 'pane-1', event_type: 'agent_active', detail: 'user', text: 'second ask' })
+    pane.emit({ pane_id: 'pane-1', event_type: 'turn_complete', text: 'second reply' })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('[data-testid="rich-reply"]').map((r) => r.text())).toEqual(['first reply', 'second reply'])
+  })
+
   it('ignores turns of other panes', async () => {
     const pane = mountPane({ agentKey: 'codex' })
     wrapper = pane.wrapper
