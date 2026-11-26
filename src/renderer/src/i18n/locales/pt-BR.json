@@ -720,6 +720,18 @@
       "detecting-session": "detectando o id da session",
       "ready": "pronto",
       "failed": "falha na preparação"
+    },
+    "rich": {
+      "group": "Visualização da saída",
+      "terminal": "Terminal",
+      "rich": "Formatada",
+      "terminal-title": "Mostrar o terminal original",
+      "rich-title": "Mostrar as respostas do agente formatadas",
+      "unsupported": "A visualização formatada não está disponível para este painel: as respostas dele não são lidas de um registro de conversa neste computador.",
+      "empty": "Mostra as respostas desde que esta janela foi aberta. Volte ao Terminal para ver o histórico completo.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "you": "Você"
     }
   },
   "action": {

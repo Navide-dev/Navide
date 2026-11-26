@@ -720,6 +720,18 @@
       "detecting-session": "détection de l’identifiant de session",
       "ready": "prêt",
       "failed": "échec de la configuration"
+    },
+    "rich": {
+      "group": "Vue de sortie",
+      "terminal": "Terminal",
+      "rich": "Mise en forme",
+      "terminal-title": "Afficher le terminal brut",
+      "rich-title": "Afficher les réponses de l’agent mises en forme",
+      "unsupported": "La vue mise en forme n’est pas disponible pour ce panneau : ses réponses ne sont pas lues depuis un journal de conversation sur cet ordinateur.",
+      "empty": "Affiche les réponses depuis l’ouverture de cette fenêtre. Revenez au Terminal pour tout l’historique.",
+      "copy": "Copier",
+      "copied": "Copié",
+      "you": "Vous"
     }
   },
   "action": {

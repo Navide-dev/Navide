@@ -720,6 +720,18 @@
       "detecting-session": "Session-ID wird erkannt",
       "ready": "bereit",
       "failed": "Einrichtung fehlgeschlagen"
+    },
+    "rich": {
+      "group": "Ausgabeansicht",
+      "terminal": "Terminal",
+      "rich": "Formatiert",
+      "terminal-title": "Das unveränderte Terminal anzeigen",
+      "rich-title": "Die Antworten des Agenten formatiert anzeigen",
+      "unsupported": "Die formatierte Ansicht ist für diesen Bereich nicht verfügbar: Seine Antworten werden nicht aus einem Gesprächsprotokoll auf diesem Computer gelesen.",
+      "empty": "Zeigt Antworten, seit dieses Fenster geöffnet wurde. Den vollständigen Verlauf siehst du im Terminal.",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "you": "Du"
     }
   },
   "action": {

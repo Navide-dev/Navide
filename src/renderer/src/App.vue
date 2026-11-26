@@ -49,6 +49,7 @@ import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composab
 import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
 import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
+import { createRichTurns, richTurnsKey } from './composables/useRichTurns'
 import { revealPath } from './composables/hostShell'
 import { useSchedulerJobs } from './composables/useSchedulerJobs'
 import { agentVendorLabel, isAgentVendor } from './lib/agentIdentity'
@@ -568,6 +569,7 @@ const agentConsole = createAgentConsole(backend, useSchedulerJobs(backend), {
   },
 })
 provide(agentConsoleKey, agentConsole)
+provide(richTurnsKey, createRichTurns(backend))
 // Warn and error diagnostics also go to the backend's on-disk error ledger,
 // which outlives a reload and is what ui_diagnostics returns as `persisted`.
 setDiagnosticSink((entry) => {

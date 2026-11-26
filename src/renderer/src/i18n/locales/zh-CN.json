@@ -720,6 +720,18 @@
       "detecting-session": "取得 Session ID 中",
       "ready": "就绪",
       "failed": "设置失败"
+    },
+    "rich": {
+      "group": "输出视图",
+      "terminal": "终端",
+      "rich": "美化",
+      "terminal-title": "显示原始终端",
+      "rich-title": "以美化格式显示 agent 的回复",
+      "unsupported": "此窗格无法使用美化视图：它的回复不是从这台电脑上的对话记录读取的。",
+      "empty": "显示此窗口打开后的回复；切回终端可查看完整历史。",
+      "copy": "复制",
+      "copied": "已复制",
+      "you": "你"
     }
   },
   "action": {

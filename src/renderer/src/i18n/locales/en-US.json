@@ -720,6 +720,18 @@
       "detecting-session": "detecting session ID",
       "ready": "ready",
       "failed": "setup failed"
+    },
+    "rich": {
+      "group": "Output view",
+      "terminal": "Terminal",
+      "rich": "Formatted",
+      "terminal-title": "Show the raw terminal",
+      "rich-title": "Show the agent's replies formatted",
+      "unsupported": "The formatted view isn't available for this pane: its replies aren't read from a conversation log on this computer.",
+      "empty": "Shows replies since this window opened. Switch back to Terminal for the full history.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "you": "You"
     }
   },
   "action": {
