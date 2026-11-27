@@ -64,7 +64,8 @@ A future portability feature should use explicit local export/import with redact
 | Context7 injection | Context7 and its MCP distribution/runtime dependencies | Detected library names and documentation queries |
 | Web search | Search provider | Search query text |
 | Git operations and Issue detection | Configured Git host, through local `git`, `gh`, or `glab` CLIs | Repository and Issue data, plus credentials handled by the CLI or Host account flow |
-| Update checks | GitHub Releases | Application version and normal network metadata |
+| Update checks | dl.navide.dev, then GitHub Releases when the mirror cannot be reached | Application version and normal network metadata |
+| Navide Cloud sign-in | The Navide Cloud server you sign in to | This machine's host name, used as its device name |
 | Plugin Registry trust refresh | The selected Official Registry or an explicitly approved self-hosted Registry | The namespace/name of an installed marketplace plugin; no plugin source or archive is sent by the refresh |
 | Skills package retrieval | GitHub API and codeload | Requested repository/ref and normal network metadata; downloads a public archive without uploading local skill contents |
 | CLI risk DNS lookups | Operating system resolver and its configured upstream service | Declared expected hostnames and configured allowed hostnames |

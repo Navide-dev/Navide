@@ -36,7 +36,8 @@ Navide は Project Telemetry Service を運営せず、Navide Account を必要�
 | Context7 Injection | Context7 と MCP Distribution/Runtime Dependency | 検出された Library Name と Documentation Query |
 | Web Search | Search Provider | Search Query Text |
 | Git Operation と Issue Detection | 設定された Git Host。Local `git`、`gh`、`glab` CLI 経由 | Repository/Issue Data と、CLI または Host Account Flow が扱う Credential |
-| Update Check | GitHub Releases | Application Version と通常の Network Metadata |
+| Update Check | dl.navide.dev（接続できない場合は GitHub Releases） | Application Version と通常の Network Metadata |
+| Navide Cloud へのサインイン | サインイン先の Navide Cloud サーバー | このマシンのホスト名（デバイス名として使用） |
 | Plugin Registry Trust Refresh | 選択した Official Registry、または明示的に承認した self-hosted Registry | インストール済み marketplace plugin の namespace/name。Refresh では Plugin Source や Archive を送信しない |
 | Skills package retrieval | GitHub API and codeload | Requested repository/ref and normal network metadata; downloads a public archive without uploading local skill contents |
 | CLI risk DNS lookups | Operating system resolver and its configured upstream service | Declared expected hostnames and configured allowed hostnames |
