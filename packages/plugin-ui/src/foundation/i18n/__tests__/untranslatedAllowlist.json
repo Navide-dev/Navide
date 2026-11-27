@@ -186,7 +186,8 @@
     "webhooks.host.placeholder",
     "webhooks.kind.github",
     "webhooks.kind.webhook",
-    "webhooks.nav"
+    "webhooks.nav",
+    "pane.rich.terminal"
   ],
   "fr-FR": [
     "account.title",
@@ -446,7 +447,8 @@
     "sshRemote.menu-entry",
     "sshRemote.dialog-title",
     "sshRemote.port-label",
-    "persona.waited-minutes"
+    "persona.waited-minutes",
+    "pane.rich.terminal"
   ],
   "de-DE": [
     "account.title",
@@ -634,7 +636,8 @@
     "sshRemote.dialog-title",
     "sshRemote.host-label",
     "sshRemote.port-label",
-    "sshRemote.key-placeholder"
+    "sshRemote.key-placeholder",
+    "pane.rich.terminal"
   ],
   "pt-BR": [
     "account.title",
@@ -838,7 +841,8 @@
     "webhooks.host.placeholder",
     "webhooks.kind.github",
     "webhooks.kind.webhook",
-    "webhooks.nav"
+    "webhooks.nav",
+    "pane.rich.terminal"
   ],
   "ru-RU": [
     "account.title",
@@ -1100,7 +1104,8 @@
     "label.terminal",
     "remoteDevcontainer.host-placeholder",
     "sshRemote.menu-entry",
-    "sshRemote.dialog-title"
+    "sshRemote.dialog-title",
+    "pane.rich.terminal"
   ],
   "ja-JP": [
     "sshRemote.dialog-title",
