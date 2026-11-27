@@ -1,6 +1,6 @@
 # Navide — Historical Master Spec and Milestone Record
 
-> This file preserves historical implementation milestones. It is no longer the single source of truth for current capabilities or future plans. Use the [documentation index](README.md), [architecture](architecture.md), [user guide](user-guide.md), and [product roadmap](roadmap.md). Active implementation work is tracked by `.cursor/plans/*.plan.md`.
+> This file preserves historical implementation milestones. It is no longer the single source of truth for current capabilities or future plans. Use the [documentation index](README.md), [architecture](architecture.md), [user guide](user-guide.md), and [product roadmap](roadmap.md). Active implementation work is tracked by plans in `.agent-team/plans/`.
 
 **Historical record reviewed**: 2026-07-15
 
@@ -8,10 +8,10 @@
 
 ## 1 · TL;DR
 
-Historical foundation of Navide's AI-native macOS engineering environment for **13 supported coding CLIs**, driven by configurable pipelines, parallel agent sessions, private project history, and precision engineering surfaces.
+Historical foundation of Navide's AI-native macOS engineering environment for the **supported coding CLIs**, driven by configurable pipelines, parallel agent sessions, private project history, and precision engineering surfaces.
 
 ```
-Tech stack: Electron 33 + Vue 3 + TypeScript + FastAPI + Python 3.12 + xterm.js + Monaco
+Tech stack: Electron 44 + Vue 3 + TypeScript + FastAPI + Python 3.12 + xterm.js + Monaco
 Status: historical milestones below; current plans and test counts change continuously
 ```
 
@@ -35,7 +35,7 @@ Status: historical milestones below; current plans and test counts change contin
 | Preview tab on right panel | ✅ Stable | `preview/PreviewPanel.vue` · read-only host reusing `FilePreviewPane` (11 kinds), `DiffPane` (readonly), markdown/mermaid and inline snippet/HTML · fed by Explorer context menu, `ui.preview.show` (MCP / plugins) and `⌥⌘V` |
 | Workspace-first entry + mode-aware UI | ✅ Stable | `recent_workspaces.py` + `Welcome.vue` · recent list + pin · pipeline/spawn/completed mode (M11) |
 | Manager pattern + pre-spawn team | ✅ Stable | default execution model: pre-spawn all slots (role only) → activate per stage · `isManager` slot + dispatch/ask/stage-done router (M13) |
-| Frontend tests | ✅ Stable | Vitest 63 (buffer/stages pure fns + 3 composables w/ mock backend) + Playwright 2 (Electron launch + Welcome→workspace smoke) (M14) |
+| Frontend tests | ✅ Stable | Vitest (buffer/stages pure fns + 3 composables w/ mock backend) + Playwright (Electron launch + Welcome→workspace smoke) (M14) |
 | Git panel (source control tab) | ✅ Stable | `git_service.py` + `useGit.ts` + `GitPane.vue`; Pipeline/Git top tabs in ControlPane |
 | Cross-agent route engine | 📋 Directional | See [Product Roadmap](roadmap.md) |
 
@@ -106,7 +106,7 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 - The `Stop` hook is also a delivery channel: its response may answer `{"decision": "block", "reason": <envelope>}` to hand a queued inter-CLI message to the agent without typing it (`hook_drain.py`; see `inter-cli-messaging.md`)
 
 ### M8 · Activity Event system
-**Status**: ✅ Done · files: `log_readers/{base,claude,codex,gemini}.py`
+**Status**: ✅ Done · files: `log_readers/{base,claude,codex}.py`
 
 - `ActivityEvent` type alongside `TokenUsage`; `agent_active` / `turn_complete` from JSONL
 - Consumed by App.vue watcher + History timeline (M10)
@@ -145,8 +145,7 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 ### M13 · Manager pre-spawn orchestration — `Pipline` / `StageManage`
 **Status**: ✅ Done · files: `App.vue` (`preSpawnStage` · `activateStage` · `StageRouter` · `parseDispatchBlocks` · `injectManagerPane`) · `stages.ts` (manager/worker protocols)
 
-- **This is the team-preconfig plan's core, already shipped & live as the default execution model** (the plan frontmatter still said "pending" — stale; this spec wins per §8)
-- `onPipelineStart` → `preSpawnStage` spawns only the first stage's slots (role prompt only); `activateStage(N)` injects the kickoff at activation time and warms stage N+1 in the background (`prewarmNextStage`), so at most two stages of CLIs are alive at once; a finished stage's panes are demoted to cold-restore placeholders on handoff (5cf510945)
+- `onPipelineStart` → `preSpawnStage` spawns only the first stage's slots (role prompt only); `activateStage(N)` injects the kickoff at activation time and warms stage N+1 in the background (`prewarmNextStage`), so at most two stages of CLIs are alive at once; a finished stage's panes are demoted to cold-restore placeholders on handoff
 - Manager pattern: a slot flagged `isManager` runs the Manager protocol; `StageRouter` watches its pane for `---DISPATCH-START---` / `---ASK-START---` / `---STAGE-DONE---` and routes to worker panes
 - Cross-stage context handoff via `buildStageContext(forManager)` + `injectManagerPane`
 - **Dropped as out-of-scope**: per-workspace `team-config.json` overlay + ControlPane Team-preview/editor (plan phases 1-4). The global Stages registry (`is_manager` slot flag in Settings → Stages) already covers team setup; per-workspace overrides judged unnecessary. Plan retired.
@@ -154,19 +153,18 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 ### M14 · Frontend test infrastructure (F6)
 **Status**: ✅ Done · files: `vitest.config.ts` · `playwright.config.ts` · `src/renderer/src/**/__tests__/` · `e2e/launch.spec.ts`
 
-- **Vitest 2.x** (Vite-native): 63 tests
-  - `lib/buffer.ts` (37) — question/sentinel/option parsing, the pipeline-detection core
-  - `data/stages.ts` (12) — manager/worker protocol rendering + frontend⇄backend round-trip
-  - composables (14) — `useTokens` / `useHistory` / `useAnalyzer` against a mock `useBackend` (no real WS); run in effect scopes, happy-dom where window/localStorage needed
-- **Playwright** Electron E2E: 2 smoke tests — app launch + Welcome entry visible, then native-dialog-stubbed Browse → workspace selected → main UI
+- **Vitest 2.x** (Vite-native)
+  - `lib/buffer.ts` — question/sentinel/option parsing, the pipeline-detection core
+  - `data/stages.ts` — manager/worker protocol rendering + frontend⇄backend round-trip
+  - composables — `useTokens` / `useHistory` / `useAnalyzer` against a mock `useBackend` (no real WS); run in effect scopes, happy-dom where window/localStorage needed
+- **Playwright** Electron E2E: smoke tests — app launch + Welcome entry visible, then native-dialog-stubbed Browse → workspace selected → main UI
 - Local scripts only (no CI): `test` / `test:run` / `test:e2e`
 - **Not covered** (deliberate): `App.vue` internals incl. `parseDispatchBlocks` (left in App.vue, not extracted); `useTerminal` xterm DOM paths (deferred to E2E)
 
 ---
 
 ### M15 · Pane Layout Modes + Minimize + Maintenance Mode
-**Status**: ✅ Done · plan: `.cursor/plans/maintenance-mode_f9a3c2d1.plan.md`
-
+**Status**: ✅ Done
 - **Layout Modes** (`ViewPanel.vue`): 4 manually selected layouts (Grid⊞ / Sidebar◧ / Spotlight◎ / Fullscreen⧉). Grid shows all panes; Sidebar shows the selected pane alongside the Active agents list; Spotlight shows the selected pane with a thumbnail strip; Fullscreen fills the workspace with the selected pane and keeps agents available in a floating panel. The persisted internal value for Sidebar remains `auto` for backward compatibility; it does not imply automatic pane switching.
 - **Minimize to Sidebar**: every TerminalPane has `↓` button → hides pane with `v-show` (PTY session stays alive), shows compact "▪ sidebar" card + "↑ 還原" in ControlPane agent list.
 - **Maintenance Mode** (`WorkspaceMode = 'maintenance'`): pipeline `completed` → auto-switches to maintenance. New ControlPane section with task textarea + agent/role picker + "▶ 派出去". `onMaintenanceSpawn` spawns pane, waits for role injection, then injects task text as kickoff.
@@ -175,7 +173,7 @@ Legend: ✅ shipped & stable · 🟡 in working tree but not yet released · �
 
 ## 4 · Currently in-flight (working tree)
 
-This historical section is retired. Use `git status` for the current working tree and `.cursor/plans/*.plan.md` for active plan-driven work.
+This historical section is retired. Use `git status` for the current working tree and `.agent-team/plans/` for active plan-driven work.
 
 ---
 
@@ -228,7 +226,6 @@ This historical section is retired. Use `git status` for the current working tre
 │       ├─ base.py        LogReader + TokenUsage + ActivityEvent│
 │       ├─ claude.py      ~/.claude/projects/                 │
 │       ├─ codex.py       ~/.codex/sessions/                  │
-│       ├─ gemini.py      ~/.gemini/tmp/                      │
 │       ├─ attribution.py workspace ↔ folder mapping          │
 │       └─ watcher.py     watchdog + force_rescan             │
 └─────────────────────────────────────────────────────────────┘
@@ -245,7 +242,7 @@ This historical section is retired. Use `git status` for the current working tre
 
 Future work moved to the [Product Roadmap](roadmap.md). In summary, Navide is evolving toward reliable orchestration and observability, capability-based agent adapters, stronger policy and isolation, reproducible run artifacts, dependency-graph workflows, delivery integrations, reusable templates, and cross-platform support.
 
-The roadmap is directional. A roadmap item becomes active implementation work only when it has an approved `.cursor/plans/*.plan.md` artifact.
+The roadmap is directional. A roadmap item becomes active implementation work only when it has an approved plan in `.agent-team/plans/`.
 
 ---
 
@@ -256,7 +253,7 @@ The roadmap is directional. A roadmap item becomes active implementation work on
 - [User guide](user-guide.md)
 - [Privacy and data flows](privacy.md)
 - [Product roadmap](roadmap.md)
-- `.cursor/plans/*.plan.md` for active or retained plan-driven implementation artifacts
+- `.agent-team/plans/` for active or retained plan-driven implementation artifacts
 
 Historical plan names and implementation notes remain in the milestone and progress-log sections below. Their status should not be used to infer current working-tree state.
 
@@ -267,7 +264,7 @@ Historical plan names and implementation notes remain in the milestone and progr
 - Add stable released behavior to `CHANGELOG.md`.
 - Update current user behavior in `user-guide.md` and architecture boundaries in `architecture.md`.
 - Update future direction in `roadmap.md` without presenting it as shipped.
-- Use `.cursor/plans/*.plan.md` for complex implementation work and maintain todo status there.
+- Use plans in `.agent-team/plans/` for complex implementation work and maintain todo status there.
 - Add an entry here only when a historical milestone is worth preserving.
 - Do not record volatile working-tree cleanliness, exact test counts, or active-branch claims as durable project truth.
 
@@ -282,7 +279,7 @@ Three plans completed on cumulative branches (theme-system → file-explorer →
 - **Onboarding Wizard** (`feat/onboarding-wizard`) — `onboarding_deps.py` dep registry + detection (ok/missing/outdated) + hard-block gate (foundation + ≥1 agent CLI + Ollama&model); `onboarding.*` WS handlers + completion flag (`~/.agent-team/onboarding.json`, `AGENT_TEAM_SKIP_ONBOARDING`); `useOnboarding.ts` + 3-step `OnboardingWizard.vue`; App.vue startup gate; external-Terminal installs via `shell:openTerminal`. +12 backend, +5 frontend tests.
 
 ### 2026-06-05
-- **Theme System** shipped (`feat/theme-system`, plan `theme-system_35d87146`) — CSS custom-property token architecture replacing 68+ hardcoded colors. Three token layers: `styles/tokens/base.css` (primitives) → `semantic.css` (59 semantic roles + `--syntax-*` group) → `themes/*.css` (5 built-ins: Dark GitHub / Midnight / Forest / Light / High Contrast) applied via `[data-theme]` on `<html>`. `useTheme` composable manages selection + 8-token custom overrides; **localStorage is the source of truth**, workspace JSON `theme`/`theme_custom` are best-effort backup (load order localStorage → backend → `dark-github`). Appearance tab in SettingsModal (theme cards + color pickers w/ 300ms debounced live preview + reset). Default theme migration is pixel-identical (token defaults equal the old hex). 11 renderer files migrated (App.vue + 10 components, GitPane separated from the concurrent notification-system work). +10 useTheme tests, +4 backend theme tests; 173 frontend + 414 backend green; production build + cross-theme token-coverage smoke test pass.
+- **Theme System** shipped (`feat/theme-system`, plan `theme-system_35d87146`) — CSS custom-property token architecture replacing 68+ hardcoded colors. Three token layers: `styles/tokens/base.css` (primitives) → `semantic.css` (59 semantic roles + `--syntax-*` group) → `themes/*.css` (5 built-ins: Dark GitHub / Midnight / Forest / Light / High Contrast) applied via `[data-theme]` on `<html>`. `useTheme` composable manages selection + 8-token custom overrides; **localStorage is the source of truth**, workspace JSON `theme`/`theme_custom` are best-effort backup (load order localStorage → backend → `dark-github`). Appearance tab in SettingsModal (theme cards + color pickers w/ 300ms debounced live preview + reset). Default theme migration is pixel-identical (token defaults equal the old hex). 11 renderer files migrated (App.vue + 10 components, GitPane separated from the concurrent notification-system work). Production build + cross-theme token-coverage smoke test pass.
 
 ### 2026-05-30 (later)
 - **M14 Frontend tests** shipped — Vitest infra + 63 unit tests (buffer/stages pure fns + useTokens/useHistory/useAnalyzer via mock backend) + Playwright 2 Electron E2E (launch + Welcome→workspace). Local scripts only. `App.vue`/`parseDispatchBlocks` deliberately untouched. Plan `frontend-tests_9c4ad7e2` retired. `typecheck:web` still exit 0.
@@ -291,9 +288,7 @@ Three plans completed on cumulative branches (theme-system → file-explorer →
 - **M10 History timeline** shipped & merged (`feat/history-tab`) — append-only JSONL per run + HistoryPanel UI + stick-to-bottom auto-scroll
 - **M11 Workspace-first entry** shipped & merged (`feat/recent-workspaces-store` → `integrate/recent-workspaces-store` → `workspaces`) — Welcome picker + recent store + mode-aware UI; verified (typecheck + 136 pytest) and user-tested
 - **M12 Reliability hardening** — injection no-drop + analyzer question-intent fix
-- `main` fast-forwarded to `workspaces` (45a9b37); residual branches `integrate/*` + `feat/recent-workspaces-store` deleted
 - Plan files retired per §8: history-tab, workspace-first-entry, reliable-injection (records live in §3 M10–M12)
-- **Audit finding**: team-preconfig plan's core (pre-spawn全隊 + Manager 編排) was already shipped & live — recorded as **M13**; its frontmatter "pending" status was stale drift. Optional per-workspace `team-config.json` overlay dropped as out-of-scope; plan retired. `.cursor/plans/` now empty — no active dev goal remains.
 
 ### 2026-05-29
 - Spec doc created — establishes this as single source of truth

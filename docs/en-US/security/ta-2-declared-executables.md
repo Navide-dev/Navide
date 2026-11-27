@@ -1,6 +1,6 @@
 # TA-2 — Declared shell executables (`permissions.shell.executables`)
 
-Status: assessment, 0.2.39. PR C2 implements the recommendation below.
+Status: assessment, 0.2.39. Implemented as recommended below (option A).
 
 ## Scope
 
@@ -14,7 +14,7 @@ path-qualified token, a `$` expansion or a leading assignment makes the
 command unresolvable and therefore refused. `full` mode runs anything and is
 refused for backends.
 
-C2 lets a package name the executables it needs — `npm`, `pnpm`, `node`,
+Declared executables let a package name the ones it needs — `npm`, `pnpm`, `node`,
 `python3`, `docker`, `make`, `terraform` … — instead of choosing between three
 Git-family commands and everything. This assessment covers:
 
@@ -23,16 +23,15 @@ Git-family commands and everything. This assessment covers:
 - how the Guard's risk grading and the agent Execution Policy relate to it;
 - PATH resolution, and the Windows quoting and extension pitfalls;
 - what is recorded about each run;
-- alignment with the user's ruling of 2026-10-17 ("一律不限制": no limits on
-  what a plugin may ask for; disclosure comes from the Registry's scan at
-  publish time, the manifest declaration is kept to compare "declared" with
-  "found").
+- alignment with "disclose, don't restrict": no limits on what a plugin may
+  ask for; disclosure comes from the Registry's scan at publish time, and the
+  manifest declaration is kept to compare "declared" with "found".
 
 ## What we are building
 
 ```
 manifest.permissions.shell = "allowlist"
-manifest.permissions.shell.executables = ["npm", "node"]      ← new (C2)
+manifest.permissions.shell.executables = ["npm", "node"]      ← new
         │
         ▼ install consent: lists each executable, graded
 Host broker: shell.run "npm test"
@@ -95,7 +94,7 @@ is still "high": the set changes the words, never the answer.
    whitespace or extension (`npm`, not `npm.cmd`). The Registry static scan
    extracts command strings it can see in the package and reports, per
    executable, "declared", "found in code but not declared", "declared but
-   not found" — the user's 10-17 ruling turned into the disclosure's shape.
+   not found" — the shape of the disclosure.
 2. **Disclosure** (`disclosure_contract.py` rules, `PluginDisclosureCard.vue`):
    `shell.executables.<name>` reasons, graded as above; the overall level is
    the highest reason, as today.
@@ -137,28 +136,22 @@ is still "high": the set changes the words, never the answer.
    executables work on Windows for views; a backend's `port: "shell"` does
    not exist there (TA-3), and the card says so.
 
-## Alignment with the 2026-10-17 ruling
+## Alignment with "disclose, don't restrict"
 
-- "一律不限制": no catalogue, no refused names, no subcommand rules for
+- No limits: no catalogue, no refused names, no subcommand rules for
   declared names. Option A.
-- "上架時系統掃描，掃描後揭露說明": the Registry scan produces the
+- Scan at publish, disclose after the scan: the Registry scan produces the
   declared-versus-found table and the grade; the manifest remains the thing
   the broker enforces and the thing the scan is compared against.
 - The two refusals that remain (`shell: "full"` for backends; Windows batch
   shims with shell metacharacters) are exploitable-bug fixes, not feature
   limits, and both are stated on the card and in the docs.
 
-## Decisions for the user
+Resolving `npm.cmd` to `node` + `npm-cli.js` instead of running the shim
+through `cmd.exe` is npm-specific and does not generalise, which is why the
+conservative argument charset is the Windows rule.
 
-1. Confirm option A (any name, graded; interpreters disclosed as "any
-   program").
-2. Confirm the Windows rule for `.cmd`/`.bat` shims (conservative argument
-   charset or refuse). The alternative — resolving `npm.cmd` to `node` +
-   `npm-cli.js` — is npm-specific and does not generalise.
-3. Whether the Execution Policy editor should offer declared executables as
-   one-click candidates (recommended) or leave the user to type them.
-
-## Did we do enough (acceptance for PR C2)
+## Did we do enough (acceptance)
 
 - A manifest declaring `executables` validates identically in the contracts
   schema and the Registry; a path, extension, `$`, uppercase or duplicate
@@ -170,8 +163,7 @@ is still "high": the set changes the words, never the answer.
 - `shell.run "./npm test"`, `"NPM test"`, `"env PATH=/tmp npm test"` and a
   workspace containing `./npm` all resolve to the Host's `npm` or are refused;
   a test pins the resolver's PATH source.
-- On Windows (unit-tested with a fake resolver, VM-verified per the batch 2
-  VM list): `npm test` runs through the shim; `npm test "a&calc"` is refused
+- On Windows (unit-tested with a fake resolver): `npm test` runs through the shim; `npm test "a&calc"` is refused
   with the argument named; a `.exe` result never goes through `cmd.exe`.
 - The disclosure card shows each declared executable with its grade; the
   Registry scan report marks found-but-undeclared names; the Activity table

@@ -3,7 +3,7 @@
 # repositories' CI, to a Registry.
 #
 #   NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-#   NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+#   NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 #   NAVIDE_PLUGIN_TOKEN=<navide publisher bearer token> \
 #   scripts/publish-first-party-plugins.sh --package <vsix> --target <target> \
 #       --version <version> [--id <plugin id>]

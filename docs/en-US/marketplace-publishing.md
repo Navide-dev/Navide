@@ -298,7 +298,7 @@ packaged build honors those settings only while Developer Mode is on
 (Settings → Navide Plugins); with it off it uses the Navide Marketplace.
 
 This is one way to try a package inside Navide before publishing; the others are
-Settings → Navide Plugins → **Install from .vsix file…**, which works in any
+Settings → Navide Plugins → **Install from File…**, which works in any
 build and installs the file you pick as an unreviewed local package (it never
 updates automatically), and Developer Mode → **Load from folder…**, which runs
 your working folder with its view and backend and reloads it as you edit. There
@@ -715,7 +715,7 @@ undone, only yanked (see [8. Yank a version](#8-yank-a-version)).
 
 ```bash
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-<name> \
   --id <plugin id> --version <version> [--target "<targets>"] [--yes]

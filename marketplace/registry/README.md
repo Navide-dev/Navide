@@ -18,7 +18,7 @@ See [`FORMAT.md`](./FORMAT.md) for the `.vsix`-style package format.
 > (`LocalStorageBackend`). Schema changes go through
 > [migrations](#schema-migrations); a version may carry one artifact per
 > platform target (see [Per-target artifacts](#per-target-artifacts)).
-> Third-party publishing is not open — see
+> Third-party publishing is open; see
 > [the plugin development guide](../../docs/en-US/plugin-development.md).
 
 ## Run locally
@@ -126,12 +126,11 @@ after `create_all` creates any missing tables. Each step checks the live
 schema before changing it (so a fresh database records every step without
 work) and runs with its record in one `BEGIN IMMEDIATE` transaction, so a
 failed step leaves nothing behind and concurrent starters apply it once.
-Steps so far: `1` discovery counter columns, `2` registry-signing columns,
-`3` rebuild `extension_version` unique on (extension, version, target).
+The steps are listed in `MIGRATIONS` in `registry/migrations.py`.
 Add a step by appending to `MIGRATIONS` with explicit SQL; never edit an
 applied one.
 
-## Discovery website (p3-discovery)
+## Discovery website
 
 A dependency-light, server-rendered marketplace site is mounted on the **same**
 FastAPI app (Jinja2 templates + self-hosted CSS in `registry/web_templates/`
@@ -162,7 +161,7 @@ dismiss or act (yank / block) at `/admin/reports`, every event lands in
 `report_audit`, and publishers see reports on their dashboard without the
 reporter's identity. Ratings and reports are rate-limited per member.
 
-## Security model (p3-security + p3-publish)
+## Security model
 
 **Signing.** Publisher Ed25519 signatures authenticate strict-mode submissions,
 but publisher keys are not part of the Client trust contract. After validating
@@ -394,7 +393,7 @@ body = {
     "name": "navide",
     "display_name": "Navide",
     "public_key": pathlib.Path(os.path.expanduser(
-        "~/navide-signing/plugin_publisher.pub.pem")).read_text(),
+        "<path-to>/plugin_publisher.pub.pem")).read_text(),
     "token": os.environ["NAVIDE_PLUGIN_TOKEN"],
 }
 req = urllib.request.Request(
@@ -410,7 +409,7 @@ Then, from the repository root:
 
 ```bash
 NAVIDE_REGISTRY_URL=https://server.navide.dev/registry \
-NAVIDE_PUBLISHER_KEY=~/navide-signing/plugin_publisher.key \
+NAVIDE_PUBLISHER_KEY=<path-to>/plugin_publisher.key \
 NAVIDE_PLUGIN_TOKEN=<navide publisher token> \
 scripts/publish-first-party-plugins.sh --from-run <run id> --repo Navide-dev/navide-plans \
   --id navide.plans --version <version> [--target "linux-x64 linux-arm64"] [--yes]
@@ -449,7 +448,7 @@ takes the extension in place of the POSIX exec bit, exactly as the Host's
 `backendEntryOnDisk` does. `navide-plugin pack --target <target>` applies the
 same rule, so a Windows build packs and publishes like any other target.
 
-## Third-party publishing (Phase 2)
+## Third-party publishing
 
 Self-service publishing is on when the four `REGISTRY_AUTH_*`/session
 settings below are set; without them the registry behaves exactly as before
@@ -629,21 +628,5 @@ approved by default.
 | `REGISTRY_REVIEW_NOTIFY_TO` | _(unset)_ | Admin address that gets one email per item entering a review queue (listing version, Testplace public code, Testplace promotion, developer application). The email holds only the kind, the package id, the submission time and the admin page link. Set with the next two, or leave all three unset to turn the email off. |
 | `REGISTRY_REVIEW_NOTIFY_FROM` | _(unset)_ | Sender address; its domain must be a verified Amazon SES identity. |
 | `REGISTRY_SES_REGION` | _(unset)_ | SES region. Credentials come from the host's instance role through boto3 (IMDSv2, so the hop limit must be at least 2 for a container); no key is configured. A failed send is logged and never affects the submission. |
-
-## Seams left for later Phase 3 todos
-
-- **Discovery frontend** (`p3-discovery`): ✅ built — the server-rendered
-  website above. Consumes the same repository layer as `GET /api/extensions`
-  (search/category/sort) and `GET /api/extensions/{ns}/{name}`.
-- **Extensions view** (`p3-lifecycle`): the in-app view install/update/remove
-  drives off the version list + `download` endpoint. It needs, per version:
-  `download` URL (streams the blob) and the `X-Package-Digest` response header
-  for integrity verification; `latest_version` (summary/detail) resolves
-  updates; and the trust fields already exposed — `trust_tier`, `capabilities`,
-  `sensitive_capabilities`, `signed` — to gate/warn on install. Download counts
-  and ratings are now also available for in-app display.
-- **CDN storage** (real storage): `registry/storage.py` — `StorageBackend`
-  protocol; only `LocalStorageBackend` is implemented. Drop in S3/CDN behind
-  the same protocol.
 
 [uv]: https://docs.astral.sh/uv/
