@@ -44,7 +44,8 @@ Consumer：Git Preference 使用驗證過的 Package／Workspace Storage Partiti
 | Context7 Injection | Context7 及其 MCP Distribution／Runtime 相依套件 | 偵測到的 Library Name 與文件查詢 |
 | Web Search | Search Provider | 搜尋查詢文字 |
 | Git Operation 與 Issue Detection | 設定的 Git Host，透過本機 `git`、`gh` 或 `glab` CLI | Repository／Issue 資料，以及由 CLI 或 Host Account Flow 處理的憑證 |
-| Update Check | GitHub Releases | 應用程式版本與一般網路 Metadata |
+| Update Check | dl.navide.dev；連不上時改連 GitHub Releases | 應用程式版本與一般網路 Metadata |
+| Navide Cloud 登入 | 你登入的 Navide Cloud 伺服器 | 本機主機名稱，用作裝置名稱 |
 | Plugin Registry Trust Refresh | 所選的 Official Registry，或明確核准的 self-hosted Registry | 已安裝 marketplace plugin 的 namespace/name；Refresh 不會傳送 Plugin Source 或 Archive |
 | Skills package retrieval | GitHub API and codeload | Requested repository/ref and normal network metadata; downloads a public archive without uploading local skill contents |
 | CLI risk DNS lookups | Operating system resolver and its configured upstream service | Declared expected hostnames and configured allowed hostnames |
