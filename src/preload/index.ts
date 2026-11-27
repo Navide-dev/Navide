@@ -1106,7 +1106,6 @@ contextBridge.exposeInMainWorld('agentTeam', {
     quitLabel: string
     cancelLabel: string
     dontShowLabel: string
-    quitDontAskLabel: string
     cancelledMessage: string
     cancelledDetail: string
     cancelledUnknownWindow: string
