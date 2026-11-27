@@ -147,7 +147,7 @@ You never need to read or modify the shared orchestration code.
    override that gets overwritten.
 7. Only if your spec has no `skipPermissionFlag`: update the flagless-vendor
    list in `src/renderer/src/platform/plugin-shell/lib/cliPermission.test.ts`.
-8. Run `pnpm vitest run src/renderer/src/platform/plugin-shell/agents` — the structural tests there
+8. Run `bun run vitest run src/renderer/src/platform/plugin-shell/agents` — the structural tests there
    check your spec against the rules the template states (key matches the
    filename, the file is registered, `resumeCommandPattern` matches the
    command Navide builds for you, no `/g` on a matcher). They need no edit
@@ -270,10 +270,8 @@ vendor names there:
   vendor gets multi-account support by filling in the credential fields of its
   own `SPEC`; the vault's remaining `claude` branches are its own history.
 - **`CODEX_HOME` per-pane isolation** (`ws_handlers.py`, `codex_home.py`).
-  `CodexHomeManager` is owned by the app and injected into the spawn path, so
-  moving it into `cli_vendors/codex.py` would invert the import direction that
-  `cli_vendors/base.py` forbids. It stays put until the spawn path grows a
-  hook that can express it.
+  `CodexHomeManager` lives in `cli_vendors/codex.py`; `codex_home.py`
+  re-exports it for older imports.
 - **Plugins** (`plugins/builtin/**`). Plugin wiring — MCP server injection,
   per-pane shim homes, skills — still branches on `agent_key` inside each
   plugin. Plugins are not part of the vendor contract: a new vendor works
@@ -288,7 +286,7 @@ the contract. Open an issue rather than adding a branch.
 ```sh
 uv --project backend run pytest backend/tests/test_cli_vendors_registry.py
 uv --project backend run pytest backend/tests
-pnpm test:run && pnpm typecheck
+bun run test:run && bun run typecheck
 ```
 
 The registry test is your checklist: it fails with a message naming exactly

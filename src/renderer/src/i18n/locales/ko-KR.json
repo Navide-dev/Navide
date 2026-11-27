@@ -394,6 +394,7 @@
     "hold-busy": "대상이 받을 준비가 되지 않았어요",
     "hold-paused": "전달이 일시 중지되었어요",
     "hold-behind": "앞의 메시지 {n}개를 기다리는 중",
+    "hold-queue-full": "대기열이 가득 차 예비 대기열에서 기다리는 중(앞에 {n}개)",
     "hold-gone": "대상 pane이 더 이상 없어요",
     "hold-not-ready": "대상 pane이 실행 중이 아니에요",
     "hold-starting": "대상 pane이 아직 시작하는 중이에요",
@@ -720,6 +721,19 @@
       "detecting-session": "session ID 감지 중",
       "ready": "준비됨",
       "failed": "설정 실패"
+    },
+    "rich": {
+      "group": "출력 보기",
+      "terminal": "터미널",
+      "rich": "서식",
+      "terminal-title": "원본 터미널 보기",
+      "rich-title": "에이전트의 답변을 서식 있게 보기",
+      "unsupported": "이 창에서는 서식 보기를 사용할 수 없습니다: 답변을 이 컴퓨터의 대화 기록에서 읽지 않습니다.",
+      "empty": "이 창을 연 뒤의 답변을 보여 줍니다. 전체 기록은 터미널로 돌아가서 볼 수 있습니다.",
+      "copy": "복사",
+      "copied": "복사됨",
+      "you": "나",
+      "truncated": "…(너무 길어 잘렸습니다. 전체 답변은 터미널로 돌아가서 보세요)"
     }
   },
   "action": {
@@ -10126,6 +10140,8 @@
       "flag-pane-closed": "pane 닫힘",
       "flag-token": "token 무효",
       "flag-failed": "연결 실패",
+      "auth-recheck": "token이 거부됨 — {time}에 자동으로 다시 확인해요",
+      "auth-recovered": "{time}에 자동으로 다시 연결됨",
       "default": "기본 bot",
       "add": "bot 추가",
       "new": "새 bot",

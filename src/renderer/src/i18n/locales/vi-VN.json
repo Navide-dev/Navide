@@ -394,6 +394,7 @@
     "hold-busy": "Đích chưa sẵn sàng nhận",
     "hold-paused": "Việc gửi đang tạm dừng",
     "hold-behind": "Đang xếp hàng — số tin nhắn phía trước: {n}",
+    "hold-queue-full": "Hàng đợi đã đầy — đang chờ ở hàng đợi dự phòng, còn {n} tin phía trước",
     "hold-gone": "Pane đích không còn tồn tại",
     "hold-not-ready": "Pane đích không chạy",
     "hold-starting": "Pane đích vẫn đang khởi động",
@@ -720,6 +721,19 @@
       "detecting-session": "đang phát hiện ID session",
       "ready": "sẵn sàng",
       "failed": "thiết lập không thành công"
+    },
+    "rich": {
+      "group": "Chế độ xem đầu ra",
+      "terminal": "Terminal",
+      "rich": "Định dạng",
+      "terminal-title": "Hiển thị terminal gốc",
+      "rich-title": "Hiển thị câu trả lời của agent có định dạng",
+      "unsupported": "Không dùng được chế độ định dạng cho ô này: câu trả lời của nó không được đọc từ nhật ký hội thoại trên máy tính này.",
+      "empty": "Hiển thị các câu trả lời kể từ khi mở cửa sổ này. Chuyển về Terminal để xem toàn bộ lịch sử.",
+      "copy": "Sao chép",
+      "copied": "Đã sao chép",
+      "you": "Bạn",
+      "truncated": "…(đã cắt bớt — chuyển về Terminal để xem toàn bộ câu trả lời)"
     }
   },
   "action": {
@@ -10126,6 +10140,8 @@
       "flag-pane-closed": "Pane đã đóng",
       "flag-token": "Token không hợp lệ",
       "flag-failed": "Kết nối thất bại",
+      "auth-recheck": "Token bị từ chối — tự động kiểm tra lại lúc {time}",
+      "auth-recovered": "Đã tự động kết nối lại lúc {time}",
       "default": "Bot chính",
       "add": "Thêm bot",
       "new": "Bot mới",

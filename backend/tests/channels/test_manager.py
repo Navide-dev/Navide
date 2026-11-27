@@ -682,7 +682,7 @@ async def test_delivery_failure_names_the_pane_and_offers_a_resend(env: Env) -> 
     notice = "⚠️ 訊息沒有送進分格「Appletoken指揮」（inject-timeout）"
     await _until(lambda: notice in env.tg.texts())
     [(label, data)] = env.tg.buttons[notice]
-    assert label == "🔁 重送" and data.startswith("nv7:")
+    assert label == "🔁 排回佇列" and data.startswith("nv7:")
 
     await env.inbound("", callback=data)
     assert [d[1] for d in env.fake.delivered] == ["please do the thing", "please do the thing"]

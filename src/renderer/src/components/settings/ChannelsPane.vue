@@ -58,7 +58,7 @@ const props = defineProps<{
   backend: Pick<ReturnType<typeof useBackend>, 'send' | 'on' | 'status'>
 }>()
 
-const { t, te } = useI18n()
+const { t, te, locale } = useI18n()
 const store = useChannels(props.backend)
 
 // Configured platforms first; otherwise the declared display order.
@@ -158,6 +158,16 @@ function statusText(bot: BotRow): string {
   if (!bot.enabled) return t('channels.status.disabled')
   const label = t(`channels.lifecycle.${bot.status.lifecycle}`)
   return bot.status.lifecycle === 'ready' && bot.status.identity ? `${label} ${bot.status.identity}` : label
+}
+
+/** A blocked bot's next automatic token check, or when a blocked bot came back. */
+function authCheckText(bot: BotRow): string {
+  if (!bot.configured || !bot.enabled) return ''
+  const { lifecycle, next_auth_check_at: next, recovered_at: recovered } = bot.status
+  const at = (ts: number): string => new Date(ts * 1000).toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' })
+  if (lifecycle === 'blocked' && next) return t('channels.bot.auth-recheck', { time: at(next) })
+  if (lifecycle === 'ready' && recovered) return t('channels.bot.auth-recovered', { time: at(recovered) })
+  return ''
 }
 
 function pendingCount(platform: ChannelPlatform): number {
@@ -1004,6 +1014,11 @@ function removeEntry(entry: ChannelAllowEntry): void {
                   :class="statusTone(bot)"
                   data-testid="channel-last-error"
                 >{{ bot.status.last_error }}</div>
+                <div
+                  v-if="authCheckText(bot)"
+                  class="ch-row-desc"
+                  data-testid="channel-auth-check"
+                >{{ authCheckText(bot) }}</div>
               </div>
               <div class="ch-row-actions">
                 <ToggleSwitch

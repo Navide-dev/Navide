@@ -394,6 +394,7 @@
     "hold-busy": "O destino não está pronto para receber",
     "hold-paused": "A entrega está pausada",
     "hold-behind": "Aguardando na fila – mensagens à frente: {n}",
+    "hold-queue-full": "Fila cheia — na fila reserva, mensagens à frente: {n}",
     "hold-gone": "O pane de destino não existe mais",
     "hold-not-ready": "O pane de destino não está em execução",
     "hold-starting": "O pane de destino ainda está iniciando",
@@ -720,6 +721,19 @@
       "detecting-session": "detectando o id da session",
       "ready": "pronto",
       "failed": "falha na preparação"
+    },
+    "rich": {
+      "group": "Visualização da saída",
+      "terminal": "Terminal",
+      "rich": "Formatada",
+      "terminal-title": "Mostrar o terminal original",
+      "rich-title": "Mostrar as respostas do agente formatadas",
+      "unsupported": "A visualização formatada não está disponível para este painel: as respostas dele não são lidas de um registro de conversa neste computador.",
+      "empty": "Mostra as respostas desde que esta janela foi aberta. Volte ao Terminal para ver o histórico completo.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "you": "Você",
+      "truncated": "…(cortado aqui: volte ao Terminal para ver a resposta completa)"
     }
   },
   "action": {
@@ -10126,6 +10140,8 @@
       "flag-pane-closed": "Pane fechado",
       "flag-token": "Token inválido",
       "flag-failed": "Falha na conexão",
+      "auth-recheck": "Token recusado — nova verificação automática às {time}",
+      "auth-recovered": "Reconectado automaticamente às {time}",
       "default": "Bot principal",
       "add": "Adicionar bot",
       "new": "Novo bot",

@@ -2,7 +2,7 @@
 
 [English](../en-US/getting-started.md) | [繁體中文](../zh-TW/getting-started.md) | 日本語 | [ドキュメント](README.md)
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。[最新の GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) では、Developer ID で署名され Apple の Notarization を通過した macOS 向けの DMG と ZIP、Windows x64 および Arm64 向けの NSIS Installer、Linux x64 向けの AppImage と `.deb` を提供しています。GitHub からのダウンロードが遅い、または失敗する場合は、同じファイルを dl.navide.dev のミラーからも配信しています。README のダウンロード一覧には各ファイルの隣に「ミラー」リンクがあり、navide.dev はミラーに到達できるとき自動的にそちらへ切り替えます。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。[最新の GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) では、Developer ID で署名され Apple の Notarization を通過した macOS 向けの DMG と ZIP、Windows x64 および Arm64 向けの NSIS Installer、Linux x64 向けの AppImage と `.deb` を提供しています。GitHub からのダウンロードが遅い、または失敗する場合は、同じファイルを dl.navide.dev のミラーからも配信しています。README のダウンロード一覧は最初にミラーへリンクし、各ファイルの隣に「GitHub」リンクがあり、navide.dev はミラーに到達できるとき自動的にそちらへ切り替えます。
 
 macOS にインストールするには、DMG をダウンロードして Navide を Applications にコピーし、そのまま開きます。Gatekeeper の回避は不要です。
 
@@ -22,11 +22,10 @@ x64 向けに 2 種類のパッケージを配布しています。
 ## Source からインストールするために必要なもの
 
 - Apple silicon 上の macOS 13+、Linux x64、または x64 / Arm 版 Windows
-- Node.js 22.12+（22.x）
-- pnpm 10+
+- Bun（バージョンは `.bun-version` で固定）。日常の開発に使います。pnpm 10.x と Node.js 22 も引き続き使え、`./release.sh` と `./build.sh` はこちらを使います。完全な `bun run test:run` に含まれる 1 つのテストは pnpm 10.x を必要とします（「開発チェック」を参照）
 - Python 3.12+
 - uv 0.11+
-- 対応する 14 種類の Coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）のうち一つ以上。一覧は [User Guide](user-guide.md) を参照
+- 対応する Coding CLI のうち一つ以上。一覧は [User Guide](user-guide.md) を参照
 - 任意：Local Analysis 用の Ollama または Local GGUF Model
 - Windows の場合：開発者モード（**設定 → 開発者向け**）、または Navide を管理者権限で実行すること。Pane ごとの CLI Home と管理対象の Skills を支える Symbolic Link の作成に必要です
 
@@ -37,12 +36,13 @@ x64 向けに 2 種類のパッケージを配布しています。
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
-`pnpm dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
+`bun run dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
 
 ## 初回起動
 
@@ -73,9 +73,11 @@ Manual Flow が動作したら、小さな Task で Pipeline を試してくだ�
 ## 開発チェック
 
 ```bash
-pnpm typecheck
-pnpm test:run
+bun run typecheck
+bun run test:run
 uv --project backend run pytest backend/tests
 ```
+
+フロントエンドのテストは `bun run test:run` で実行してください。`bun test` を直接実行すると Vitest ではなく Bun 独自のテストランナーが起動し、プロジェクトの Vitest 設定が無視されます。`bun run test` も使わないでください（Vitest が watch モードで起動します）。完全な `bun run test:run` には `src/main/plugins/pluginExternalWorkspace.test.ts` が含まれます。これは pnpm を使う外部プラグイン開発者を模したテストで、`PATH` 上に本物の pnpm 10.x が必要です。無い場合はスキップされず `Executable not found in $PATH: "pnpm"` で失敗します。同じ `node_modules` で `bun install` と `pnpm install` を併用しないでください。
 
 Application、Backend、CLI、Session Binding、Analyzer、Token Tracking が期待どおり起動しない場合は、[トラブルシューティング](troubleshooting.md)を参照してください。

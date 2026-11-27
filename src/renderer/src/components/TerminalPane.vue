@@ -32,6 +32,9 @@ import { cliRiskKey } from '../composables/useResourceUsage'
 import type { CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
 import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
 import AgentControlPanel from './agent/AgentControlPanel.vue'
+import RichOutputView from './RichOutputView.vue'
+import { richTurnsKey } from '../composables/useRichTurns'
+import { RICH_OUTPUT_VENDORS } from '../lib/richTurns'
 import { agentConsoleKey } from '../composables/useAgentConsole'
 import type { AgentPaneInfo } from '../lib/agentIdentity'
 import { SSH_MCP_CLIS, SSH_TERMINAL, sshTargetLabel, type SshRemoteTarget } from '../composables/useSshRemotePrefs'
@@ -537,6 +540,36 @@ const sshLabel = computed(() => (props.sshRemote ? sshTargetLabel(props.sshRemot
 /** The CLI an SSH pane runs on the host; '' for an SSH terminal. */
 const sshCli = computed(() => (props.sshRemote?.cli && props.sshRemote.cli !== SSH_TERMINAL ? props.sshRemote.cli : ''))
 const sshCliLabel = computed(() => agentProfileFor(sshCli.value)?.label ?? sshCli.value)
+
+// ── Rich output view ─────────────────────────────────────────────────────────
+// Laid over the terminal, never in place of it: .xterm-host keeps its size and
+// its scrollback, so switching back shows the terminal exactly as it was.
+const richTurns = inject(richTurnsKey, null)
+const richSupported = computed(
+  () => !!richTurns && !props.remote && !props.sshRemote && RICH_OUTPUT_VENDORS.has(props.agentKey ?? '')
+)
+const richMode = ref(false)
+const richTurnList = computed(() => richTurns?.turnsFor(props.paneId) ?? [])
+const richTop = ref(0)
+let richHeaderObserver: ResizeObserver | null = null
+watch(
+  () => richMode.value && richSupported.value,
+  (on) => {
+    richHeaderObserver?.disconnect()
+    richHeaderObserver = null
+    if (!on) return
+    void nextTick(() => {
+      const host = containerRef.value
+      if (!host) return
+      richTop.value = host.offsetTop
+      if (typeof ResizeObserver !== 'undefined' && headerRef.value) {
+        richHeaderObserver = new ResizeObserver(() => (richTop.value = host.offsetTop))
+        richHeaderObserver.observe(headerRef.value)
+      }
+    })
+  }
+)
+onBeforeUnmount(() => richHeaderObserver?.disconnect())
 
 // ── Agent pane ───────────────────────────────────────────────────────────────
 const agentConsole = inject(agentConsoleKey, null)
@@ -1190,6 +1223,33 @@ onMounted(() => {
         >📌</span>
         </template>
         </template>
+        <div
+          v-if="agentKey && agentKey !== 'terminal'"
+          class="rich-toggle"
+          role="group"
+          data-testid="rich-toggle"
+          :aria-label="$t('pane.rich.group')"
+          :title="richSupported ? undefined : $t('pane.rich.unsupported')"
+        >
+          <button
+            type="button"
+            :class="{ active: !richMode || !richSupported }"
+            :aria-pressed="!richMode || !richSupported ? 'true' : 'false'"
+            :disabled="!richSupported"
+            :title="richSupported ? $t('pane.rich.terminal-title') : undefined"
+            data-testid="rich-toggle-terminal"
+            @click.stop="richMode = false"
+          >{{ $t('pane.rich.terminal') }}</button>
+          <button
+            type="button"
+            :class="{ active: richMode && richSupported }"
+            :aria-pressed="richMode && richSupported ? 'true' : 'false'"
+            :disabled="!richSupported"
+            :title="richSupported ? $t('pane.rich.rich-title') : undefined"
+            data-testid="rich-toggle-rich"
+            @click.stop="richMode = true"
+          >{{ $t('pane.rich.rich') }}</button>
+        </div>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
         <template v-if="agentView">
         <span
@@ -1227,6 +1287,13 @@ onMounted(() => {
       @dragleave="onTerminalDragLeave"
       @drop.prevent="onTerminalDrop"
     ></div>
+    <!-- Sibling of .xterm-host, never inside it (xterm owns that subtree). -->
+    <RichOutputView
+      v-if="richMode && richSupported"
+      :style="{ top: richTop + 'px' }"
+      :turns="richTurnList"
+      @mousedown.left="emit('set-focus')"
+    />
     <!-- Sibling of .xterm-host, never inside it (xterm owns that subtree). -->
     <AgentControlPanel
       v-if="agentView"
@@ -1453,6 +1520,24 @@ onMounted(() => {
   color: var(--text-primary);
 }
 /* Reorder drop target feedback, matching .tab-btn.drag-over in StageTabBar.vue. */
+.rich-toggle {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+.rich-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-3xs);
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.rich-toggle button + button { border-left: 1px solid var(--border-default); }
+.rich-toggle button.active { background: var(--accent-subtle); color: var(--text-primary); }
+.rich-toggle button:disabled { cursor: default; opacity: 0.6; }
 .pane-header.drag-over {
   background: var(--accent-subtle);
   box-shadow: inset 0 0 0 2px var(--accent-focus);

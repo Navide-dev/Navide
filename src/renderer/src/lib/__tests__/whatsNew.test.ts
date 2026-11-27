@@ -166,8 +166,8 @@ describe('0.2.26 — wake, Auto resume, file and folder installs', () => {
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
     expect(pickWhatsNew('0.2.26', '0.2.26')).toBeNull()
     expect(pickWhatsNewOnDemand('0.2.26', false)?.version).toBe('0.2.26')
-    expect(WHATS_NEW[23].version).toBe('0.2.26')
-    expect(WHATS_NEW[24].version).toBe('0.2.25')
+    expect(WHATS_NEW[24].version).toBe('0.2.26')
+    expect(WHATS_NEW[25].version).toBe('0.2.25')
   })
 })
 
@@ -193,7 +193,7 @@ describe('0.2.27 — Navide Browser and blocked local installs', () => {
   it('shows once to someone updating from 0.2.26, and not to a build still running 0.2.26', () => {
     expect(pickWhatsNew('0.2.27', '0.2.26')?.version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.27', '0.2.27')).toBeNull()
-    expect(WHATS_NEW[22].version).toBe('0.2.27')
+    expect(WHATS_NEW[23].version).toBe('0.2.27')
     expect(pickWhatsNew('0.2.26', '0.2.25')?.version).toBe('0.2.26')
   })
 })
@@ -242,7 +242,7 @@ describe('0.2.29 — six more languages', () => {
   it('shows once to someone updating from 0.2.28, and not to a build still running 0.2.28', () => {
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.29', '0.2.29')).toBeNull()
-    expect(WHATS_NEW[20].version).toBe('0.2.29')
+    expect(WHATS_NEW[21].version).toBe('0.2.29')
     expect(pickWhatsNew('0.2.28', '0.2.27')?.version).toBe('0.2.28')
   })
 })
@@ -270,7 +270,7 @@ describe('0.2.30 — pipelines no longer stall silently', () => {
   it('shows once to someone updating from 0.2.29, and not to a build still running 0.2.29', () => {
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.30', '0.2.30')).toBeNull()
-    expect(WHATS_NEW[19].version).toBe('0.2.30')
+    expect(WHATS_NEW[20].version).toBe('0.2.30')
     expect(pickWhatsNew('0.2.29', '0.2.28')?.version).toBe('0.2.29')
   })
 })
@@ -282,8 +282,8 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   const versions = ['0.2.40', '0.2.39', '0.2.38', '0.2.37'] as const
   const en = (version: string) => whatsNewFor(version)!.highlights.map((text) => text['en-US']).join('\n')
 
-  it('are the four entries under 0.2.49, 0.2.48, 0.2.47, 0.2.46, 0.2.45, 0.2.44, 0.2.43, 0.2.42 and the 0.2.41 hotfix, in order', () => {
-    expect(WHATS_NEW.slice(9, 13).map((entry) => entry.version)).toEqual([...versions])
+  it('are the four entries under 0.2.50, 0.2.49, 0.2.48, 0.2.47, 0.2.46, 0.2.45, 0.2.44, 0.2.43, 0.2.42 and the 0.2.41 hotfix, in order', () => {
+    expect(WHATS_NEW.slice(10, 14).map((entry) => entry.version)).toEqual([...versions])
   })
 
   it('are authored in every UI language', () => {
@@ -317,12 +317,52 @@ describe('0.2.37 to 0.2.40 — backfilled announcements', () => {
   })
 })
 
+describe('0.2.50 — the formatted view, the Telegram proxy stall, the privacy page', () => {
+  const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
+  const entry = whatsNewFor('0.2.50')
+
+  it('is the newest entry, authored in every UI language', () => {
+    expect(WHATS_NEW[0].version).toBe('0.2.50')
+    for (const text of [entry!.title, ...entry!.highlights]) {
+      for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
+    }
+  })
+
+  it('leads with the formatted view and names the rest of the release', () => {
+    expect(entry!.title['en-US']).toMatch(/^A Formatted View for Panes/)
+    expect(entry!.highlights[0]['en-US']).toMatch(/^Formatted view: /)
+    expect(entry!.highlights[0]['en-US']).toContain('Terminal / Formatted')
+    expect(entry!.highlights[0]['zh-TW']).toContain('「終端｜美化」')
+    const en = entry!.highlights.map((text) => text['en-US']).join('\n')
+    expect(en).toContain('Copy button')
+    expect(en).toContain('system proxy settings')
+    expect(en).toContain('dl.navide.dev')
+  })
+
+  it('ends with the known limitations', () => {
+    const known = entry!.highlights[entry!.highlights.length - 1]
+    expect(known['en-US']).toMatch(/^Known limitations: /)
+    expect(known['en-US']).toContain('Kiro, Devin, SSH and remote panes are not supported')
+    expect(known['en-US']).toContain('100,000 characters')
+    expect(known['zh-TW']).toMatch(/^已知限制：/)
+  })
+
+  it('puts a no-break space before French : ; ? !', () => {
+    for (const text of [entry!.title, ...entry!.highlights]) expect(text['fr-FR']).not.toMatch(/ [:;?!»]|« /)
+  })
+
+  it('shows once to someone updating from 0.2.49', () => {
+    expect(pickWhatsNew('0.2.50', '0.2.49')?.version).toBe('0.2.50')
+    expect(pickWhatsNew('0.2.50', '0.2.50')).toBeNull()
+  })
+})
+
 describe('0.2.49 — MCP health, SSH Remote in tmux, Kiro models and Guard, the plugin template', () => {
   const locales = ['zh-TW', 'en-US', 'ja-JP', 'zh-CN', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ru-RU', 'vi-VN'] as const
   const entry = whatsNewFor('0.2.49')
 
-  it('is the newest entry, authored in every UI language', () => {
-    expect(WHATS_NEW[0].version).toBe('0.2.49')
+  it('sits right under 0.2.50, authored in every UI language', () => {
+    expect(WHATS_NEW[1].version).toBe('0.2.49')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -364,7 +404,7 @@ describe('0.2.48 — persona mode, CLIs over SSH Remote and per-pane /status car
   const entry = whatsNewFor('0.2.48')
 
   it('sits right under 0.2.49, authored in every UI language', () => {
-    expect(WHATS_NEW[1].version).toBe('0.2.48')
+    expect(WHATS_NEW[2].version).toBe('0.2.48')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -403,7 +443,7 @@ describe('0.2.47 — Organization Cloud and SSH Remote terminal panes', () => {
   const entry = whatsNewFor('0.2.47')
 
   it('sits right under 0.2.48, authored in every UI language', () => {
-    expect(WHATS_NEW[2].version).toBe('0.2.47')
+    expect(WHATS_NEW[3].version).toBe('0.2.47')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -447,7 +487,7 @@ describe('0.2.46 — launch prompts, plugin views after a restart, automatic pro
   const en = () => entry!.highlights.map((text) => text['en-US']).join('\n')
 
   it('sits right under 0.2.47, authored in every UI language', () => {
-    expect(WHATS_NEW[3].version).toBe('0.2.46')
+    expect(WHATS_NEW[4].version).toBe('0.2.46')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -487,7 +527,7 @@ describe('0.2.45 — Electron 45, official plugins follow the Marketplace, messa
   const en = () => entry!.highlights.map((text) => text['en-US']).join('\n')
 
   it('sits under 0.2.46, authored in every UI language', () => {
-    expect(WHATS_NEW[4].version).toBe('0.2.45')
+    expect(WHATS_NEW[5].version).toBe('0.2.45')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -527,7 +567,7 @@ describe('0.2.44 — message delivery, MCP reconnect in place, remote container 
   const en = () => entry!.highlights.map((text) => text['en-US']).join('\n')
 
   it('sits under 0.2.45, authored in every UI language', () => {
-    expect(WHATS_NEW[5].version).toBe('0.2.44')
+    expect(WHATS_NEW[6].version).toBe('0.2.44')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -570,7 +610,7 @@ describe('0.2.43 — MCP connection fixes, Cloud developer sign-in, Guard edges,
   const entry = whatsNewFor('0.2.43')
 
   it('sits under 0.2.44, authored in every UI language', () => {
-    expect(WHATS_NEW[6].version).toBe('0.2.43')
+    expect(WHATS_NEW[7].version).toBe('0.2.43')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -637,7 +677,7 @@ describe('0.2.42 — model switching from Telegram, quota bars, closed windows',
   const entry = whatsNewFor('0.2.42')
 
   it('sits under 0.2.43, authored in every UI language', () => {
-    expect(WHATS_NEW[7].version).toBe('0.2.42')
+    expect(WHATS_NEW[8].version).toBe('0.2.42')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -660,7 +700,7 @@ describe('0.2.41 — hotfix: Git and shell calls on macOS and Linux', () => {
   const entry = whatsNewFor('0.2.41')
 
   it('sits under 0.2.42, authored in every UI language', () => {
-    expect(WHATS_NEW[8].version).toBe('0.2.41')
+    expect(WHATS_NEW[9].version).toBe('0.2.41')
     for (const text of [entry!.title, ...entry!.highlights]) {
       for (const locale of locales) expect(text[locale], `${locale}: ${text['en-US']}`).toBeTruthy()
     }
@@ -707,7 +747,7 @@ describe('0.2.36 — API key accounts, workbench and plugin commands', () => {
   it('shows once to someone updating from 0.2.35, and not to a build still running 0.2.35', () => {
     expect(pickWhatsNew('0.2.36', '0.2.35')?.version).toBe('0.2.36')
     expect(pickWhatsNew('0.2.36', '0.2.36')).toBeNull()
-    expect(WHATS_NEW[13].version).toBe('0.2.36')
+    expect(WHATS_NEW[14].version).toBe('0.2.36')
     expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
   })
 
@@ -759,7 +799,7 @@ describe('0.2.31 — Linux memory growth and Navide Plugins settings pages', () 
   it('shows once to someone updating from 0.2.30, and not to a build still running 0.2.30', () => {
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.31', '0.2.31')).toBeNull()
-    expect(WHATS_NEW[18].version).toBe('0.2.31')
+    expect(WHATS_NEW[19].version).toBe('0.2.31')
     expect(pickWhatsNew('0.2.30', '0.2.29')?.version).toBe('0.2.30')
   })
 })
@@ -803,7 +843,7 @@ describe('0.2.32 — secrets stay on this machine, Paste Credential removed', ()
   it('shows once to someone updating from 0.2.31, and not to a build still running 0.2.31', () => {
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.32', '0.2.32')).toBeNull()
-    expect(WHATS_NEW[17].version).toBe('0.2.32')
+    expect(WHATS_NEW[18].version).toBe('0.2.32')
     expect(pickWhatsNew('0.2.31', '0.2.30')?.version).toBe('0.2.31')
   })
 })
@@ -841,7 +881,7 @@ describe('0.2.33 — chat wake brings back the conversation, in all 11 languages
   it('shows once to someone updating from 0.2.32, and not to a build still running 0.2.32', () => {
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.33', '0.2.33')).toBeNull()
-    expect(WHATS_NEW[16].version).toBe('0.2.33')
+    expect(WHATS_NEW[17].version).toBe('0.2.33')
     expect(pickWhatsNew('0.2.32', '0.2.31')?.version).toBe('0.2.32')
   })
 })
@@ -876,7 +916,7 @@ describe('0.2.34 — App Lock and Import from n8n', () => {
   it('shows once to someone updating from 0.2.33, and not to a build still running 0.2.33', () => {
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.34', '0.2.34')).toBeNull()
-    expect(WHATS_NEW[15].version).toBe('0.2.34')
+    expect(WHATS_NEW[16].version).toBe('0.2.34')
     expect(pickWhatsNew('0.2.33', '0.2.32')?.version).toBe('0.2.33')
   })
 })
@@ -924,7 +964,7 @@ describe('0.2.35 — Navide Browser built in, Plans editing, Windows Hello and T
   it('shows once to someone updating from 0.2.34, and not to a build still running 0.2.34', () => {
     expect(pickWhatsNew('0.2.35', '0.2.34')?.version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.35', '0.2.35')).toBeNull()
-    expect(WHATS_NEW[14].version).toBe('0.2.35')
+    expect(WHATS_NEW[15].version).toBe('0.2.35')
     expect(pickWhatsNew('0.2.34', '0.2.33')?.version).toBe('0.2.34')
   })
 })

@@ -126,6 +126,33 @@ describe('ChannelsPane', () => {
     expect(w.find('[data-platform="telegram"] [data-testid="channel-last-error"]').exists()).toBe(false)
   })
 
+  it('shows when a blocked bot checks its token next, and when it came back', async () => {
+    const at = (ts: number): string => new Date(ts * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    const next = 1_800_000_000
+    const tgRow = (status: Record<string, unknown>) => ({
+      ok: true,
+      enabled: true,
+      platforms: [{ platform: 'telegram', configured: true, enabled: true, status, config: {}, capabilities: null }],
+    })
+    mock.setResponse('channels.list', tgRow({
+      lifecycle: 'blocked', connected: false, identity: '', last_error: 'Telegram rejected the bot token (401: Unauthorized)',
+      blocked_at: next - 600, next_auth_check_at: next, recovered_at: null,
+    }))
+    const w = await render()
+    expect(w.get('[data-platform="telegram"] [data-testid="channel-auth-check"]').text())
+      .toBe(`Token rejected — checking again automatically at ${at(next)}`)
+    w.unmount()
+    mock = createMockBackend('connected')
+    seed()
+    mock.setResponse('channels.list', tgRow({
+      lifecycle: 'ready', connected: true, identity: '@navide_bot', last_error: '',
+      blocked_at: null, next_auth_check_at: null, recovered_at: next,
+    }))
+    const w2 = await render()
+    expect(w2.get('[data-platform="telegram"] [data-testid="channel-auth-check"]').text())
+      .toBe(`Reconnected automatically at ${at(next)}`)
+  })
+
   it('the connect form reveals what the platform needs, its hint and the single-receiver note', async () => {
     const w = await render()
     const slack = w.get('[data-platform="slack"]')

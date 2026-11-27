@@ -55,10 +55,31 @@ export function withLoopDoneInstruction(prompt: string): string {
 export const SESSION_LIMIT_RE =
   /hit your .{0,40}limit.{0,80}?resets\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*\(([^)]+)\)/i
 
-const DATED_LIMIT_RE = /hit your .{0,40}limit.{0,80}?resets\s+(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})|\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)))/i
+/** Also matches the weekly banner's month-name form,
+ *  "You've hit your weekly limit · resets Nov 28 at 9pm (Asia/Taipei)". */
+const DATED_LIMIT_RE = /hit your .{0,40}limit.{0,80}?resets\s+(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})|\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\))|[a-z]{3,9}\.?\s+\d{1,2}(?:,?\s+\d{4})?\s+(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\))/i
 
-function datedReset(message: string): number | null {
-  const reset = DATED_LIMIT_RE.exec(message)?.[1]
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+/** "Nov 28 at 9pm (TZ)" → "YYYY-MM-DD at 9pm (TZ)". The banner names no year:
+ *  it is the one that puts the reset closest to `now` — a reset more than a
+ *  day behind `now` belongs to next year (a December banner naming Jan 2). */
+function isoFromMonthName(reset: string, now: number): string | null {
+  const m = /^([a-z]{3,9})\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?\s+(.+)$/i.exec(reset)
+  if (!m) return null
+  const month = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase())
+  if (month < 0) return null
+  const iso = (year: number): string =>
+    `${year}-${String(month + 1).padStart(2, '0')}-${m[2].padStart(2, '0')} ${m[4]}`
+  if (m[3]) return iso(Number(m[3]))
+  const year = new Date(now).getUTCFullYear()
+  return Date.UTC(year, month, Number(m[2])) < now - 24 * 60 * 60_000 ? iso(year + 1) : iso(year)
+}
+
+function datedReset(message: string, now: number): number | null {
+  const matched = DATED_LIMIT_RE.exec(message)?.[1]
+  if (!matched) return null
+  const reset = /^\d/.test(matched) ? matched : isoFromMonthName(matched, now)
   if (!reset) return null
   const date = reset.slice(0, 10).split('-').map(Number)
   const day = new Date(Date.UTC(date[0], date[1] - 1, date[2]))
@@ -97,7 +118,7 @@ export function parseLimitEvidence(message: string, now: number = Date.now()): {
   const modelScope = /all models/i.test(notice) ? 'all' : model
   const dated = DATED_LIMIT_RE.exec(normalized)
   if (dated) {
-    const resetAt = datedReset(normalized)
+    const resetAt = datedReset(normalized, now)
     return { windowKind, modelScope, resetAt, resetPrecision: resetAt === null ? 'unknown' : dated[1][10] === 'T' ? 'exact' : /:\d{2}/.test(dated[1]) ? 'minute' : 'hour' }
   }
   const parsed = parseLimitReset(normalized, now)
@@ -161,7 +182,7 @@ export const LOOP_ESTIMATE_WINDOW_MS = 5 * 60 * 60_000
  *  (unknown timezone, out-of-range time) — callers fail open. */
 export function parseLimitReset(message: string, now: number = Date.now()): number | null {
   if (DATED_LIMIT_RE.test(message)) {
-    const at = datedReset(message)
+    const at = datedReset(message, now)
     return at === null ? null : at + LIMIT_RESET_BUFFER_MS
   }
   const m = SESSION_LIMIT_RE.exec(message)

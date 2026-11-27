@@ -394,6 +394,7 @@
     "hold-busy": "目標尚未就緒，無法接收",
     "hold-paused": "投遞已暫停",
     "hold-behind": "前面還有 {n} 則訊息",
+    "hold-queue-full": "排隊已滿，先放在候補佇列（前面還有 {n} 則）",
     "hold-gone": "目標分格已不存在",
     "hold-not-ready": "目標分格未在執行",
     "hold-starting": "目標分格仍在啟動中",
@@ -720,6 +721,19 @@
       "detecting-session": "取得 Session ID 中",
       "ready": "就緒",
       "failed": "設定失敗"
+    },
+    "rich": {
+      "group": "輸出檢視",
+      "terminal": "終端",
+      "rich": "美化",
+      "terminal-title": "顯示原始終端",
+      "rich-title": "以美化格式顯示 agent 的回覆",
+      "unsupported": "這個分格無法使用美化檢視：它的回覆不是從這台電腦上的對話紀錄讀取的。",
+      "empty": "顯示這個視窗開啟後的回覆；切回終端可看完整歷史。",
+      "copy": "複製",
+      "copied": "已複製",
+      "you": "你",
+      "truncated": "…（內容過長已截斷，完整內容請切回終端）"
     }
   },
   "action": {
@@ -10126,6 +10140,8 @@
       "flag-pane-closed": "分格已關閉",
       "flag-token": "token 失效",
       "flag-failed": "連線失敗",
+      "auth-recheck": "token 被拒，{time} 會自動再檢查一次",
+      "auth-recovered": "{time} 已自動恢復連線",
       "default": "主要 bot",
       "add": "新增 bot",
       "new": "新的 bot",

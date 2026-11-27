@@ -394,6 +394,7 @@
     "hold-busy": "Das Ziel ist nicht empfangsbereit",
     "hold-paused": "Die Zustellung ist pausiert",
     "hold-behind": "Wartet in der Reihe – Nachrichten davor: {n}",
+    "hold-queue-full": "Warteschlange voll — in der Reserve-Warteschlange, Nachrichten davor: {n}",
     "hold-gone": "Der Zielbereich existiert nicht mehr",
     "hold-not-ready": "Der Zielbereich läuft nicht",
     "hold-starting": "Der Zielbereich startet noch",
@@ -720,6 +721,19 @@
       "detecting-session": "Session-ID wird erkannt",
       "ready": "bereit",
       "failed": "Einrichtung fehlgeschlagen"
+    },
+    "rich": {
+      "group": "Ausgabeansicht",
+      "terminal": "Terminal",
+      "rich": "Formatiert",
+      "terminal-title": "Das unveränderte Terminal anzeigen",
+      "rich-title": "Die Antworten des Agenten formatiert anzeigen",
+      "unsupported": "Die formatierte Ansicht ist für diesen Bereich nicht verfügbar: Seine Antworten werden nicht aus einem Gesprächsprotokoll auf diesem Computer gelesen.",
+      "empty": "Zeigt Antworten, seit dieses Fenster geöffnet wurde. Den vollständigen Verlauf siehst du im Terminal.",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "you": "Du",
+      "truncated": "…(hier gekürzt – die vollständige Antwort siehst du im Terminal)"
     }
   },
   "action": {
@@ -10126,6 +10140,8 @@
       "flag-pane-closed": "Bereich geschlossen",
       "flag-token": "Token ungültig",
       "flag-failed": "Verbindung fehlgeschlagen",
+      "auth-recheck": "Token abgelehnt – wird um {time} automatisch erneut geprüft",
+      "auth-recovered": "Um {time} automatisch wieder verbunden",
       "default": "Haupt-Bot",
       "add": "Bot hinzufügen",
       "new": "Neuer Bot",

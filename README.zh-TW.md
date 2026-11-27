@@ -153,7 +153,7 @@ Local-first 不代表所有情況都完全離線。使用外部 Agent CLI、雲�
 
 ## 試用 Navide
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.49 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.49 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 與 Arm64 安裝程式與 Linux x64 套件：
 
 - [下載 DMG](https://dl.navide.dev/releases/v0.2.49/Navide-0.2.49-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.49/Navide-0.2.49-arm64.dmg))
 - [下載 ZIP](https://dl.navide.dev/releases/v0.2.49/Navide-0.2.49-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.49/Navide-0.2.49-arm64.zip))
@@ -165,13 +165,13 @@ Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x
 
 將 Navide 複製到「應用程式」後即可正常開啟，無需繞過 Gatekeeper。自此版本起支援 App 內自動更新。
 
-Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原生安裝程式由 Release CI 建置、自下一個版本起隨發行提供；在此之前 Arm 版 Windows 以模擬方式執行 x64 安裝程式。Windows 版本尚未經過程式碼簽章，因此首次執行時 SmartScreen 會出現警告；「執行管理」視窗在該平台依設計沒有可列出的內容（它讀的是使用者的 crontab 與 macOS 的 launchd；Windows Task Scheduler 是刻意不整合——Navide 本身從不建立排程工作，而工作排程器已能管理機器上的工作）；每個 Pane 的 CLI Home 與受管理的 Skills 以符號連結建立，因此需要 Windows 開發人員模式或以系統管理員身分執行 Navide；CLI 只能被直接終止而無法收到停止通知，Pane 關閉前可能來不及寫出 Transcript。
+Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Windows 版本尚未經過程式碼簽章，因此首次執行時 SmartScreen 會出現警告；「執行管理」視窗在該平台依設計沒有可列出的內容（它讀的是使用者的 crontab 與 macOS 的 launchd；Windows Task Scheduler 是刻意不整合——Navide 本身從不建立排程工作，而工作排程器已能管理機器上的工作）；每個 Pane 的 CLI Home 與受管理的 Skills 以符號連結建立，因此需要 Windows 開發人員模式或以系統管理員身分執行 Navide；CLI 只能被直接終止而無法收到停止通知，Pane 關閉前可能來不及寫出 Transcript。
 
 若要建立開發環境，仍可從原始碼安裝。
 
 ### 原始碼安裝前置需求
 
-- Node.js 22.12+（22.x）與 pnpm 10+
+- Bun（版本固定於 `.bun-version`）
 - Python 3.12+ 與 uv 0.11+
 - 至少一個受支援的 Coding CLI
 - 選用：Ollama 或本機 GGUF 分析模型
@@ -181,9 +181,10 @@ Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原�
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
 Onboarding Wizard 會檢查 Runtime、偵測 Agent CLI，並說明相關 macOS 權限。接著可閱讀[開始使用](docs/zh-TW/getting-started.md)與[使用指南](docs/zh-TW/user-guide.md)。

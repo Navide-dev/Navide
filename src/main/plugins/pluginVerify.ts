@@ -124,7 +124,7 @@ export const OFFICIAL_PLUGIN_PREFIX = 'navide.'
  * (fail-closed); it never means "skip the check".
  *
  * The matching private key is NOT in this repo — it lives beside the macOS
- * signing assets in `~/navide-signing/plugin_publisher.key` (0600) and must be
+ * signing assets as `plugin_publisher.key` (0600) and must be
  * backed up with them. Losing it means no further official plugin package can
  * be published under this pin; rotating it requires shipping a new app build,
  * since the pin is a build-time constant.

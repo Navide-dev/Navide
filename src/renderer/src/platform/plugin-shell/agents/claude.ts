@@ -142,9 +142,10 @@ export const SPEC = {
   // has no session window; the reader then says so in `absentWindows`.
   quotaSemantics: { hard: ['session', 'weekly'], required: ['session', 'weekly'], scoped: ['weekly-model'] },
   // Claude Code's own limit banner, with the reset clock that names WHICH
-  // window ran out (loopPrompt.SESSION_LIMIT_RE parses it). The clockless
+  // window ran out (loopPrompt.SESSION_LIMIT_RE parses it; the weekly banner
+  // prefixes a date: "resets Nov 28 at 9pm (TZ)"). The clockless
   // "hit your limit" alone is prose until the account's reading agrees.
   quotaExhausted: {
-    pattern: /hit your .{0,40}limit.{0,80}?resets\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)/i,
+    pattern: /hit your .{0,40}limit.{0,80}?resets\s+(?:[a-z]{3,9}\.?\s+\d{1,2}(?:,?\s+\d{4})?\s+(?:at\s+)?)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)/i,
   },
 } as const satisfies AgentSpec

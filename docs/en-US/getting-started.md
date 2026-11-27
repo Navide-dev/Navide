@@ -2,7 +2,7 @@
 
 English | [繁體中文](../zh-TW/getting-started.md) | [日本語](../ja-JP/getting-started.md) | [Documentation](README.md)
 
-Navide supports macOS 13 or newer on Apple silicon, Linux x64, and Windows on x64 or Arm. The [latest GitHub release](https://github.com/Navide-dev/Navide/releases/latest) provides DMG and ZIP downloads for macOS, signed with a Developer ID certificate and notarized by Apple, NSIS installers for Windows x64 and Arm64, and an AppImage and a `.deb` for Linux x64. If a GitHub download stalls or fails, the same files are served from the dl.navide.dev mirror — the README's download list carries a *mirror* link beside every file, and navide.dev switches to it automatically when it is reachable.
+Navide supports macOS 13 or newer on Apple silicon, Linux x64, and Windows on x64 or Arm. The [latest GitHub release](https://github.com/Navide-dev/Navide/releases/latest) provides DMG and ZIP downloads for macOS, signed with a Developer ID certificate and notarized by Apple, NSIS installers for Windows x64 and Arm64, and an AppImage and a `.deb` for Linux x64. If a GitHub download stalls or fails, the same files are served from the dl.navide.dev mirror — the README's download list links the mirror first, with a *GitHub* link beside every file, and navide.dev switches to it automatically when it is reachable.
 
 To install on macOS, download the DMG and copy Navide to Applications, then open it normally — no Gatekeeper workaround is needed.
 
@@ -22,11 +22,10 @@ Two packages are published for x64:
 ## What you need to install from source
 
 - macOS 13+ on Apple silicon, Linux x64, or Windows on x64 or Arm
-- Node.js 22.12+ (22.x)
-- pnpm 10+
+- Bun (the version pinned in `.bun-version`) for daily development. pnpm 10.x with Node.js 22 still works, is used by `./release.sh` and `./build.sh`, and is needed for one test in the full `bun run test:run` (see “Development checks”)
 - Python 3.12+
 - uv 0.11+
-- At least one of the 14 supported coding CLIs (Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Grok CLI, Kilo Code, Kimi Code, Muse Code, OpenCode, Pi, Qwen Code) — the [User Guide](user-guide.md#manual-agent-panes) lists them
+- At least one supported coding CLI — the [User Guide](user-guide.md#manual-agent-panes) lists them
 - Optional: Ollama or a local GGUF model for local analysis
 - On Windows: Developer Mode (**Settings → For developers**) or running Navide elevated, so it can create the symbolic links behind per-pane CLI homes and managed skills
 
@@ -37,12 +36,13 @@ Each coding CLI has its own installation, authentication, subscription, and data
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
-`pnpm dev` starts the Electron application, Vite renderer, and Python FastAPI backend together.
+`bun run dev` starts the Electron application, Vite renderer, and Python FastAPI backend together.
 
 ## First launch
 
@@ -73,9 +73,11 @@ After the manual flow works, try a pipeline with a small task. Review stage defi
 ## Development checks
 
 ```bash
-pnpm typecheck
-pnpm test:run
+bun run typecheck
+bun run test:run
 uv --project backend run pytest backend/tests
 ```
+
+Run the frontend tests with `bun run test:run`, never with bare `bun test`: that runs Bun's own test runner instead of Vitest and ignores the project's Vitest configuration. Do not use `bun run test` either; it starts Vitest in watch mode. The full `bun run test:run` includes `src/main/plugins/pluginExternalWorkspace.test.ts`, which simulates an external plugin author who uses pnpm: it needs a real pnpm 10.x on `PATH` and fails with `Executable not found in $PATH: "pnpm"` without one (it is not skipped). Do not mix `bun install` and `pnpm install` in one `node_modules`.
 
 See [Troubleshooting](troubleshooting.md) if the app, backend, CLI, session binding, analyzer, or token tracking does not start as expected.
