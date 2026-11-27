@@ -22,6 +22,12 @@ const dialogState = vi.hoisted(() => ({
 
 // index.ts runs the Linux keyring preflight at import; never spawn dbus-send here.
 vi.mock('./linuxKeyring', () => ({ applyLinuxKeyringPreflight: () => false }))
+// The async quit prompt is what these tests drive; Windows asks it synchronously
+// (see dockQuitProbe.test.ts), so pin the platform on a Windows host too.
+vi.mock('../shared/osplat', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../shared/osplat')>()),
+  isWindows: () => false,
+}))
 vi.mock('electron', () => {
   const app = {
     isPackaged: false,

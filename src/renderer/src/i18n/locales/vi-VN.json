@@ -498,6 +498,7 @@
     "sidebar-ws-confirm": "Đóng workspace và các pane của nó",
     "confirm": "Đóng",
     "dont-show-again": "Không hiện lời nhắc này nữa",
+    "quit-dont-ask": "Thoát và không hỏi lại",
     "quit-title": "Thoát Navide?",
     "quit-body": "Bạn có chắc muốn thoát toàn bộ ứng dụng?",
     "quit-cancelled-title": "Navide chưa thoát",
