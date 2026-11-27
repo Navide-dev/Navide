@@ -10139,6 +10139,8 @@
       "flag-pane-closed": "Pane closed",
       "flag-token": "Token invalid",
       "flag-failed": "Connection failed",
+      "auth-recheck": "Token rejected — checking again automatically at {time}",
+      "auth-recovered": "Reconnected automatically at {time}",
       "default": "Main bot",
       "add": "Add Bot",
       "new": "New bot",

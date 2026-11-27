@@ -10139,6 +10139,8 @@
       "flag-pane-closed": "分格已关闭",
       "flag-token": "token 失效",
       "flag-failed": "连接失败",
+      "auth-recheck": "token 被拒，{time} 会自动再检查一次",
+      "auth-recovered": "{time} 已自动恢复连接",
       "default": "主要 bot",
       "add": "添加 bot",
       "new": "新的 bot",

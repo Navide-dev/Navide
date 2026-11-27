@@ -7,7 +7,10 @@ Receive loop (OpenClaw polling-session.ts):
   id (token changed) is discarded.
 - 409 means another consumer is polling the same bot (e.g. Claude Code
   ``--channels``): report it and back off, never crash.
-- 401/404 mean the token is dead: lifecycle ``blocked``, stop retrying.
+- 401/404 mean the token is rejected: lifecycle ``blocked``, polling stops, and getMe is
+  asked again every ``AUTH_RECHECK_S``; once it answers, the session starts over (a token
+  Telegram rejected for a while, or one BotFather revoked and the user restored, comes back
+  without a restart).
 - 429 honours ``retry_after`` capped at 60s.
 - A getUpdates call that does not finish within the stall watchdog restarts.
 
@@ -75,6 +78,8 @@ POLL_TIMEOUT_S = 30
 # that drops packets, a slow DNS or proxy) gets a second, fresh try well inside quick add's wait.
 GET_ME_TIMEOUT = httpx.Timeout(10.0)
 GET_ME_NETWORK_RETRIES = 1
+# How often a blocked bot (token rejected) asks getMe whether the token works again.
+AUTH_RECHECK_S = 600.0
 GENERAL_TOPIC_ID = "1"
 SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
@@ -260,6 +265,11 @@ class TelegramStatus(AdapterStatus):
     # update_id gaps seen this session: how many updates in all, and when the last one was
     missed_updates: int = 0
     last_missed_at: float | None = None
+    # Token rejected: when it was first rejected, and when getMe is asked next (wall clock).
+    # Both clear once the token works again; recovered_at then says when that was.
+    blocked_at: float | None = None
+    next_auth_check_at: float | None = None
+    recovered_at: float | None = None
 
 
 class TelegramApiError(Exception):
@@ -294,6 +304,7 @@ class TelegramAdapter:
         stall_timeout_s: float = STALL_WATCHDOG_S,
         poll_timeout_s: int = POLL_TIMEOUT_S,
         stable_s: float = READY_STABLE_S,
+        auth_recheck_s: float = AUTH_RECHECK_S,
     ) -> None:
         self._token = token.strip()
         redact.add_secret(self._token)
@@ -309,6 +320,7 @@ class TelegramAdapter:
         self._stall_timeout_s = stall_timeout_s
         self._poll_timeout_s = poll_timeout_s
         self._stable_s = stable_s
+        self._auth_recheck_s = auth_recheck_s
         self.status = TelegramStatus()
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
@@ -380,9 +392,20 @@ class TelegramAdapter:
             except ChannelAuthError as exc:
                 self.status.lifecycle = "blocked"
                 self.status.connected = False
-                self.status.last_error = str(exc)
-                log.warning("telegram: token rejected, polling stopped: %s", exc)
-                return
+                self.status.last_error = self._redact(str(exc))
+                if self.status.blocked_at is None:
+                    self.status.blocked_at = time.time()
+                log.warning("telegram[%s]: token rejected, polling stopped; checking again every %.0fs: %s",
+                            self.account, self._auth_recheck_s, self.status.last_error)
+                await self._wait_for_token()
+                self.status.blocked_at = None
+                self.status.next_auth_check_at = None
+                self.status.recovered_at = time.time()
+                self.status.lifecycle = "starting"
+                self.status.last_error = ""
+                self._attempt = 0
+                log.info("telegram[%s]: token accepted again; polling restarts", self.account)
+                continue
             except Exception as exc:  # noqa: BLE001 — every other failure is transient
                 self._attempt += 1
                 if isinstance(exc, TelegramApiError) and exc.code == 409:
@@ -397,6 +420,23 @@ class TelegramAdapter:
                 log.info("telegram[%s]: poll failed (%s); retry in %.1fs", self.account,
                          self.status.last_error, delay)
                 await asyncio.sleep(delay)
+
+    async def _wait_for_token(self) -> None:
+        """Return once getMe answers again, asking every ``_auth_recheck_s``. A rejection
+        or a network failure only waits for the next check."""
+        while True:
+            self.status.next_auth_check_at = time.time() + self._auth_recheck_s
+            await asyncio.sleep(self._auth_recheck_s)
+            try:
+                await self._call("getMe", timeout=GET_ME_TIMEOUT)
+                return
+            except asyncio.CancelledError:
+                raise
+            except ChannelAuthError as exc:
+                self.status.last_error = self._redact(str(exc))
+            except Exception as exc:  # noqa: BLE001 — not an answer either way: wait again
+                log.info("telegram[%s]: token check failed (%s); next in %.0fs", self.account,
+                         self._redact(_describe_failure(exc)), self._auth_recheck_s)
 
     async def _add_commands(self) -> None:
         """Add ours to the bot's "/" menu without touching the user's own commands: theirs

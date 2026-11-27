@@ -10139,6 +10139,8 @@
       "flag-pane-closed": "pane が閉じています",
       "flag-token": "token が無効",
       "flag-failed": "接続に失敗",
+      "auth-recheck": "token が拒否されました。{time} に自動で再確認します",
+      "auth-recovered": "{time} に自動で再接続しました",
       "default": "メイン bot",
       "add": "bot を追加",
       "new": "新しい bot",

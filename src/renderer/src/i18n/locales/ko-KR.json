@@ -10139,6 +10139,8 @@
       "flag-pane-closed": "pane 닫힘",
       "flag-token": "token 무효",
       "flag-failed": "연결 실패",
+      "auth-recheck": "token이 거부됨 — {time}에 자동으로 다시 확인해요",
+      "auth-recovered": "{time}에 자동으로 다시 연결됨",
       "default": "기본 bot",
       "add": "bot 추가",
       "new": "새 bot",

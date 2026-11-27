@@ -10139,6 +10139,8 @@
       "flag-pane-closed": "Pane đã đóng",
       "flag-token": "Token không hợp lệ",
       "flag-failed": "Kết nối thất bại",
+      "auth-recheck": "Token bị từ chối — tự động kiểm tra lại lúc {time}",
+      "auth-recovered": "Đã tự động kết nối lại lúc {time}",
       "default": "Bot chính",
       "add": "Thêm bot",
       "new": "Bot mới",
