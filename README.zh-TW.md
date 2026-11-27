@@ -182,7 +182,7 @@ Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原�
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 bun install
-bun node_modules/electron/install.js  # once: Electron 44 downloads its binary lazily
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
 bun run dev
 ```

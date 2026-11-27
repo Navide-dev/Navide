@@ -5,7 +5,7 @@
 > listing outside this repository, with the SDK installed from the
 > `plugin-packages` GitHub Release. This page is the legacy Manifest v1
 > reference: its quick starts build inside a Navide checkout
-> (`src/renderer/plugins/`, `pnpm dev`), which only Navide's own maintainers
+> (`src/renderer/plugins/`, `bun run dev`), which only Navide's own maintainers
 > need.
 
 > **Current runtime (manifest v1 and v2).** This guide documents the manifest

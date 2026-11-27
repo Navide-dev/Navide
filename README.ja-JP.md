@@ -182,7 +182,7 @@ Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windo
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 bun install
-bun node_modules/electron/install.js  # once: Electron 44 downloads its binary lazily
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
 bun run dev
 ```

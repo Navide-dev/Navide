@@ -49,7 +49,8 @@ Describe the problem you are trying to solve and the solution you have in mind.
 **Requirements:** Bun (the version pinned in `.bun-version`), Python 3.12+, uv 0.11+, Go 1.27.x
 for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64.
 Node.js 22.12+ (22.x) and pnpm 10+ are still needed for `./release.sh`, `./build.sh`
-and the one test that plays an external plugin author who uses pnpm
+and the one test that plays an external plugin author who uses pnpm. Node.js is
+also needed for the `node scripts/…` helpers run directly below.
 
 ```bash
 git clone https://github.com/Navide-dev/Navide.git

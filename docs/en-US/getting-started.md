@@ -37,7 +37,7 @@ Each coding CLI has its own installation, authentication, subscription, and data
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 bun install
-bun node_modules/electron/install.js  # once: Electron 44 downloads its binary lazily
+bun node_modules/electron/install.js  # once: Electron downloads its binary lazily
 uv --project backend sync
 bun run dev
 ```
