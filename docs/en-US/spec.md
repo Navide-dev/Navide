@@ -11,7 +11,7 @@
 Historical foundation of Navide's AI-native macOS engineering environment for the **supported coding CLIs**, driven by configurable pipelines, parallel agent sessions, private project history, and precision engineering surfaces.
 
 ```
-Tech stack: Electron 44 + Vue 3 + TypeScript + FastAPI + Python 3.12 + xterm.js + Monaco
+Tech stack: Electron 33 + Vue 3 + TypeScript + FastAPI + Python 3.12 + xterm.js + Monaco
 Status: historical milestones below; current plans and test counts change continuously
 ```
 

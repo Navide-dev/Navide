@@ -151,6 +151,11 @@ Resolving `npm.cmd` to `node` + `npm-cli.js` instead of running the shim
 through `cmd.exe` is npm-specific and does not generalise, which is why the
 conservative argument charset is the Windows rule.
 
+## Open question
+
+Whether the Execution Policy editor should offer declared executables as
+one-click candidates (recommended) or leave the user to type them.
+
 ## Did we do enough (acceptance)
 
 - A manifest declaring `executables` validates identically in the contracts

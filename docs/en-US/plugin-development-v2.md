@@ -68,7 +68,8 @@ of the Navide Marketplace.
   do. Each such rule must state why it is protection rather than restriction.
 
 When a new design would add a restriction, turn it into a declaration plus
-disclosure instead, or record it as an explicit decision.
+disclosure instead, or bring it to the product owner or maintainers as an
+explicit decision.
 Some existing rules in this spec predate the principle and are under review:
 a third-party method is callable by MCP agents only as a declared agent tool,
 behind a switch that is off by default (see

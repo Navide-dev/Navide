@@ -111,19 +111,37 @@ One declaration, two enforcement points:
   "its views" today, "its views and its backend" once B ships. The risk level
   for a declared host list is **highest**, the level the disclosure contract
   already reserved for `network` (data a view can read through its
-  capabilities can leave the machine to a named party).
-- A view's request to an undeclared host is let through and recorded. The
-  Activity page marks it as not declared, the consent card and the Registry
-  scan show undeclared hosts in red, and a public listing that declares hosts
-  must declare the ones its code reaches (the Registry refuses the publish).
-  A per-package switch, **Only allow declared network hosts** (off by
-  default), turns both the frame CSP and the session hook into the enforcing
-  mode. The backend bridge of option B follows the same stance: record and
-  disclose by default, enforce by the same switch.
-- A plugin may declare local or private addresses (a local Ollama or a LAN
-  appliance is a legitimate use); the disclosure reads highest.
-- An Activity row stores the host and method, not the URL path, because paths
-  carry identifiers (the shell rows keep executable and subcommand only).
+  capabilities can leave the machine to a named party); whether a list of
+  named public hosts should read one level lower than a local or private
+  address, or than a future "any host" mode, is an open wording question
+  (below), not a change to the enforcement.
+
+## Decided
+
+For C1 (views), **"not declared = allowed and disclosed"**: a view's request
+to an undeclared host is let through and recorded, the Activity page marks it
+as not declared, the consent card and the Registry scan show undeclared hosts
+in red, a public listing that declares hosts must declare the ones its code
+reaches (the Registry refuses the publish), and a per-package switch **Only
+allow declared network hosts** (off by default) turns both the frame CSP and
+the session hook into the enforcing mode. The same stance is expected of the
+backend bridge of option B when it ships: record and disclose by default,
+enforce by the same switch.
+
+## Open questions
+
+1. Ship backend network as option B (Host bridge) in a later version, or not
+   at all (views only)? The recommendation is B.
+2. Whether a plugin may declare local or private addresses at all (default
+   recommendation: allowed, disclosed as highest; a plugin for a local Ollama
+   or a LAN appliance is a legitimate use).
+3. Whether the Activity row stores the full URL path or host only (the shell
+   rows keep executable and subcommand only; the same restraint — host and
+   method — is recommended, because paths carry identifiers; C1 records the
+   host only).
+4. Whether a declared list of public hosts should read **high** on the card
+   while a local or private address, or an "any host" mode, reads
+   **highest**. C1 ships with one level, highest, as the contract reserved.
 
 ## Did we do enough (acceptance for the implementing PR)
 

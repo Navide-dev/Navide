@@ -84,12 +84,12 @@ registries.
 | Droid | Its own cwd encoding (POSIX and native Windows spellings), session layouts, cumulative sidecars, split reply/outcome and inherited parent environment |
 | Goose | One shared SQLite database, sub-agent session exclusion, marker attribution in top-level sessions, usage ledger and inferred final reply |
 | Grok | Official grok-build updates, cwd layouts, UUID resume claims, explicit completion and streamed text |
-| Hermes | Interactive launch and environment handling; no reader, session resume, model or effort contract |
+| Hermes | Interactive `hermes chat` launch, Navide-named sessions and `--continue` resume, read-only SQLite `state.db` reader with cumulative token counters; no model or effort contract |
 | Kilo | Its own database/root/vendor identity plus the shared OpenCode schema and authenticated TUI push |
 | Kimi | Session-directory identity, wire records, cancellation, inferred idle completion and ESC timeout environment |
 | MiniMax Code | Interactive launch/login and environment handling; no reader, session resume, model or effort contract |
 | Muse | Session-directory identity, main-stream accounting, child-stream exclusion, explicit terminal records and resume |
-| OpenClaw | Interactive launch and environment handling; no reader, session resume, model or effort contract |
+| OpenClaw | Interactive `tui --local` launch, Navide-named session keys and reattach resume, read-only SQLite `transcript_events` reader with key-to-sessionId mapping; no model or effort contract |
 | OpenCode | SQLite streaming updates, row checkpoints, top-level markers and unauthenticated loopback TUI push |
 | Pi | Header identity, lazy flush, whole-file rewrites, entry deduplication, workspace-scoped resume and inferred idle |
 | Qwen | Active/archive logs, usage semantics, automated-record exclusion, inferred idle, hooks and input-file push |

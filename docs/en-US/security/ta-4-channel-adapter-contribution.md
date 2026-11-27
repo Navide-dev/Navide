@@ -88,9 +88,8 @@ installed) that sits on the one path where outside text enters a pane
 | **B. Plugin-held in sandbox memory** | Delivered to the plugin over the Backend Wire at start. | Any network the plugin has (TA-1), plus any channel back to the user (tool results, pane messages, its own view). | Everything | Not recommended: the token becomes plugin data |
 | **C. Host performs the whole protocol** | The adapter is declarative only (URL templates). | None | Only trivial HTTP bots; no WebSocket state machines, no media | Too narrow |
 
-Option A is the only custody model for third-party adapters. It needs TA-1's
-bridge (option B there) and extends it with a credential slot; the two are one
-design.
+Option A needs TA-1's bridge (option B there) and extends it with a
+credential slot; the two are one design.
 
 ## Taint and identity
 
@@ -108,9 +107,8 @@ design.
   the prompt but the answer is accepted only from a Navide window or a
   built-in adapter — the card says "approvals cannot be answered from this
   chat"; (2) relay allowed, disclosed as highest, with a per-adapter switch
-  in Settings → Channels, off by default. The first version uses (1): it
-  withholds one convenience from one channel type and removes the one path
-  where a plugin could approve a `critical` command by itself.
+  in Settings → Channels, off by default. Which one is an open question
+  (below).
 - **Outbound**: the manager's redaction runs before the text reaches the
   plugin (as today); the plugin receives already-redacted text.
 
@@ -135,6 +133,18 @@ design.
 - CLI credentials: untouched; a plugin adapter never has a path to them that
   a plugin backend does not already have (none, under the sandbox).
 
+## Open questions
+
+1. Confirm option A (Host-held token, per-request injection to declared
+   hosts) as the only custody model for third-party adapters.
+2. Approval relay for plugin adapters: not answerable from that chat (1), or
+   allowed behind a per-adapter switch disclosed as highest (2). The
+   recommendation is (1) for the first version; it withholds one convenience
+   from one channel type and removes the one path where a plugin could approve
+   a `critical` command by itself.
+3. Whether the first external adapter is built against this contract in the
+   same version, which would pull TA-1 option B into that version.
+
 ## Did we do enough (acceptance when implemented)
 
 - A plugin adapter's process memory never contains the token: a test runs a
@@ -146,7 +156,8 @@ design.
   allowlisted it (documented behaviour), and the inbound event records the
   adapter plugin id.
 - A permission prompt mirrored through a plugin adapter cannot be approved
-  from that chat (shape 1 above).
+  from that chat (shape 1) or requires the switch (shape 2), per the open
+  question above.
 - The manager's existing tests (`backend/tests/channels/`) pass unchanged with
   a proxy adapter substituted for a built-in one.
 - Tests: `backend/tests/channels/`, `src/main/plugins` (bridge port,
