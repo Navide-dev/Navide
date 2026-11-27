@@ -25,13 +25,15 @@ const dialogState = vi.hoisted(() => ({
 }))
 
 // The last-window quit only exists off macOS; null keeps the host's answer.
-const osState = vi.hoisted(() => ({ mac: null as boolean | null, windows: null as boolean | null }))
+// Windows asks the quit prompt synchronously, so every test runs the async
+// prompt unless it asks for Windows — on a Windows host too.
+const osState = vi.hoisted(() => ({ mac: null as boolean | null, windows: false }))
 vi.mock('../shared/osplat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../shared/osplat')>()
   return {
     ...actual,
     isMac: () => osState.mac ?? actual.isMac(),
-    isWindows: () => osState.windows ?? actual.isWindows(),
+    isWindows: () => osState.windows,
   }
 })
 // app.quit() re-emits before-quit in Electron; here the test drives that
@@ -678,7 +680,7 @@ describe('the last window closing quits like Cmd+Q (Linux, Windows)', () => {
       appState.exits.length = 0
     })
     afterEach(() => {
-      osState.windows = null
+      osState.windows = false
       dialogState.asyncPromptNeverSettles = false
     })
 
