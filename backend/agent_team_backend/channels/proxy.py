@@ -160,7 +160,9 @@ async def resolve(url: str) -> Any:
     if key is None:
         return DEFAULT
     scheme, host, port = key
-    if fixed_proxy_applies(scheme, host):
+    # On macOS this reads SystemConfiguration, which blocked the event loop on
+    # every channel request (2026-11-27 backend.log: in 10+ stall stacks).
+    if await asyncio.to_thread(fixed_proxy_applies, scheme, host):
         return DEFAULT
     now = time.monotonic()
     cached = _cache.get(key)
