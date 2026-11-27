@@ -101,13 +101,13 @@ Founder dogfooding must never be described as customer validation. Future direct
 ## Current supportable claims
 
 - Navide supports multiple independent coding-agent and terminal panes.
-- The current registry supports 14 coding CLIs — Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Grok CLI, Kilo Code, Kimi Code, Muse Code, OpenCode, Pi, Qwen Code — plus plain terminal sessions.
+- The current registry supports the coding CLIs listed in the [User Guide](user-guide.md#manual-agent-panes), plus plain terminal sessions.
 - Supported sessions can be detected, persisted, rebuilt, and resumed.
 - Pipelines can define stages, parallel slots, roles, prompts, questions, documentation queries, and completion sentinels.
 - Workspace-scoped state, run events, handoffs, and compatible token summaries are stored under `.agent-team/`.
 - Navide provides editor, Diff, terminal, diagnostics, Git, test, and review surfaces.
 - Navide is local-first and does not require a Navide account.
-- Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.2 release provides macOS downloads signed with a Developer ID certificate and notarized by Apple, a Windows x64 installer, and Linux x64 packages, alongside source installation; the native Windows on Arm installer is built by release CI and ships from the next release, and the Windows build is not code-signed.
+- Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. Releases provide macOS downloads signed with a Developer ID certificate and notarized by Apple, Windows x64 and Arm64 installers, and Linux x64 packages, alongside source installation; the Windows builds are not code-signed.
 - Navide's founder uses it as the primary environment for developing Navide.
 
 ## Directional claims that require a label

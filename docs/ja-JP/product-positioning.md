@@ -101,13 +101,13 @@ Founder Dogfooding を Customer Validation と表現してはなりません。F
 ## 現在裏付け可能な主張
 
 - Navide は複数の独立した Coding Agent Pane と Terminal Pane をサポートします。
-- 現在の Registry は 14 種類のコーディング CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）と Plain Terminal Session をサポートします。
+- 現在の Registry は [User Guide](user-guide.md) に挙げたコーディング CLI と Plain Terminal Session をサポートします。
 - 対応 Session は検出、保存、再構築、再開できます。
 - Pipeline では Stage、Parallel Slot、Role、Prompt、Question、Documentation Query、Completion Sentinel を定義できます。
 - Workspace ごとの State、Run Event、Handoff、対応する Token Summary は `.agent-team/` に保存されます。
 - Navide は Editor、Diff、Terminal、Diagnostics、Git、Test、Review Surface を提供します。
 - Navide は Local-first で、Navide Account を必要としません。
-- Navide は Apple silicon 上の macOS 13+、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.2 では Developer ID 証明書で署名し Apple の Notarization を受けた macOS 向けダウンロード、Windows x64 インストーラー、Linux x64 パッケージ、および Source Installation を提供します。Arm 版 Windows のネイティブインストーラーは Release CI でビルドされ、次のリリースから配布されます。Windows ビルドはまだコード署名されていません。
+- Navide は Apple silicon 上の macOS 13+、Linux x64、x64 および Arm 版 Windows をサポートします。各リリースでは Developer ID 証明書で署名し Apple の Notarization を受けた macOS 向けダウンロード、Windows x64 と Arm64 のインストーラー、Linux x64 パッケージ、および Source Installation を提供します。Windows ビルドはまだコード署名されていません。
 - Navide の創設者は Navide 開発の主要環境として利用しています。
 
 ## ラベルが必要な方向性の主張
