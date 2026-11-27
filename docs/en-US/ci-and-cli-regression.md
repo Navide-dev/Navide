@@ -87,6 +87,7 @@ registries.
 | Hermes | Interactive `hermes chat` launch, Navide-named sessions and `--continue` resume, read-only SQLite `state.db` reader with cumulative token counters; no model or effort contract |
 | Kilo | Its own database/root/vendor identity plus the shared OpenCode schema and authenticated TUI push |
 | Kimi | Session-directory identity, wire records, cancellation, inferred idle completion and ESC timeout environment |
+| Kiro | Interactive `chat --v3` launch, per-pane `KIRO_HOME` with the navide MCP server, `Stop` turn-end hook named by spawn token, fail-open POSIX Guard hook, `--model` / `--effort` from the docs; no reader, session resume, usage or account switching |
 | MiniMax Code | Interactive launch/login and environment handling; no reader, session resume, model or effort contract |
 | Muse | Session-directory identity, main-stream accounting, child-stream exclusion, explicit terminal records and resume |
 | OpenClaw | Interactive `tui --local` launch, Navide-named session keys and reattach resume, read-only SQLite `transcript_events` reader with key-to-sessionId mapping; no model or effort contract |
