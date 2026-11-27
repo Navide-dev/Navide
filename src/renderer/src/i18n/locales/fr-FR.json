@@ -394,7 +394,7 @@
     "hold-busy": "La cible n’est pas prête à recevoir",
     "hold-paused": "La remise est suspendue",
     "hold-behind": "En attente (messages devant : {n})",
-    "hold-queue-full": "File pleine — en attente dans la file de réserve, messages avant : {n}",
+    "hold-queue-full": "File pleine — en attente dans la file de réserve, messages avant : {n}",
     "hold-gone": "Le pane cible n’existe plus",
     "hold-not-ready": "Le pane cible n’est pas en cours d’exécution",
     "hold-starting": "Le pane cible est encore en train de démarrer",
@@ -728,12 +728,12 @@
       "rich": "Mise en forme",
       "terminal-title": "Afficher le terminal brut",
       "rich-title": "Afficher les réponses de l’agent mises en forme",
-      "unsupported": "La vue mise en forme n’est pas disponible pour ce panneau : ses réponses ne sont pas lues depuis un journal de conversation sur cet ordinateur.",
+      "unsupported": "La vue mise en forme n’est pas disponible pour ce panneau : ses réponses ne sont pas lues depuis un journal de conversation sur cet ordinateur.",
       "empty": "Affiche les réponses depuis l’ouverture de cette fenêtre. Revenez au Terminal pour tout l’historique.",
       "copy": "Copier",
       "copied": "Copié",
       "you": "Vous",
-      "truncated": "…(coupé ici : revenez au Terminal pour la réponse complète)"
+      "truncated": "…(coupé ici : revenez au Terminal pour la réponse complète)"
     }
   },
   "action": {

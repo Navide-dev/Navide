@@ -1736,10 +1736,11 @@ SPEC = VendorSpec(
     login_command_args="auth login",
     install_hooks=_install_hooks,
     # The usage-limit banner Claude Code prints ("You've hit your … limit ·
-    # resets 3pm (Asia/Taipei)"); the same detector the frontend spec's
+    # resets 3pm (Asia/Taipei)", or "resets Nov 28 at 9pm (Asia/Taipei)" for the
+    # weekly limit); the same detector the frontend spec's
     # ``quotaExhausted`` carries, so a cli-text report matches on both sides.
     quota_exhausted_patterns=(
-        r"hit your .{0,40}limit.{0,80}?resets\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)",
+        r"hit your .{0,40}limit.{0,80}?resets\s+(?:[a-z]{3,9}\.?\s+\d{1,2}(?:,?\s+\d{4})?\s+(?:at\s+)?)?\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*\([^)]+\)",
     ),
     live_file=(".claude", ".credentials.json"),
     slot_file=".credentials.json",
