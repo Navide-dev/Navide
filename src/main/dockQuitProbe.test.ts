@@ -13,13 +13,26 @@ type Listener = (...args: never[]) => unknown
 const appListeners: Array<[string, Listener]> = []
 const ipcListeners = new Map<string, Listener>()
 const windowSends: Array<[string, unknown]> = []
-const dialogState = vi.hoisted(() => ({ hold: false, response: 0, prompts: 0, lastPrompt: null as { title?: string } | null, notices: [] as Array<{ message?: string; detail?: string }> }))
+const dialogState = vi.hoisted(() => ({
+  hold: false,
+  response: 0,
+  prompts: 0,
+  lastPrompt: null as { title?: string } | null,
+  notices: [] as Array<{ message?: string; detail?: string }>,
+  // Windows 0.2.50 VM: the async prompt closed but its promise never settled.
+  asyncPromptNeverSettles: false,
+  syncPrompts: [] as Array<{ parent: unknown; buttons?: unknown[]; defaultId?: number; cancelId?: number; checkboxLabel?: unknown }>,
+}))
 
 // The last-window quit only exists off macOS; null keeps the host's answer.
-const osState = vi.hoisted(() => ({ mac: null as boolean | null }))
+const osState = vi.hoisted(() => ({ mac: null as boolean | null, windows: null as boolean | null }))
 vi.mock('../shared/osplat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../shared/osplat')>()
-  return { ...actual, isMac: () => osState.mac ?? actual.isMac() }
+  return {
+    ...actual,
+    isMac: () => osState.mac ?? actual.isMac(),
+    isWindows: () => osState.windows ?? actual.isWindows(),
+  }
 })
 // app.quit() re-emits before-quit in Electron; here the test drives that
 // re-entry itself, so only count the calls.
@@ -76,6 +89,8 @@ vi.mock('electron', () => {
         getTitle: () => 'Plans',
         id: 1,
         isFocused: () => true,
+        isVisible: () => true,
+        isMinimized: () => false,
         webContents: {
           send: (channel: string, arg: unknown) => {
             windowSends.push([channel, arg])
@@ -107,7 +122,13 @@ vi.mock('electron', () => {
         if (dialogState.hold && options?.buttons?.length === 2 && held) {
           return new Promise((resolve) => held.addEventListener('abort', () => resolve({ response: 1, checkboxChecked: false })))
         }
+        if (dialogState.asyncPromptNeverSettles && options?.buttons?.length === 2) return new Promise(() => {})
         return Promise.resolve({ response: dialogState.response, checkboxChecked: false })
+      },
+      showMessageBoxSync: (win: unknown, opts?: unknown) => {
+        const options = (opts ?? win) as { buttons?: unknown[]; defaultId?: number; cancelId?: number; checkboxLabel?: unknown }
+        dialogState.syncPrompts.push({ parent: opts ? win : null, ...options })
+        return dialogState.response
       },
       showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }),
     },
@@ -641,6 +662,74 @@ describe('the last window closing quits like Cmd+Q (Linux, Windows)', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+  })
+
+  // Windows 0.2.50 VM: Enter closed the async quit prompt, but its promise never
+  // settled, so the quit never started and the app stayed running with no
+  // window. On Windows the prompt answers synchronously. The sync dialog has no
+  // checkbox, so "don't show again" becomes a third button that quits and turns
+  // the prompt off.
+  describe('Windows: the quit prompt answers synchronously', () => {
+    beforeEach(() => {
+      osState.windows = true
+      dialogState.asyncPromptNeverSettles = true
+      dialogState.syncPrompts.length = 0
+      appState.exits.length = 0
+    })
+    afterEach(() => {
+      osState.windows = null
+      dialogState.asyncPromptNeverSettles = false
+    })
+
+    it('Quit on the last window starts the quit and leaves the prompt on', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      expect(closeLastWindow()).toHaveBeenCalled()
+      await vi.waitFor(() => expect(appState.quits).toBe(1))
+      expect(dialogState.syncPrompts).toHaveLength(1)
+      expect(dialogState.syncPrompts[0]).toMatchObject({
+        buttons: ['Quit', 'Cancel', "Quit and don't ask again"],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      expect(dialogState.syncPrompts[0]!.checkboxLabel).toBeUndefined()
+      expect(windowSends.map(([channel]) => channel)).not.toContain('app:quitConfirmDisabled')
+    })
+
+    it('"Quit and don\'t ask again" quits and turns the prompt off', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      dialogState.response = 2
+      closeLastWindow()
+      await vi.waitFor(() => expect(appState.quits).toBe(1))
+      expect(windowSends.map(([channel]) => channel)).toContain('app:quitConfirmDisabled')
+    })
+
+    it('Cancel (and Esc, which answers cancelId) keeps the app running', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      dialogState.response = 1
+      expect(closeLastWindow()).toHaveBeenCalled()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(dialogState.syncPrompts).toHaveLength(1)
+      expect(appState.quits).toBe(0)
+      expect(appState.exits).toEqual([])
+      expect(windowSends.map(([channel]) => channel)).not.toContain('app:quitConfirmDisabled')
+    })
+
+    it('a window that is not on screen is not the parent', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      closeLastWindow()
+      await vi.waitFor(() => expect(appState.quits).toBe(1))
+      expect(dialogState.syncPrompts[0]!.parent).toBeNull()
+    })
+
+    it('a quit asked from before-quit uses the same prompt, on the visible window', { timeout: 60_000 }, async () => {
+      const { beforeQuit } = await bootLastWindow()
+      const preventDefault = vi.fn()
+      await beforeQuit({ preventDefault })
+      expect(preventDefault).toHaveBeenCalled()
+      expect(appState.quits).toBe(1)
+      expect(dialogState.syncPrompts).toHaveLength(1)
+      expect(dialogState.syncPrompts[0]!.parent).toMatchObject({ id: 1 })
     })
   })
 })
