@@ -32,6 +32,7 @@ import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMi
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
 import { editorOpenParamsForAbsolutePath } from './plugins/editorNativeCapability'
 import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
+import { createQuitDeadline, describeWindowUrl } from './quit-deadline'
 import { dockSurfaceProvided } from './dockSurfaceProvider'
 import {
   handlePluginFrameAssetRequest,
@@ -345,6 +346,7 @@ let quitTeardownRan = false
 // Every path that cancels a quit undoes it through this one reset.
 const resetCancelledQuit = createQuitCancelReset({
   clearQuitFlags: () => {
+    quitDeadline.disarm()
     dockQuitInProgress = false
     quitForced = false
     quittingWindowsPrepared = false
@@ -356,6 +358,7 @@ const resetCancelledQuit = createQuitCancelReset({
   takeTeardownRan: () => {
     const ran = quitTeardownRan
     quitTeardownRan = false
+    quitBackendStop = null
     return ran
   },
   restartBackend: () => restartBackendNow(),
@@ -386,6 +389,44 @@ const quitCancelWatch = createQuitCancelWatch({
         detail: quitConfirm.cancelledDetail.replace('{windows}', windows),
       })
     })().catch(() => undefined)
+  },
+})
+// Every window as the quit trace logs it: id, visibility and the URL reduced to
+// its path tail and query keys (values can carry workspace paths).
+// Best effort: the trace must never be what breaks a quit.
+function describeWindowsForQuitTrace(): string {
+  try {
+    const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed())
+    if (windows.length === 0) return 'windows=0'
+    return `windows=${windows.length} ` + windows
+      .map((w) => `#${w.id}:${w.isVisible() ? 'visible' : 'hidden'}:${describeWindowUrl(w.webContents.getURL())}`)
+      .join(' ')
+  } catch {
+    return 'windows=?'
+  }
+}
+// One main.log line per quit stage, so a quit that stalls leaves a trace of
+// how far it got (a packaged Windows run showed none at all).
+function traceQuit(stage: string, detail = ''): void {
+  quitDeadline.stage(stage)
+  infoMain(`[main] quit-trace ${stage}${detail ? ` ${detail}` : ''}`)
+}
+// Generous on purpose: the teardown's own capped waits add up to about 15s, so
+// only a quit that is genuinely stuck reaches this.
+const QUIT_DEADLINE_MS = 30_000
+// Backstop for a confirmed quit that never reaches 'quit' (see quit-deadline.ts).
+const quitDeadline = createQuitDeadline({
+  timeoutMs: QUIT_DEADLINE_MS,
+  onExpired: (stage) => {
+    warnMain(`[main] quit stalled at "${stage}" for ${QUIT_DEADLINE_MS}ms; ${describeWindowsForQuitTrace()}; stopping the backends and exiting`)
+    void (async () => {
+      try {
+        await stopBackendsForQuit()
+      } catch (err) {
+        errorMain('[main] stopping the backends for a stalled quit failed', err)
+      }
+      app.exit(0)
+    })()
   },
 })
 // True while the quit confirmation dialog is on screen, so a second close
@@ -6712,6 +6753,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  traceQuit('window-all-closed')
   if (!isMac()) app.quit()
 })
 
@@ -6724,6 +6766,9 @@ app.on('window-all-closed', () => {
 // Cmd+Q, so the close participants get their say before anything is torn
 // down; `quitConfirmed` skips the prompt there and lets the windows close.
 app.on('browser-window-created', (_event, win) => {
+  // A window that appears while a quit is closing them all keeps that quit
+  // from finishing; say so in the quit trace.
+  if (quitConfirmed || dockQuitInProgress) traceQuit('window-created-during-quit', `#${win.id}`)
   win.on('close', (e) => {
     guardLastWindowClose(e, {
       liveWindows: () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed()).length,
@@ -6734,6 +6779,8 @@ app.on('browser-window-created', (_event, win) => {
       quit: () => {
         quitConfirmed = true
         dockQuitInProgress = true
+        quitDeadline.arm('confirmed-on-last-window-close')
+        traceQuit('confirmed-on-last-window-close', describeWindowsForQuitTrace())
         app.quit()
       },
     })
@@ -6764,7 +6811,24 @@ const PLUGIN_BACKEND_STOP_WAIT_MS = 6000
 const SETTINGS_FLUSH_GRACE_MS = 250
 
 async function teardownBackendAndQuit(): Promise<void> {
+  await stopBackendsForQuit()
+  broadcastQuitStage('closing')
+  traceQuit('teardown-done', describeWindowsForQuitTrace())
+  app.quit()
+}
+
+// The teardown up to the native quit, shared with the stalled-quit backstop so
+// it runs once per quit: a backstop that fires mid-teardown waits for the one
+// already running instead of stopping the backend a second time.
+let quitBackendStop: Promise<void> | null = null
+function stopBackendsForQuit(): Promise<void> {
+  quitBackendStop ??= runQuitBackendStop()
+  return quitBackendStop
+}
+
+async function runQuitBackendStop(): Promise<void> {
   quitTeardownRan = true
+  traceQuit('teardown-start', `backend=${backend ? 'up' : 'none'} starting=${backendStarting ? 'yes' : 'no'}`)
   // Put the shutdown screen up before anything below can block: the waits here
   // run into seconds, and the windows stay on screen for all of it.
   broadcastQuitStage('saving')
@@ -6797,19 +6861,27 @@ async function teardownBackendAndQuit(): Promise<void> {
   // is not in that set: its handle owns the process, and `stop()` below is what
   // takes that one down.
   abandonPendingBackends()
+  traceQuit('teardown-backend-stop')
   if (b) await withDeadline(b.stop(), BACKEND_STOP_WAIT_MS)
+  traceQuit('teardown-plugin-backends-stop')
   await withDeadline(
     frontendPluginManager.closeBackendPlugins(),
     PLUGIN_BACKEND_STOP_WAIT_MS,
   )
-  broadcastQuitStage('closing')
-  app.quit()
 }
 
 // Not on will-quit: a will-quit listener can still prevent the quit, and only
 // 'quit' follows when none did. Disposing takes the services' IPC listeners
 // down for good, so it waits for the same signal.
+app.on('will-quit', () => traceQuit('will-quit'))
+app.on('render-process-gone', (_event, contents, details) => {
+  if (quitConfirmed || dockQuitInProgress) {
+    traceQuit('renderer-gone-during-quit', `${describeWindowUrl(contents.getURL())} reason=${details.reason}`)
+  }
+})
 app.on('quit', () => {
+  traceQuit('quit')
+  quitDeadline.disarm()
   quitCancelWatch.disarm()
   terminalStorageOwnerService.dispose()
   filePickerHostService.dispose()
@@ -6834,10 +6906,15 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
   quitPromptOpen = true
   quitPromptWindow = win
   quitPromptAbort = abort
+  // The user is being asked: none of this counts against a quit deadline.
+  const releaseDeadline = quitDeadline.hold()
+  traceQuit('prompt-open', win && !win.isDestroyed() ? `parent=#${win.id}` : 'parent=none')
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    traceQuit('prompt-answered', `response=${res.response} aborted=${abort.signal.aborted}`)
   } finally {
+    releaseDeadline()
     quitPromptOpen = false
     quitPromptWindow = undefined
     quitPromptAbort = undefined
@@ -6881,6 +6958,7 @@ app.on('ready', () => {
 })
 
 app.on('before-quit', async (e) => {
+  traceQuit('before-quit', `confirmed=${quitConfirmed} prepared=${quittingWindowsPrepared} preparing=${quittingWindowsPreparation ? 'yes' : 'no'} forced=${quitForced} ${describeWindowsForQuitTrace()}`)
   // Confirmation gate — shared "confirm before close" setting, driven by renderer.
   if (quitConfirm.enabled && !quitConfirmed) {
     e.preventDefault()
@@ -6891,9 +6969,14 @@ app.on('before-quit', async (e) => {
       return
     }
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    if (!(await askQuitConfirm(win))) return // cancelled — stay open (default already prevented)
+    if (!(await askQuitConfirm(win))) {
+      traceQuit('prompt-cancelled')
+      return // cancelled — stay open (default already prevented)
+    }
     quitConfirmed = true
     dockQuitInProgress = true
+    quitDeadline.arm('confirmed-on-quit')
+    traceQuit('confirmed-on-quit')
     // Re-enter through the normal path so receiver/provider preparation runs
     // before any backend shutdown.
     app.quit()
@@ -6909,10 +6992,16 @@ app.on('before-quit', async (e) => {
     const windows = BrowserWindow.getAllWindows()
     if (windows.some((window) => frontendPluginManager.hasWindowCloseParticipants(window))) {
       e.preventDefault()
+      traceQuit('prepare-windows-start')
+      // A plugin may ask the user whether to save here: that wait is theirs,
+      // not a stalled quit, so it does not count against the deadline.
+      const releaseDeadline = quitDeadline.hold()
       quittingWindowsPreparation = windowCloseCoordinator.prepareForQuit(windows, { forced: quitForced }).finally(() => {
         quittingWindowsPreparation = null
+        releaseDeadline()
       })
       const prepared = await quittingWindowsPreparation
+      traceQuit('prepare-windows-done', `prepared=${prepared}`)
       if (!prepared) {
         // A forced quit that landed while a user quit was being prepared: run
         // the quit again, this time through the forced preparation.
@@ -6941,9 +7030,11 @@ app.on('before-quit', async (e) => {
   // and in-flight calls - so a packaged launch that merely registered the bundled
   // Plans backend as metadata no longer keeps this guard permanently false.
   if (!backend && !backendStarting && !frontendPluginManager.hasBackendActivity()) {
+    traceQuit('native-quit', describeWindowsForQuitTrace())
     quitCancelWatch.arm()
     return
   }
   e.preventDefault()
+  traceQuit('teardown-queued')
   void teardownBackendAndQuit()
 })
