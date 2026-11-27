@@ -278,6 +278,7 @@ declare global {
         quitLabel: string
         cancelLabel: string
         dontShowLabel: string
+        quitDontAskLabel: string
         cancelledMessage: string
         cancelledDetail: string
         cancelledUnknownWindow: string
