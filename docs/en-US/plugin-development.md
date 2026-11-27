@@ -5,7 +5,7 @@
 > listing outside this repository, with the SDK installed from the
 > `plugin-packages` GitHub Release. This page is the legacy Manifest v1
 > reference: its quick starts build inside a Navide checkout
-> (`src/renderer/plugins/`, `pnpm dev`), which only Navide's own maintainers
+> (`src/renderer/plugins/`, `bun run dev`), which only Navide's own maintainers
 > need.
 
 > **Current runtime (manifest v1 and v2).** This guide documents the manifest
@@ -555,7 +555,7 @@ environment variables cannot provide or replace this packaged pin.
 
 ## Local development
 
-In a development build (`pnpm dev`), set `AGENT_TEAM_PLUGIN_DEV=1` to expose
+In a development build (`bun run dev`), set `AGENT_TEAM_PLUGIN_DEV=1` to expose
 the plugin dev menu, which registers dev descriptors pointing at local build
 output and adds entries for the `noop` and `fs_probe` probe plugins. Packaged
 builds ignore `AGENT_TEAM_PLUGIN_DEV` and `AGENT_TEAM_PLUGIN_DEV_PATH`; a

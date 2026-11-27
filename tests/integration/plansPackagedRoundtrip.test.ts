@@ -322,7 +322,7 @@ const packagedFixture = join(process.cwd(), 'dist-test-fixtures/plans/backend/na
 const packagedFixtureEnabled = process.env.NAVIDE_TEST_PACKAGED_PLANS === '1'
 if (packagedFixtureEnabled && !existsSync(packagedFixture)) {
   throw new Error(
-    `NAVIDE_TEST_PACKAGED_PLANS=1 requires the packaged fixture at ${packagedFixture}; run pnpm run build:plans:fixture first.`,
+    `NAVIDE_TEST_PACKAGED_PLANS=1 requires the packaged fixture at ${packagedFixture}; run bun run build:plans:fixture first.`,
   )
 }
 

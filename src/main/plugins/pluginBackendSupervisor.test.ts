@@ -60,7 +60,7 @@ const packagedFixtures = [
   ['Go', join(process.cwd(), 'dist-test-fixtures/plans/backend/navide-plans-go')],
 ] as const
 if (packagedFixtureEnabled && packagedFixtures.some(([, entryFile]) => !existsSync(entryFile))) {
-  throw new Error('NAVIDE_TEST_PACKAGED_PLANS=1 requires both packaged Plans fixtures; run pnpm run build:plans:fixture first.')
+  throw new Error('NAVIDE_TEST_PACKAGED_PLANS=1 requires both packaged Plans fixtures; run bun run build:plans:fixture first.')
 }
 const packagedBackendEnvironment: Record<string, string> = {}
 for (const key of ['TMPDIR', 'TEMP', 'TMP'] as const) {

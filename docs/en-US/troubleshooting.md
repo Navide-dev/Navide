@@ -4,16 +4,18 @@ English | [繁體中文](../zh-TW/troubleshooting.md) | [日本語](../ja-JP/tro
 
 ## The app does not start
 
-1. Confirm Node.js 22.12+ (22.x), pnpm 10+, Python 3.12+, and uv 0.11+.
+1. Confirm Bun (the version pinned in `.bun-version`), Python 3.12+, and uv 0.11+.
 2. Reinstall locked dependencies:
 
    ```bash
-   pnpm install --frozen-lockfile
+   bun install --frozen-lockfile
    uv --project backend sync --locked
    ```
 
-3. Start from a terminal with `pnpm dev` and inspect the first backend or Electron error.
-4. Run `pnpm typecheck` to distinguish environment problems from source errors.
+3. Start from a terminal with `bun run dev` and inspect the first backend or Electron error.
+4. Run `bun run typecheck` to distinguish environment problems from source errors.
+5. If `node_modules` was ever installed with pnpm or npm as well, delete it and run `bun install --frozen-lockfile` again; do not mix `bun install` and `pnpm install` in one `node_modules`.
+6. If a frontend test run looks wrong, check that you ran `bun run test:run`: bare `bun test` runs Bun's own test runner instead of Vitest.
 
 ## Backend health stays unavailable
 

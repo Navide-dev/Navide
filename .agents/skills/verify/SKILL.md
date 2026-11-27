@@ -42,5 +42,6 @@ it must return in ms, not after the walks.
 ## Frontend / Electron UI
 
 Never drive the UI (no cliclick/screencapture/AppleScript — repo rule).
-Verify renderer logic at the unit level, then hand the user concrete manual
-steps: which pane to open, what to click, what they should see.
+Verify renderer logic at the unit level (`bun run test:run <files>` — never
+bare `bun test`, which runs Bun's own runner instead of Vitest), then hand the
+user concrete manual steps: which pane to open, what to click, what they should see.
