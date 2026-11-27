@@ -337,6 +337,15 @@ describe('0.2.50 — the formatted view, the Telegram proxy stall, the privacy p
     expect(en).toContain('Copy button')
     expect(en).toContain('system proxy settings')
     expect(en).toContain('dl.navide.dev')
+    expect(en).toContain('resets Nov 28 at 9pm')
+    expect(en).toContain('overflow queue')
+    expect(en).toContain('Resend is renamed Requeue')
+    expect(en).toContain('every 10 minutes')
+    const zh = entry!.highlights.map((text) => text['zh-TW']).join('\n')
+    expect(zh).toContain('候補佇列')
+    expect(zh).toContain('［切換帳號並送出］和［查看分格］')
+    expect(zh).toContain('「排回佇列」')
+    expect(zh).toContain('［繼續］')
   })
 
   it('ends with the known limitations', () => {
