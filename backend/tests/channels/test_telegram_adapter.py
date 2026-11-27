@@ -199,8 +199,80 @@ async def test_auth_failure_blocks_and_stops(api: FakeBotApi, code: int) -> None
     await ad.start(emit)
     await _until(lambda: ad.status.lifecycle == "blocked")
     await asyncio.sleep(0.2)
-    assert len(api.calls_of("getMe")) == 1  # no retry after a dead token
+    assert len(api.calls_of("getMe")) == 1  # no retry before the next token check
+    assert ad.status.blocked_at is not None and ad.status.next_auth_check_at is not None
     await ad.stop()
+
+
+async def test_a_blocked_bot_checks_the_token_again_and_resumes(api: FakeBotApi) -> None:
+    # Rejected at start and at the first check; the second check answers.
+    api.fail("getMe", 401, "Unauthorized", times=2)
+    got: list[InboundMessage] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=lambda a, r: 0.05, poll_timeout_s=1,
+                         auth_recheck_s=0.3)
+    await ad.start(emit)
+    try:
+        await _until(lambda: ad.status.lifecycle == "blocked")
+        blocked_at = ad.status.blocked_at
+        assert blocked_at is not None and ad.status.recovered_at is None
+        assert ad.status.next_auth_check_at is not None and ad.status.next_auth_check_at > blocked_at
+        assert "401" in ad.status.last_error and TOKEN not in ad.status.last_error
+        await _until(lambda: len(api.calls_of("getMe")) == 2)
+        assert ad.status.lifecycle == "blocked" and ad.status.blocked_at == blocked_at
+        api.push_message(chat_id=42, text="back")
+        await _until(lambda: got)
+        assert ad.status.lifecycle == "ready" and ad.status.last_error == ""
+        assert ad.status.blocked_at is None and ad.status.next_auth_check_at is None
+        assert ad.status.recovered_at is not None and ad.status.recovered_at >= blocked_at
+    finally:
+        await ad.stop()
+
+
+async def test_a_token_rejected_mid_session_blocks_then_resumes(api: FakeBotApi) -> None:
+    api.fail("getUpdates", 401, "Unauthorized")
+    got: list[InboundMessage] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=lambda a, r: 0.05, poll_timeout_s=1,
+                         auth_recheck_s=0.3)
+    await ad.start(emit)
+    try:
+        await _until(lambda: ad.status.lifecycle == "blocked")
+        api.push_message(chat_id=42, text="after")
+        await _until(lambda: got)
+        assert ad.status.lifecycle == "ready" and ad.status.recovered_at is not None
+    finally:
+        await ad.stop()
+
+
+async def test_a_network_failure_during_the_token_check_stays_blocked(api: FakeBotApi) -> None:
+    api.fail("getMe", 401, "Unauthorized")
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=lambda a, r: 0.05, poll_timeout_s=1,
+                         auth_recheck_s=0.2)
+    real_call = ad._call
+    checks: list[str] = []
+
+    async def call(method, params=None, timeout=None):
+        if method == "getMe" and ad.status.lifecycle == "blocked" and len(checks) < 2:
+            checks.append(method)
+            raise httpx.ConnectError("network down")
+        return await real_call(method, params, timeout)
+
+    ad._call = call  # type: ignore[method-assign]
+    await ad.start(_noop)
+    try:
+        await _until(lambda: len(checks) == 2)
+        assert ad.status.lifecycle == "blocked" and "401" in ad.status.last_error
+        await _until(lambda: ad.status.lifecycle == "ready")
+        assert ad.status.blocked_at is None
+    finally:
+        await ad.stop()
 
 
 async def test_429_on_send_honours_retry_after(api: FakeBotApi) -> None:

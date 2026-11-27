@@ -29,6 +29,11 @@ export interface ChannelStatus {
   display_name?: string
   /** Telegram only: Bot Management Mode is on, so this bot can create bots (getMe). */
   can_manage_bots?: boolean
+  /** Telegram only: the token was rejected (epoch seconds), and when getMe is asked
+   *  again; both clear once it works, and recovered_at says when that was. */
+  blocked_at?: number | null
+  next_auth_check_at?: number | null
+  recovered_at?: number | null
 }
 
 export interface ChannelCapabilities {
