@@ -871,6 +871,8 @@ class Attribution:
         owner = self._session_owner.get(usage.session_id) if usage.session_id else None
         owner_reg = self._panes.get(owner) if owner else None
         owner_ws = owner_reg.workspace_path if owner_reg is not None else None
+        if usage.vendor == "claude":
+            self._fill_missing_claude_dirs()
         claude_hits: list[str] = []
         for ws_path, mapping in self._workspaces.items():
             # Migrated vendors answer through their reader; None falls to the
@@ -893,6 +895,30 @@ class Attribution:
                 ):
                     claude_hits.append(ws_path)
         return self._pick_claude_workspace(usage, claude_hits, owner_ws)
+
+    def _fill_missing_claude_dirs(self) -> None:
+        """Give claude_dir to workspaces registered before the projects root existed.
+
+        On a fresh install the root (~/.claude/projects) is created by the first
+        Claude pane, after its workspace registered, so register_workspace found
+        no root and left claude_dir empty. Until a later re-registration, every
+        event of that first pane matched no workspace and was dropped. Caller
+        holds the lock; once every mapping has a claude_dir this is one scan of
+        the workspace dict.
+        """
+        missing = [m for m in self._workspaces.values() if not m.claude_dir]
+        if not missing or "claude" not in self._readers:
+            return
+        roots = self._readers["claude"].project_dirs()
+        if not roots:
+            return
+        for mapping in missing:
+            mapping.claude_dir = str(roots[0] / encode_claude_cwd(mapping.workspace_path))
+            log.info(
+                "registered workspace=%s claude_dir=%s (projects root appeared)",
+                mapping.workspace_path, mapping.claude_dir,
+            )
+        self._save_workspaces()
 
     def _pick_claude_workspace(
         self, usage: TokenUsage, hits: list[str], owner_ws: str | None
