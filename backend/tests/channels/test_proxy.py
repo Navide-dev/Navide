@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+import threading
 from typing import Any
 
 import httpx
@@ -77,6 +78,27 @@ async def test_a_fixed_proxy_keeps_its_priority(monkeypatch: pytest.MonkeyPatch)
     assert await proxy.resolve("https://api.telegram.org/") is proxy.DEFAULT
     assert await proxy.ws_proxy("wss://example.org/") is True
     assert asked == []
+
+
+async def test_the_system_proxy_settings_are_read_off_the_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    # On macOS getproxies() and proxy_bypass() query SystemConfiguration; read on
+    # the loop, they showed up in event-loop stall stacks under every Telegram call.
+    loop_thread = threading.get_ident()
+    seen: list[int] = []
+
+    def getproxies() -> dict[str, str]:
+        seen.append(threading.get_ident())
+        return {}
+
+    def proxy_bypass(host: str) -> bool:
+        seen.append(threading.get_ident())
+        return False
+
+    monkeypatch.setattr(proxy.urllib.request, "getproxies", getproxies)
+    monkeypatch.setattr(proxy.urllib.request, "proxy_bypass", proxy_bypass)
+    _host_answers(monkeypatch, "DIRECT", [])
+    assert await proxy.resolve("https://api.telegram.org/") is None
+    assert seen and loop_thread not in seen
 
 
 async def test_a_no_proxy_host_is_left_to_the_library(monkeypatch: pytest.MonkeyPatch) -> None:
