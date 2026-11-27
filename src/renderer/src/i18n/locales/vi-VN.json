@@ -394,6 +394,7 @@
     "hold-busy": "Đích chưa sẵn sàng nhận",
     "hold-paused": "Việc gửi đang tạm dừng",
     "hold-behind": "Đang xếp hàng — số tin nhắn phía trước: {n}",
+    "hold-queue-full": "Hàng đợi đã đầy — đang chờ ở hàng đợi dự phòng, còn {n} tin phía trước",
     "hold-gone": "Pane đích không còn tồn tại",
     "hold-not-ready": "Pane đích không chạy",
     "hold-starting": "Pane đích vẫn đang khởi động",

@@ -394,6 +394,7 @@
     "hold-busy": "目标尚未就绪，无法接收",
     "hold-paused": "投递已暂停",
     "hold-behind": "前面还有 {n} 则消息",
+    "hold-queue-full": "队列已满，先放在候补队列（前面还有 {n} 条）",
     "hold-gone": "目标分格已不存在",
     "hold-not-ready": "目标分格未在运行",
     "hold-starting": "目标分格仍在启动中",

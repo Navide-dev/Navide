@@ -77,13 +77,19 @@ UNLINK_WORDS = {"/unlink"}
 UNLINK_CONFIRM_CALLBACK = "nv4:unlink-yes"
 UNLINK_CONFIRM_WORDS = {"/unlink_confirm"}
 UNLINK_KEEP_CALLBACK = "nv4:unlink-keep"
+# The queue-full notice's two buttons: switch the pane to an account with quota left
+# (the quota failover's own ranking) so what is queued goes out, or show the pane.
+QUEUE_SWITCH_CALLBACK = "nv4:qswitch"
+STATUS_CALLBACK = "nv4:status"
+QUEUE_SWITCH_WORDS = {"/switch_send"}
 # Typed bare on Mattermost, as MATTERMOST_WAKE_WORD is.
 _MATTERMOST_BARE = {WAKE_CALLBACK, FRESH_CALLBACK, UNLINK_CALLBACK, UNLINK_CONFIRM_CALLBACK}
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
                       PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
                       WAKE_CALLBACK: "/wake", model_menu.OPEN_CALLBACK: "/model",
                       account_menu.OPEN_CALLBACK: "/account", FRESH_CALLBACK: "/wake_new",
-                      UNLINK_CALLBACK: "/unlink", UNLINK_CONFIRM_CALLBACK: "/unlink_confirm"}
+                      UNLINK_CALLBACK: "/unlink", UNLINK_CONFIRM_CALLBACK: "/unlink_confirm",
+                      QUEUE_SWITCH_CALLBACK: "/switch_send", STATUS_CALLBACK: "/status"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -154,6 +160,7 @@ MENU_MOVED_BUTTONS = [("💬 Prompts", PROMPTS_CALLBACK), ("🧩 Skills", SKILLS
 # Where a platform has no buttons, the reply names the commands they stand for.
 MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
+QUEUE_FULL_BUTTONS = [("🔄 切換帳號並送出", QUEUE_SWITCH_CALLBACK), ("🔎 查看分格", STATUS_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
 MSG_BOUND_NEEDS_APPROVAL = "⚠️ 已連接 pane「{name}」，但這個聊天室的傳送者要先核准，訊息才會送進 pane。{how}"
@@ -164,7 +171,9 @@ MSG_LOGIN_PANE = "這個 pane 正在登入 CLI 帳號，畫面上有授權網址
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_NOT_DELIVERED = "⚠️ 訊息沒有送進分格「{name}」（{reason}）"
-MSG_RESEND_EXPIRED = "⚠️ 這個重送按鈕已失效，請重新傳送訊息"
+MSG_RESEND_EXPIRED = "⚠️ 這個排回佇列按鈕已失效，請重新傳送訊息"
+MSG_QUEUE_OVERFLOW = "⚠️ 分格「{name}」的排隊已滿，這則先放進候補佇列，不會丟掉；分格空出來就會送進去"
+MSG_SWITCH_NO_HEADROOM = "⚠️ 沒有還有額度的帳號可以切換，排隊中的訊息會等分格空出來再送"
 MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_READING_REPLY = "✅ 完成，正在送出回覆…"
@@ -339,6 +348,9 @@ class Seams:
     # email?}, quota?: {window, used_percent, resets_at, stale}}; {} when unknown. One window
     # probe plus cached reads, never a quota fetch; a sign-in pane's texts are left out
     pane_card: Callable[[str], Awaitable[dict[str, Any]]] = lambda _p: _no_card()
+    # agent_key -> the quota failover's ranked accounts (quota_failover.candidates): rows of
+    # {slotId, excluded, ...}, eligible first; [] when unknown. Never a quota fetch
+    failover_candidates: Callable[[str], Awaitable[list[dict[str, Any]]]] = lambda _a: _no_rows()
 
 
 async def _no_card() -> dict[str, Any]:
@@ -2384,6 +2396,10 @@ class ChannelManager:
             self._not_to_pane(msg, "a resume")
             await self._resume(msg, pane_id)
             return
+        if _command_word(command) in QUEUE_SWITCH_WORDS:
+            self._not_to_pane(msg, "a switch-and-send")
+            await self._switch_and_send(msg, pane_id)
+            return
         model_cmd = model_menu.parse_command(command)
         if model_cmd is not None:
             self._not_to_pane(msg, "a model command")
@@ -3122,6 +3138,54 @@ class ChannelManager:
         result = await self._seams.resume(pane_id)
         await self._reply(msg, MSG_RESUMED if result.get("ok") else f"⚠️ 恢復失敗：{result.get('error') or 'unknown'}")
 
+    async def _switch_and_send(self, msg: InboundMessage, pane_id: str) -> None:
+        """The queue-full notice's switch button: move the pane to the account the quota
+        failover ranks first, through the same switch /account makes (same window checks,
+        same audit), so the pane's queued messages go out on that account."""
+        lang = prompt_skills.language(await self._ui_settings())
+        info = await self._seams.account_menu(pane_id)
+        status = str(info.get("status") or "")
+        if status == "unsupported":
+            agent = str(info.get("agentKey") or self._seams.pane_agent(pane_id) or "?")
+            await self._reply(msg, account_menu.text(lang, "unsupported", agent=agent))
+            return
+        if status != "ok":
+            await self._reply(msg, account_menu.text(lang, "no_window"))
+            return
+        rows = [account_menu.AccountRow.from_window(r) for r in info.get("rows") or [] if isinstance(r, dict)]
+        if len(rows) < 2:
+            await self._reply(msg, account_menu.text(lang, "no_accounts"))
+            return
+        fixed = info.get("fixedCount")
+        menu = self.accounts.create(
+            location_key=msg.location_key(), sender_id=msg.sender_id, lang=lang,
+            agent_key=str(info.get("agentKey") or ""), active_id=str(info.get("activeId") or account_menu.DEFAULT_ID),
+            rows=rows, fixed_count=fixed if isinstance(fixed, int) and not isinstance(fixed, bool) else 0,
+        )
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if self._kind_at(loc) != "direct":
+            # As /account: a group chat sees the accounts, never switches them.
+            self.accounts.close(menu)
+            await self._reply(msg, redact.redact_text(self.accounts.body(menu, group=True)))
+            return
+        try:
+            ranked = await self._seams.failover_candidates(menu.agent_key)
+        except Exception as exc:  # noqa: BLE001 — answered as nobody eligible
+            log.info("channels: ranking accounts for %s failed: %s", pane_id, exc)
+            ranked = []
+        offered = {r.id for r in rows}
+        target = next((str(c.get("slotId")) for c in ranked
+                       if c.get("excluded") is None and str(c.get("slotId")) in offered
+                       and str(c.get("slotId")) != menu.active_id), "")
+        if not target:
+            self.accounts.close(menu)
+            await self._reply(msg, MSG_SWITCH_NO_HEADROOM)
+            return
+        await self._account_switch(msg, pane_id, menu, target)
+        if self._seams.pane_state(pane_id).get("display_status") == "stopped":
+            # A stopped pane would go on holding what is queued on the new account too.
+            await self._seams.resume(pane_id)
+
     async def _cancel_queued(self, msg: InboundMessage) -> None:
         """``/cancel``: withdraw what this chat sent that has not gone into a pane yet."""
         withdrawn = 0
@@ -3320,7 +3384,9 @@ class ChannelManager:
         queued = self._queued.setdefault(pane_id, set())
         if len(queued) >= MAX_QUEUED_PER_PANE:
             log.info("channels: %s -> pane %s: not delivered: queue full", _loc_log(msg), pane_id)
-            await self._reply(msg, MSG_QUEUE_FULL)
+            buttons = [*QUEUE_FULL_BUTTONS, *([self.resend_buttons.button(msg.location_key(), msg.text)]
+                                              if msg.text else [])]
+            await self._reply(msg, MSG_QUEUE_FULL, buttons=buttons)
             return False
         now = self._clock()
         sends = [t for t in self._chat_sends.get((pane_id, msg.sender_id), []) if now - t < CHAT_RATE_WINDOW_S]
@@ -4555,6 +4621,7 @@ class ChannelManager:
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
         started = self._clock()
         held_notice = False
+        overflow_notice = False
         try:
             while True:
                 verdict = await self._seams.await_verdict(msg_key, VERDICT_POLL_S)
@@ -4570,15 +4637,25 @@ class ChannelManager:
                         # say which one dropped it (inject-failed 2026-11-15).
                         text = MSG_NOT_DELIVERED.format(name=self._pane_name(pane_id),
                                                         reason=verdict.get("reason") or "failed")
-                        buttons = [self.resend_buttons.button(*resend)] if resend and resend[1] else None
-                        await self._notice(adapter, pending.loc, text, buttons=buttons)
+                        buttons = [self.resend_buttons.button(*resend)] if resend and resend[1] else []
+                        if verdict.get("reason") == "queue-full":
+                            buttons = [*QUEUE_FULL_BUTTONS, *buttons]
+                        await self._notice(adapter, pending.loc, text, buttons=buttons or None)
                     return
                 age = self._clock() - started
                 hold = (verdict.get("hold") or {}).get("key") or ""
+                if adapter is not None and hold == "queue-full" and not overflow_notice:
+                    # Kept past the window's queue cap rather than refused: said once.
+                    overflow_notice = True
+                    await self._notice(adapter, pending.loc, MSG_QUEUE_OVERFLOW.format(name=self._pane_name(pane_id)),
+                                       buttons=QUEUE_FULL_BUTTONS)
                 if adapter is not None and not held_notice:
                     if hold in HOLD_FAILURE_KEYS and age >= HOLD_FAILURE_AFTER_S:
                         held_notice = True
-                        await self._notice(adapter, pending.loc, f"⚠️ pane 目前無法接收訊息（{hold}），訊息仍在排隊")
+                        # A pane a person stopped holds its queue on purpose; the chat can lift it.
+                        stopped = self._seams.pane_state(pane_id).get("display_status") == "stopped"
+                        await self._notice(adapter, pending.loc, f"⚠️ pane 目前無法接收訊息（{hold}），訊息仍在排隊",
+                                           buttons=RESUME_BUTTONS if stopped else None)
                     elif age >= HELD_NOTICE_AFTER_S:
                         held_notice = True
                         await self._notice(adapter, pending.loc, f"⚠️ 訊息已排隊超過 {int(age // 60)} 分鐘（{hold or 'queued'}）")

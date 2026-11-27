@@ -394,6 +394,7 @@
     "hold-busy": "Target is not ready to receive",
     "hold-paused": "Delivery is paused",
     "hold-behind": "Waiting in line — messages ahead: {n}",
+    "hold-queue-full": "Queue is full — kept in overflow, messages ahead: {n}",
     "hold-gone": "Target pane no longer exists",
     "hold-not-ready": "Target pane is not running",
     "hold-starting": "Target pane is still starting up",

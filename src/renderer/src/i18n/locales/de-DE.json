@@ -394,6 +394,7 @@
     "hold-busy": "Das Ziel ist nicht empfangsbereit",
     "hold-paused": "Die Zustellung ist pausiert",
     "hold-behind": "Wartet in der Reihe – Nachrichten davor: {n}",
+    "hold-queue-full": "Warteschlange voll — in der Reserve-Warteschlange, Nachrichten davor: {n}",
     "hold-gone": "Der Zielbereich existiert nicht mehr",
     "hold-not-ready": "Der Zielbereich läuft nicht",
     "hold-starting": "Der Zielbereich startet noch",

@@ -18971,6 +18971,8 @@ backend.on('agent_msg.deliver', (raw) => {
     // An MCP caller with no pane: a MSG reply to it would bounce (hasReplyRoute).
     noReplyRoute: !hasReplyRoute(ev),
     ...(ev.submit === false ? { prefill: true } : {}),
+    // A chat line past the queue cap waits in overflow instead of failing.
+    ...(ev.origin === 'channel' ? { overflow: true } : {}),
   })
   if (!accepted) return
   // Say where the instruction came from — another machine, a chat channel or

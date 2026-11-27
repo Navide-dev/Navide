@@ -394,6 +394,7 @@
     "hold-busy": "O destino não está pronto para receber",
     "hold-paused": "A entrega está pausada",
     "hold-behind": "Aguardando na fila – mensagens à frente: {n}",
+    "hold-queue-full": "Fila cheia — na fila reserva, mensagens à frente: {n}",
     "hold-gone": "O pane de destino não existe mais",
     "hold-not-ready": "O pane de destino não está em execução",
     "hold-starting": "O pane de destino ainda está iniciando",

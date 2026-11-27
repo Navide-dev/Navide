@@ -351,6 +351,15 @@ def default_seams() -> Seams:
         result = reply.get("result")
         return result if isinstance(result, dict) else {"status": "no-window"}
 
+    async def failover_candidates(agent_key: str) -> list[dict[str, Any]]:
+        # The ranking an automatic failover uses; reads cached snapshots and the vault only.
+        from .. import app
+
+        engine = getattr(app, "quota_failover", None)
+        if engine is None or not agent_key:
+            return []
+        return await engine.candidates(agent_key)
+
     async def switch_account(pane_id: str, profile_id: str, from_id: str, who: str,
                              on_settled: Any = None) -> dict[str, Any]:
         # The shared no-confirm switch (mcp_server request_account_switch): the same as a
@@ -443,6 +452,7 @@ def default_seams() -> Seams:
         turn_text=turn_text,
         is_login_pane=login_panes.is_login_pane, pane_model=pane_model, set_model=set_model,
         account_menu=account_menu, switch_account=switch_account, pane_card=pane_card,
+        failover_candidates=failover_candidates,
     )
 
 
