@@ -23,7 +23,7 @@ vi.mock('../shared/osplat', async (importOriginal) => {
 })
 // app.quit() re-emits before-quit in Electron; here the test drives that
 // re-entry itself, so only count the calls.
-const appState = vi.hoisted(() => ({ quits: 0 }))
+const appState = vi.hoisted(() => ({ quits: 0, exits: [] as number[] }))
 // index.ts runs the Linux keyring preflight at import; never spawn dbus-send here.
 vi.mock('./linuxKeyring', () => ({ applyLinuxKeyringPreflight: () => false }))
 // The fake window below is never registered as a Navide window (whenReady never
@@ -61,6 +61,7 @@ vi.mock('electron', () => {
     once: () => {},
     setName: () => {},
     quit: () => { appState.quits++ },
+    exit: (code: number) => { appState.exits.push(code) },
     // Never resolves: no window, no backend — the state this fast path is for.
     whenReady: () => new Promise(() => {}),
     requestSingleInstanceLock: () => true,
@@ -562,6 +563,85 @@ describe('the last window closing quits like Cmd+Q (Linux, Windows)', () => {
     expect(backendState.events).toEqual(['quit stage saving', 'quit stage stopping', 'quit stage closing'])
     expect(markCleanExit).toHaveBeenCalled()
     expect(appQuitting()).toBe(true)
+  })
+
+  // Windows 0.2.50 VM: after the prompt said Quit the app never came back to
+  // before-quit — no teardown, no 'quit', the process running with no window.
+  // A confirmed quit that has not reached 'quit' in time stops the backends
+  // itself and exits.
+  describe('a confirmed quit that stalls', () => {
+    beforeEach(() => {
+      appState.exits.length = 0
+      dialogState.hold = false
+    })
+
+    it('stops the backends and exits once the deadline passes', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
+      const closeBackendPlugins = vi.spyOn(frontendPluginManager, 'closeBackendPlugins').mockResolvedValue(undefined as never)
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        closeLastWindow()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(appState.quits).toBe(1)
+        // Electron never re-enters before-quit.
+        await vi.advanceTimersByTimeAsync(29_000)
+        expect(appState.exits).toEqual([])
+        await vi.advanceTimersByTimeAsync(20_000)
+        expect(appState.exits).toEqual([0])
+        expect(backendState.events).toEqual(['quit stage saving', 'quit stage stopping'])
+        expect(closeBackendPlugins).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does nothing once the quit reached quit', { timeout: 60_000 }, async () => {
+      const { closeLastWindow, quit } = await bootLastWindow()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        closeLastWindow()
+        await vi.advanceTimersByTimeAsync(0)
+        quit()
+        await vi.advanceTimersByTimeAsync(120_000)
+        expect(appState.exits).toEqual([])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does nothing when the user chose Cancel', { timeout: 60_000 }, async () => {
+      const { closeLastWindow } = await bootLastWindow()
+      dialogState.response = 1
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        expect(closeLastWindow()).toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(120_000)
+        expect(appState.quits).toBe(0)
+        expect(appState.exits).toEqual([])
+        expect(backendState.events).toEqual([])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('does not count the time a plugin spends asking the user', { timeout: 60_000 }, async () => {
+      const { beforeQuit, closeLastWindow } = await bootLastWindow()
+      const { frontendPluginManager } = await import('./plugins/frontendPluginManager')
+      // The plugin's save question stays on screen.
+      vi.mocked(frontendPluginManager.prepareWindowClose).mockReturnValue(new Promise(() => {}) as never)
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        closeLastWindow()
+        await vi.advanceTimersByTimeAsync(0)
+        void beforeQuit({ preventDefault: vi.fn() })
+        await vi.advanceTimersByTimeAsync(120_000)
+        expect(appState.exits).toEqual([])
+        expect(backendState.events).toEqual([])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })
 
