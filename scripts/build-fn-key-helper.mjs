@@ -3,11 +3,11 @@
 // electron-builder packages it as Contents/Resources/bin/navide-fn-key and
 // signs it with the rest of the app; the main process runs it only while
 // hold-to-talk is bound to fn or a shortcut recorder listens for a new key
-// (see native/fn-key/main.c). A no-op off macOS so `pnpm build` stays one
+// (see native/fn-key/main.c). A no-op off macOS so `bun run build` stays one
 // command everywhere.
 //
 // `--test` also compiles and runs native/fn-key/fn_logic_test.c.
-// `--if-needed` is how `pnpm dev` runs it: skipped when the binary is newer
+// `--if-needed` is how `bun run dev` runs it: skipped when the binary is newer
 // than its sources, and a failed compile only warns — dev still starts, and
 // the voice settings say the helper is missing instead of fn doing nothing.
 
