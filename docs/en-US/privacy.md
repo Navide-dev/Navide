@@ -36,15 +36,11 @@ Depending on enabled features, Navide stores:
 
 Navide does not operate a project telemetry service and does not require a Navide account.
 
-When the Issue 16 production storage integration is enabled, uninstalling a
-plugin removes its local storage after the cleanup step succeeds. A later
-reinstall does not restore that deleted storage. Ordinary third-party
-production plugin calls remain denied until their later grant/context
-integration is enabled. The first-party `navide.git` migration is an explicit
-Host-owned consumer: its Git preferences use the authenticated package and
-workspace storage partitions, and an upgrade can clone the prior active
-snapshot into the new candidate while retaining the old snapshot for
-rollback.
+Uninstalling a Navide plugin removes its local storage after the cleanup step
+succeeds; a later reinstall does not restore it. The bundled Git plugin's
+preferences use the same authenticated package and workspace storage
+partitions, and an upgrade can clone the prior active snapshot into the new
+candidate while retaining the old snapshot for rollback.
 
 ## Private project intelligence
 

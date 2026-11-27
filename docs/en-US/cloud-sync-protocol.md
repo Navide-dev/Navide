@@ -5,8 +5,6 @@ Navide-Server (server) for syncing the four Settings → INTEGRATIONS sections
 across a user's devices. Both sides implement this file; neither invents
 fields on its own.
 
-Approved plan: `.agent-team/plans/cloud-sync-integrations_4d8e63.html`.
-
 ## Shape
 
 Sync rides the existing control-plane link (`server_link.py` →
@@ -99,8 +97,9 @@ env/header values from any bundle it is handed, and the server refuses every
 below describe what clients before 0.2.28 did and are kept for that purge.
 
 The `credentials` scope is, to the server, indistinguishable from the other
-four: same tables, same handlers, same ciphertext-only `body`. What differs is
-on the client (`sync_scopes.CredentialsScope`, flagged `sensitive`):
+four: same tables, same handlers, same ciphertext-only `body`. On the client,
+`credentials` stays in the scope list only so an older switch reads as off; no
+adapter exists. What clients before 0.2.28 did differently:
 
 - `itemId` is `c-` plus 32 random hex characters, minted when a credential is
   first pasted and carried unchanged by every device that imports it. It is
@@ -234,9 +233,7 @@ pusher is not notified of its own write.
 These are **frame** limits wearing item clothing. A push is one WebSocket
 message and the server's `maxPayload` is 1 MiB, so anything larger never
 reaches a handler at all: the socket closes with 1009 and the request never
-resolves. The first version of this table said 1 MiB per body and 4 MiB per
-push, neither of which could ever arrive — the checks for them were dead code
-on both ends. The numbers above sit under the frame cap with room for the
+resolves. The numbers above sit under the frame cap with room for the
 envelope, and both are measured on the base64 `body` **as stored**, never on
 its decoded length, because invariant 2 forbids decoding it.
 
