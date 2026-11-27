@@ -498,7 +498,6 @@
     "sidebar-ws-confirm": "작업 영역과 pane 닫기",
     "confirm": "닫기",
     "dont-show-again": "이 알림을 다시 표시하지 않기",
-    "quit-dont-ask": "종료하고 다시 묻지 않기",
     "quit-title": "Navide를 종료할까요?",
     "quit-body": "앱 전체를 종료할까요?",
     "quit-cancelled-title": "Navide가 종료되지 않았어요",

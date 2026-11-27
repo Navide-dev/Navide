@@ -101,7 +101,6 @@ describe('App ⌘W closes the focused pane', () => {
         expect(dict.settings.general[key], `${locale} is missing settings.general.${key}`).toBeTruthy()
       }
       expect(dict['confirm-close']['dont-show-again'], `${locale} is missing the opt-out label`).toBeTruthy()
-      expect(dict['confirm-close']['quit-dont-ask'], `${locale} is missing the Windows quit opt-out button`).toBeTruthy()
     }
   })
 })

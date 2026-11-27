@@ -498,7 +498,6 @@
     "sidebar-ws-confirm": "ワークスペースとペインを閉じる",
     "confirm": "閉じる",
     "dont-show-again": "今後この確認を表示しない",
-    "quit-dont-ask": "終了して今後は確認しない",
     "quit-title": "Navide を終了しますか？",
     "quit-body": "アプリ全体を終了してもよろしいですか？",
     "quit-cancelled-title": "Navide は終了しませんでした",

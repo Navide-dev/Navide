@@ -198,7 +198,7 @@ import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { isAppNavigation as isAppNavigationPolicy } from './navigationPolicy'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
-import { isLinux, isMac, isWindows } from '../shared/osplat'
+import { isLinux, isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
 import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
@@ -324,7 +324,6 @@ let quitConfirm = {
   quitLabel: 'Quit',
   cancelLabel: 'Cancel',
   dontShowLabel: "Don't show this again",
-  quitDontAskLabel: "Quit and don't ask again",
   cancelledMessage: 'Navide did not quit',
   cancelledDetail: 'A window stopped the quit: {windows}. Finish or close what it is doing, then quit again.',
   cancelledUnknownWindow: 'a window that has closed since',
@@ -6912,9 +6911,7 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
   traceQuit('prompt-open', win && !win.isDestroyed() ? `parent=#${win.id}` : 'parent=none')
   let res: Electron.MessageBoxReturnValue
   try {
-    res = isWindows()
-      ? askQuitConfirmSync(win)
-      : win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
     traceQuit('prompt-answered', `response=${res.response} aborted=${abort.signal.aborted}`)
   } finally {
     releaseDeadline()
@@ -6931,29 +6928,6 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
     }
   }
   return true
-}
-
-// Windows: the async prompt runs on a dialog thread of its own and posts the
-// answer back to the main thread. On the 0.2.50 VM Enter closed it and the
-// answer never arrived, so the quit never started and the app stayed running
-// with no window. The sync prompt runs on the main thread and returns the
-// button itself. It has no checkbox, so "don't show again" is a third button
-// that answers Quit with the box ticked. It is parented only to a window that
-// is on screen, so it cannot open somewhere the user cannot see it. A SIGTERM
-// cannot close it; that quit goes on once the user has answered.
-function askQuitConfirmSync(win: BrowserWindow | undefined): Electron.MessageBoxReturnValue {
-  const opts = {
-    type: 'question' as const,
-    title: QUIT_DIALOG_TITLE,
-    buttons: [quitConfirm.quitLabel, quitConfirm.cancelLabel, quitConfirm.quitDontAskLabel],
-    defaultId: 0,
-    cancelId: 1,
-    message: quitConfirm.message,
-    detail: quitConfirm.detail,
-  }
-  const parent = win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() ? win : undefined
-  const response = parent ? dialog.showMessageBoxSync(parent, opts) : dialog.showMessageBoxSync(opts)
-  return response === 2 ? { response: 0, checkboxChecked: true } : { response, checkboxChecked: false }
 }
 
 // SIGTERM (a logout or shutdown, `kill`, a supervisor stopping the app) is a

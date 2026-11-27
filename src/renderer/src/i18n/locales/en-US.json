@@ -498,7 +498,6 @@
     "sidebar-ws-confirm": "Close Workspace and Its Panes",
     "confirm": "Close",
     "dont-show-again": "Don't show this reminder again",
-    "quit-dont-ask": "Quit and don't ask again",
     "quit-title": "Quit Navide?",
     "quit-body": "Are you sure you want to quit the entire app?",
     "quit-cancelled-title": "Navide did not quit",
