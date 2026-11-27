@@ -19,7 +19,7 @@ from . import quick_menu
 CALLBACK_PREFIX = "nv7:"
 _CALLBACK_RE = re.compile(r"^nv7:([a-z0-9]{8})$")
 MAX_TOKENS = 64
-BUTTON_LABEL = "🔁 重送"
+BUTTON_LABEL = "🔁 排回佇列"
 
 
 def parse_callback(data: str) -> str | None:

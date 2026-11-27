@@ -769,7 +769,10 @@ function annotateHold(q: number[], headKey: string | null): void {
   q.forEach((id, i) => {
     const m = findMessage(id)
     if (!m || m.status !== 'queued') return
-    if (i > 0) setHold(m, { key: 'behind', n: i })
+    // Past the cap only chat-channel messages exist (see acceptRemoteMessage's
+    // `overflow`): kept rather than refused, and said so.
+    if (i >= QUEUE_CAP) setHold(m, { key: 'queue-full', n: i })
+    else if (i > 0) setHold(m, { key: 'behind', n: i })
     else if (headKey) setHold(m, { key: headKey })
     else setHold(m, undefined)
   })
@@ -1123,6 +1126,11 @@ function acceptRemoteMessage(args: {
   noReplyRoute?: boolean
   /** cli_send submit: false to a plain terminal: typed without Enter. */
   prefill?: boolean
+  /** From a chat channel: past QUEUE_CAP the message waits at the tail of the
+   *  queue (hold `queue-full`) instead of failing — a person's chat line has
+   *  no agent behind it to send it again. The backend caps how many a chat can
+   *  have queued per pane, so this tail stays bounded. */
+  overflow?: boolean
 }): boolean {
   if (!deps) return false
   const localName = nameByPane.get(args.targetPaneId)
@@ -1191,7 +1199,7 @@ function acceptRemoteMessage(args: {
   }
 
   const q = queues.get(args.targetPaneId) ?? []
-  if (q.length >= QUEUE_CAP) {
+  if (q.length >= QUEUE_CAP && !args.overflow) {
     failMessage(msg.id, QUEUE_FULL_REASON)
     deps.reportDelivery?.(args.msgKey, false, QUEUE_FULL_REASON)
     return true

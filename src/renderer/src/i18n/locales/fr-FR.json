@@ -394,6 +394,7 @@
     "hold-busy": "La cible n’est pas prête à recevoir",
     "hold-paused": "La remise est suspendue",
     "hold-behind": "En attente (messages devant : {n})",
+    "hold-queue-full": "File pleine — en attente dans la file de réserve, messages avant : {n}",
     "hold-gone": "Le pane cible n’existe plus",
     "hold-not-ready": "Le pane cible n’est pas en cours d’exécution",
     "hold-starting": "Le pane cible est encore en train de démarrer",

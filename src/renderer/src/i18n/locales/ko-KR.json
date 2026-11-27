@@ -394,6 +394,7 @@
     "hold-busy": "대상이 받을 준비가 되지 않았어요",
     "hold-paused": "전달이 일시 중지되었어요",
     "hold-behind": "앞의 메시지 {n}개를 기다리는 중",
+    "hold-queue-full": "대기열이 가득 차 예비 대기열에서 기다리는 중(앞에 {n}개)",
     "hold-gone": "대상 pane이 더 이상 없어요",
     "hold-not-ready": "대상 pane이 실행 중이 아니에요",
     "hold-starting": "대상 pane이 아직 시작하는 중이에요",
