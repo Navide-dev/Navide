@@ -728,7 +728,7 @@
       "rich": "Mise en forme",
       "terminal-title": "Afficher le terminal brut",
       "rich-title": "Afficher les réponses de l’agent mises en forme",
-      "unsupported": "La vue mise en forme n’est pas disponible pour ce panneau : ses réponses ne sont pas lues depuis un journal de conversation sur cet ordinateur.",
+      "unsupported": "La vue mise en forme n’est pas disponible pour ce panneau : Navide ne peut pas lire le texte des échanges de cette CLI.",
       "empty": "Affiche les réponses depuis l’ouverture de cette fenêtre. Revenez au Terminal pour tout l’historique.",
       "copy": "Copier",
       "copied": "Copié",

@@ -728,7 +728,7 @@
       "rich": "Formatiert",
       "terminal-title": "Das unveränderte Terminal anzeigen",
       "rich-title": "Die Antworten des Agenten formatiert anzeigen",
-      "unsupported": "Die formatierte Ansicht ist für diesen Bereich nicht verfügbar: Seine Antworten werden nicht aus einem Gesprächsprotokoll auf diesem Computer gelesen.",
+      "unsupported": "Die formatierte Ansicht ist für diesen Bereich nicht verfügbar: Navide kann den Text der Runden dieser CLI nicht lesen.",
       "empty": "Zeigt Antworten, seit dieses Fenster geöffnet wurde. Den vollständigen Verlauf siehst du im Terminal.",
       "copy": "Kopieren",
       "copied": "Kopiert",

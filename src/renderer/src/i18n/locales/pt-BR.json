@@ -728,7 +728,7 @@
       "rich": "Formatada",
       "terminal-title": "Mostrar o terminal original",
       "rich-title": "Mostrar as respostas do agente formatadas",
-      "unsupported": "A visualização formatada não está disponível para este painel: as respostas dele não são lidas de um registro de conversa neste computador.",
+      "unsupported": "A visualização formatada não está disponível para este painel: o Navide não consegue ler o texto dos turnos desta CLI.",
       "empty": "Mostra as respostas desde que esta janela foi aberta. Volte ao Terminal para ver o histórico completo.",
       "copy": "Copiar",
       "copied": "Copiado",

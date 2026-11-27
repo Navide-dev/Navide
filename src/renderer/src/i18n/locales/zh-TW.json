@@ -728,7 +728,7 @@
       "rich": "美化",
       "terminal-title": "顯示原始終端",
       "rich-title": "以美化格式顯示 agent 的回覆",
-      "unsupported": "這個分格無法使用美化檢視：它的回覆不是從這台電腦上的對話紀錄讀取的。",
+      "unsupported": "這個分格無法使用美化檢視：Navide 讀不到這個 CLI 的回合文字。",
       "empty": "顯示這個視窗開啟後的回覆；切回終端可看完整歷史。",
       "copy": "複製",
       "copied": "已複製",
