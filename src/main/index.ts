@@ -6908,9 +6908,11 @@ async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> 
   quitPromptAbort = abort
   // The user is being asked: none of this counts against a quit deadline.
   const releaseDeadline = quitDeadline.hold()
+  traceQuit('prompt-open', win && !win.isDestroyed() ? `parent=#${win.id}` : 'parent=none')
   let res: Electron.MessageBoxReturnValue
   try {
     res = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    traceQuit('prompt-answered', `response=${res.response} aborted=${abort.signal.aborted}`)
   } finally {
     releaseDeadline()
     quitPromptOpen = false
