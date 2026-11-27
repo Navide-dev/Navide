@@ -498,7 +498,6 @@
     "sidebar-ws-confirm": "關閉工作區與其中的分格",
     "confirm": "關閉",
     "dont-show-again": "不再顯示此提醒",
-    "quit-dont-ask": "結束且不再詢問",
     "quit-title": "結束 Navide？",
     "quit-body": "確定要結束整個應用程式嗎？",
     "quit-cancelled-title": "Navide 沒有結束",
