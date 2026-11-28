@@ -3,6 +3,7 @@
   "reservedPrefixes": [
     "channels_",
     "cli_",
+    "commander_",
     "credentials_",
     "evolve_",
     "git_",
@@ -75,6 +76,10 @@
     "channels_set_verbosity",
     "channels_status",
     "channels_unbind",
+    "commander_get",
+    "commander_list",
+    "commander_memory_append",
+    "commander_tree",
     "credentials_findings",
     "credentials_list",
     "evolve_report",
