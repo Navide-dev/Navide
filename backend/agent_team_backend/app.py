@@ -2962,6 +2962,15 @@ async def _start_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("evolve startup failed: %s", err)
 
+    # Commander stall notices: reads each commander's dispatch tree once a
+    # minute and tells the commander; never wakes or interrupts a pane.
+    from . import commander_watch
+
+    try:
+        await commander_watch.startup()
+    except Exception as err:  # noqa: BLE001
+        log.warning("commander watch startup failed: %s", err)
+
     # Name a frozen backend the moment it freezes: a daemon thread logs the
     # loop thread's stack when the loop stops turning (issue #24), instead of
     # the freeze being reproducible only under sample(1).
@@ -3139,6 +3148,9 @@ async def _stop_log_watcher() -> None:
         from . import evolve_service
 
         await evolve_service.shutdown()
+        from . import commander_watch
+
+        await commander_watch.shutdown()
         from . import voice_handlers
 
         await voice_handlers.shutdown()
