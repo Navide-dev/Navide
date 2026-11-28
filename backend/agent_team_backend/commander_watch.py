@@ -58,10 +58,13 @@ def notice_text(stall: Stall) -> str:
 # ── production seams ────────────────────────────────────────────────────────
 
 
-async def _send_to_body(pane_id: str, text: str) -> None:
+async def _send_to_body(pane_id: str, text: str, source_pane_id: str) -> None:
     from .mcp_server import server as mcp
 
-    answer = await mcp._send(mcp._Caller(kind="host"), "", text, pane_id=pane_id)
+    # The notice quotes the child's name and task, which agents wrote: Guard
+    # marks the commander as it would for a message from that pane.
+    answer = await mcp._send(mcp._Caller(kind="host"), "", text, pane_id=pane_id,
+                             taint_detail=f"stall notice quoting pane {source_pane_id}")
     if not answer.get("ok", True):
         log.info("commander watch: notice to %s not sent: %s", pane_id, answer.get("error") or answer)
 
@@ -98,7 +101,7 @@ class CommanderWatch:
         self,
         *,
         service: Callable[[], commander_service.CommanderService] = commander_service.current,
-        send_to_body: Callable[[str, str], Awaitable[None]] = _send_to_body,
+        send_to_body: Callable[[str, str, str], Awaitable[None]] = _send_to_body,
         push_chats: Callable[[str, str], Awaitable[None]] = _push_chats,
         broadcast: Callable[[str, str, str], Awaitable[None]] = _broadcast,
         live_pane: Callable[[str], Any] = _live_pane,
@@ -165,7 +168,7 @@ class CommanderWatch:
         text = notice_text(stall)
         steps: list[tuple[str, Awaitable[None]]] = []
         if stall.body_pane_id:
-            steps.append(("body", self._send_to_body(stall.body_pane_id, text)))
+            steps.append(("body", self._send_to_body(stall.body_pane_id, text, stall.pane_id)))
         steps.append(("chat", self._push_chats(stall.commander_id, text)))
         steps.append(("broadcast", self._broadcast(stall.commander_id, stall.pane_id, stall.state)))
         for what, step in steps:
