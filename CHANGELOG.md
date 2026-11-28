@@ -2,6 +2,34 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Formatted view (0.2.50): a CLI pane's header has a new **Terminal | Formatted** toggle, set to Terminal by default. The formatted view lists the pane's recent turns — your prompt and the agent's reply, read from the CLI's own conversation log — with each reply rendered as Markdown: headings, emphasis, lists, tables, links, and code blocks highlighted with a Copy button. Raw HTML is escaped, only http(s) links are kept and they open in your browser (the window never navigates, and a middle click opens externally too), images become links and load nothing, and the result is sanitized. The view is laid over the terminal, which stays mounted at its size and is never resized, redrawn or cleared, so switching back shows it exactly as it was. Panes whose turns Navide cannot read (Kiro, Devin, SSH and remote panes) show the toggle disabled with the reason; plain terminals have none. Sign-in panes never keep turns. All 11 languages.
+- What's New 0.2.50: the in-app What's New has its 0.2.50 entry before the release (0.2.48 and 0.2.49 first shipped without theirs), covering the formatted view, Claude's weekly limit banner, the Telegram fixes below and the known limitations. All 11 languages.
+
+### Changed
+
+- Telegram queue-full notices (0.2.50): the notice for a message held in the overflow queue, a queue-full failure and the chat cap notice now offer **Switch account and send** and **Show pane**. Switch account and send takes the first account the quota failover would pick and runs the same switch as `/account` (the same window checks and audit), then resumes the pane if it was stopped; Show pane answers as `/status` does. The resend button is renamed **Requeue**, and the notice for a message held because its pane was stopped with STOP now offers Resume.
+- Quit (0.2.50): each quit stage — the confirmation, window preparation, each teardown step, `will-quit` and `quit`, and any window created or renderer lost during a quit — is written to `main.log`, so a quit that does not finish shows where it stopped. Once you confirm a quit, a 30-second deadline backs it up: if the app has not quit by then, Navide logs the last stage reached, stops the backend and plugin backends, and exits. Time spent in the quit prompt or in a plugin's close preparation does not count, and a cancelled quit disarms it. The prompt and its "don't show again" checkbox are unchanged. The trace and the deadline run on every platform; they were added after a quit on a fresh Windows install looked stuck, which turned out to be a test artifact.
+- Privacy page: it now names `dl.navide.dev` as where update checks go, and says which device name Navide Cloud sees.
+- Docs: three external pull requests (#650, #863, #924) describe Bun as the daily toolchain, remove stale, internal and machine-local content, fix stale facts and fill zh-TW and ja-JP gaps. The plugin package workflows run on Bun.
+- Dependencies: backend fastapi 0.165.0, boto3 1.44.7 / botocore 1.44.9, anthropic 2.12.0 and ruff 0.17.6; frontend dev tooling @playwright/test 1.65.1, @vitejs/plugin-vue 6.0.11, @vue/test-utils 2.6.0 and @types/node 22.20.5. The formatted view adds marked 18.2.0, dompurify 3.4.17 (the version the existing override already pinned) and highlight.js 11.12.0, all pinned exactly.
+
+### Fixed
+
+- Claude weekly limit (0.2.50): Claude's weekly limit banner, which gives its reset as a date with a month name ("resets Nov 28 at 9pm (Asia/Taipei)"), was not recognised. A pane parked on the limit menu kept reading idle, so no quota light showed, automatic account switching never started, and its message queue filled to the cap (Telegram reported queue-full). The month-name form is now read, with the year inferred from today, and counts as an exhausted quota.
+- Telegram and other chat channels, queue full (0.2.50): a chat message that found its pane's queue full (10 messages) failed. It now waits at the end of the queue in an overflow hold, shown as "Queue is full — kept in overflow" in the messages panel, and is sent when the pane has room; the chat is told the message was kept. A pane's chat backlog stays bounded. Messages from `cli_send` and other panes are still refused at the cap.
+- Telegram rejected token (0.2.50): a bot whose token Telegram rejected (401 or 404) stopped for good until Navide restarted. It now stays blocked and checks the token again every 10 minutes; once it is accepted, the bot reconnects on its own. Settings → Channels shows when the next check is due, or when the bot recovered. Network and proxy reconnects are unchanged. All 11 languages.
+- First pane after a fresh install (0.2.50): on a new machine the Claude projects folder is created by the first Claude pane, after its workspace was registered, so Navide could not match that pane's conversation log to the workspace. Its replies, its working and turn-complete signals and the formatted view stayed empty until a second pane opened. The workspace now picks up the folder as soon as it exists. Found and verified on fresh macOS, Windows and Linux installs.
+- Backend responsiveness under load (0.2.50): reading the system proxy settings before each Telegram or other chat-channel request, and recording a pane event in a project's log, both ran on the backend's event loop. On macOS the proxy lookup asks the system, and under load the two appeared in dozens of the event loop's stalls in a day, which made panes slow to answer and could make them lose their Navide tools. Both now run on a worker thread, with the same results and in the same order.
+
+### Known limitations
+
+- Formatted view (0.2.50): it shows only the turns since the window opened, not a pane's earlier conversation. A reply over 100,000 characters is cut and the view says so, a pane keeps at most 1.5 million characters of turns (the oldest go first), and code blocks over 20,000 characters are shown without highlighting. Kiro, Devin, SSH and remote panes are not supported. A pane's turns are dropped when the window lets go of it (close, rebuild, reclaim, group detach or workspace close).
+- Telegram (0.2.50): the new buttons (Switch account and send, Show pane, Requeue) and the overflow notices are in Chinese only for now.
+
 ## [0.2.49] — 2026-11-27
 
 ### Added
