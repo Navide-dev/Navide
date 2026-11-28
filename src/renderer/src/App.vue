@@ -47,6 +47,7 @@ import { formatBytes } from './lib/formatBytes'
 import { formatCpuPercent, machineCpuShare, machineMemoryShare } from './lib/resourceSampling'
 import { cliRiskKey, useResourceUsage, type ResourceUsageWire } from './composables/useResourceUsage'
 import { channelsKey, useChannels, type ChannelAgentRequest } from './composables/useChannels'
+import { useCommanders } from './composables/useCommanders'
 import { guardKey, useGuard } from './composables/useGuard'
 import { agentConsoleKey, createAgentConsole } from './composables/useAgentConsole'
 import { createRichTurns, richTurnsKey } from './composables/useRichTurns'
@@ -25279,6 +25280,8 @@ function openArenaFromPane(paneId: string): void {
 // and pane headers. The menu is rendered once in this component; each surface only
 // raises an open request with the pane id and pointer coords.
 const paneCtxMenu = ref<{ paneId: string; x: number; y: number } | null>(null)
+// The menu's "Upgrade to commander" opens the dialog ControlPane mounts (0.2.51).
+const commanders = useCommanders()
 const paneCtxMenuEl = ref<HTMLElement | null>(null)
 // Whether the right-clicked pane is held narrower than its container by the
 // layout-mode cols cap (see lockCols). Offers "Fit to pane width" when true.
@@ -28077,6 +28080,13 @@ function paneIsCommander(p: ActivePane): boolean {
           class="pane-ctx-item"
           @click="openReconnectPicker(paneCtxMenu!.paneId); closePaneCtxMenu()"
         >{{ $t('reconnect.menu-item') }}</div>
+        <div
+          v-if="paneCtxView && paneCtxView.agentKey !== 'terminal' && !commanders.bodyPanes.value.has(paneCtxView.id)"
+          class="pane-ctx-item"
+          data-testid="ctx-commander-upgrade"
+          :title="$t('commander.action.upgrade-tooltip')"
+          @click="commanders.openCreate(paneCtxMenu!.paneId); closePaneCtxMenu()"
+        >{{ $t('commander.action.upgrade') }}</div>
         <template v-if="arenaEnabled && paneCtxView && paneCtxView.agentKey !== 'terminal'">
           <div class="pane-ctx-sep"></div>
           <div
