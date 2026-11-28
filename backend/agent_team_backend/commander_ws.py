@@ -3,8 +3,9 @@
 Creating, upgrading, downgrading, editing and archiving a commander are the
 user's to do in a Navide main window: those messages are refused from any
 other session (a plugin, editor or other WS client). There is deliberately no
-MCP route to them. Reading (list / get / tree) is open to the window's own
-clients like the rest of the window state.
+MCP route to them. Reading (list / get / tree) is main-window only too: an
+answer carries the commander's memory, pane ids and workspaces, and the events
+go to main windows only for the same reason.
 
 Events, sent to every main window:
 
@@ -87,6 +88,8 @@ def _live_pane(pane_id: str) -> Any:
 
 
 async def commander_list(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
+    if await _refuse_unless_main(session, msg_id, msg_type):
+        return
     include = payload.get("include_archived") is True
 
     def build() -> list[dict[str, Any]]:
@@ -97,6 +100,8 @@ async def commander_list(session: Any, msg_id: str, msg_type: str, payload: dict
 
 
 async def commander_get(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
+    if await _refuse_unless_main(session, msg_id, msg_type):
+        return
     commander_id = str(payload.get("id") or "")
 
     def build() -> dict[str, Any]:
@@ -110,6 +115,8 @@ async def commander_get(session: Any, msg_id: str, msg_type: str, payload: dict)
 
 
 async def commander_tree(session: Any, msg_id: str, msg_type: str, payload: dict) -> None:
+    if await _refuse_unless_main(session, msg_id, msg_type):
+        return
     answer = await _run(session, msg_id, msg_type, _svc().tree, str(payload.get("id") or ""))
     if answer is not None:
         await session.send_json(make_response(msg_id, msg_type, answer))
