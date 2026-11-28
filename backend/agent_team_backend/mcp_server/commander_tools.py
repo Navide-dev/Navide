@@ -70,14 +70,9 @@ def _opened_by_chain(pane_id: str) -> list[str]:
 
 
 def _commander_of(svc: commander_service.CommanderService, pane_id: str) -> str:
-    """The active commander *pane_id* is the body of, or dispatched work of."""
-    commander_id = svc.store.commander_of_body(pane_id)
-    if commander_id:
-        return commander_id
-    d = svc.store.dispatch_of(pane_id)
-    if d is None or svc.store.get(d.commander_id).archived_at:
-        return ""
-    return d.commander_id
+    """The active commander *pane_id* is the body of, or dispatched work of
+    (alias ids included)."""
+    return svc.commander_of(pane_id)
 
 
 def note_dispatch(opener_pane_id: str, child_pane_id: str, task: str) -> None:

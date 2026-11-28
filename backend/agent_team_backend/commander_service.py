@@ -131,6 +131,19 @@ def _live_pane(pane_id: str) -> Any:
     return agent_messaging.current(pane_id)
 
 
+def _live_ids(pane_id: str) -> list[str]:
+    """Every id *pane_id* is known by: itself, the id that superseded it and
+    the ids it superseded (agent_messaging's aliases)."""
+    from . import agent_messaging
+
+    out = [pane_id]
+    newer = agent_messaging.resolve_alias(pane_id)
+    if newer:
+        out.append(newer)
+    out += agent_messaging.former_ids(newer or pane_id)
+    return list(dict.fromkeys(out))
+
+
 def _live_activity(pane_id: str) -> dict[str, Any] | None:
     from . import app
 
@@ -162,6 +175,7 @@ class CommanderService:
         reported: Callable[[str, str, int], bool] = _live_reported,
         monotonic: Callable[[], float] = time.monotonic,
         clock: Callable[[], float] = time.time,
+        ids: Callable[[str], list[str]] = _live_ids,
     ) -> None:
         self.store = store
         self._pane = pane
@@ -169,6 +183,7 @@ class CommanderService:
         self._reported = reported
         self._monotonic = monotonic
         self._clock = clock
+        self._ids = ids
 
     def _now(self) -> int:
         return int(self._clock())
@@ -284,13 +299,51 @@ class CommanderService:
             "dispatch_counts": counts,
         }
 
+    def _known_as(self, pane_id: str) -> list[str]:
+        """*pane_id* and its alias ids, so a lookup still finds a body or a
+        dispatch filed under the id a pane had before its window re-keyed it."""
+        try:
+            return [i for i in self._ids(pane_id) if i] or [pane_id]
+        except Exception as err:  # noqa: BLE001 - a lookup falls back to the id itself
+            log.debug("commander alias read failed: %s", err)
+            return [pane_id]
+
+    def _follow(self, stored_id: str, pane_id: str) -> None:
+        """The store still names *stored_id*; the pane answers to *pane_id*."""
+        if stored_id != pane_id:
+            self.store.update_body_pane(stored_id, pane_id)
+
+    def commander_of(self, pane_id: str) -> str:
+        """The active commander *pane_id* is the body of, or dispatched work
+        of, under any of its alias ids; "" when none."""
+        for known in self._known_as(pane_id):
+            commander_id = self.store.commander_of_body(known)
+            if commander_id:
+                self._follow(known, pane_id)
+                return commander_id
+        d = self._dispatch_of(pane_id)
+        if d is None or self.store.get(d.commander_id).archived_at:
+            return ""
+        return d.commander_id
+
+    def _dispatch_of(self, pane_id: str) -> CommanderDispatch | None:
+        for known in self._known_as(pane_id):
+            d = self.store.dispatch_of(known)
+            if d is not None:
+                self._follow(known, pane_id)
+                d.pane_id = pane_id
+                return d
+        return None
+
     def role_of(self, pane_id: str) -> dict[str, Any] | None:
         """For cli_whoami: is *pane_id* a commander's body, or work it dispatched?"""
-        commander_id = self.store.commander_of_body(pane_id)
-        if commander_id:
-            c = self.store.get(commander_id)
-            return {"id": c.id, "name": c.name, "role": "commander"}
-        d = self.store.dispatch_of(pane_id)
+        for known in self._known_as(pane_id):
+            commander_id = self.store.commander_of_body(known)
+            if commander_id:
+                self._follow(known, pane_id)
+                c = self.store.get(commander_id)
+                return {"id": c.id, "name": c.name, "role": "commander"}
+        d = self._dispatch_of(pane_id)
         if d is None:
             return None
         c = self.store.get(d.commander_id)
@@ -305,12 +358,9 @@ class CommanderService:
         work one dispatched (grandchildren count). Returns None otherwise."""
         if not opener_pane_id or not child_pane_id:
             return None
-        commander_id = self.store.commander_of_body(opener_pane_id)
+        commander_id = self.commander_of(opener_pane_id)
         if not commander_id:
-            d = self.store.dispatch_of(opener_pane_id)
-            if d is None or self.store.get(d.commander_id).archived_at:
-                return None
-            commander_id = d.commander_id
+            return None
         return self.store.record_dispatch(commander_id, pane_id=child_pane_id, opened_by=opener_pane_id,
                                           task=task, now=self._now())
 

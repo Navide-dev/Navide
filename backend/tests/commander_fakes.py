@@ -42,6 +42,15 @@ class World:
         self.mono += seconds
         self.wall += seconds
 
+    def ids_of(self, pane_id: str) -> list[str]:
+        """Every id *pane_id* is known by: itself, what superseded it, and
+        what it superseded (agent_messaging's aliases)."""
+        out = [pane_id]
+        if pane_id in self.aliases:
+            out.append(self.aliases[pane_id])
+        out += [old for old, new in self.aliases.items() if new == pane_id]
+        return out
+
     def reported(self, sender: str, recipient: str, since: int) -> bool:
         return any(s == sender and r == recipient and at >= since for s, r, at in self.messages)
 
@@ -50,6 +59,6 @@ def service(tmp_path: Path, world: World | None = None) -> CommanderService:
     world = world or World()
     store = CommanderStore(Database(tmp_path / "navide.db"), memory_root=tmp_path / "commanders")
     return CommanderService(
-        store, pane=world.lookup, activity=world.activity.get, reported=world.reported,
+        store, pane=world.lookup, activity=world.activity.get, reported=world.reported, ids=world.ids_of,
         monotonic=lambda: world.mono, clock=lambda: world.wall,
     )
