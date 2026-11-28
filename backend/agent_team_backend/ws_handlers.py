@@ -12014,9 +12014,12 @@ async def project_log_event(session: "Session", msg_id: str, msg_type: str, payl
     ws_path = payload["workspace_path"]
     # Route to the run-specific log file (e.g. pipeline-20260528-…log)
     # rather than the generic pipeline.log fallback.
-    _proj = app.project_store.peek(ws_path)
+    # Both touch the workspace db (and peek decodes the whole project), which
+    # sat in event-loop stall stacks under many panes (2026-11-28 backend.log).
+    _proj = await run_in_db_thread(app.project_store.peek, ws_path)
     _log_name = _proj.log_file_name if _proj else ""
-    app.project_store.record_pane_event(
+    await run_in_db_thread(
+        app.project_store.record_pane_event,
         ws_path,
         event_type=payload.get("event_type", "note"),
         pane_id=payload.get("pane_id", ""),
