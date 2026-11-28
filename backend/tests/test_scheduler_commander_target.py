@@ -161,3 +161,52 @@ async def test_archive_disables_and_resume_reenables_only_those(env):
     resumed = await stored(env, on["id"])
     assert resumed["enabled"] and "commander_paused" not in resumed["state"]
     assert not (await stored(env, off["id"]))["enabled"]
+
+
+# ── workspace boundary (a pane may only schedule into its own workspace) ────
+
+PANE_B = {"kind": "pane", "pane_id": "pb", "pane_name": "b", "workspace": "/other"}
+PANE_A = {"kind": "pane", "pane_id": "pa", "pane_name": "a", "workspace": "/ws"}
+
+
+async def test_a_pane_cannot_schedule_another_workspaces_commander(env):
+    c = env.svc.create({"name": "boss", "workspaces": ["/ws"], "agent_key": "claude"})
+    out = await env.sched.upsert({**job(commander_id=c.id), "action": {
+        "kind": "message", "workspace": "/other", "text": "hi", "commander_id": c.id}}, PANE_B)
+    assert out["ok"] is False and out["code"] == "SCHEDULER_CROSS_WORKSPACE"
+    out = await env.sched.upsert(job(commander_id="no-such-commander"), PANE_A)
+    assert out["ok"] is False and out["code"] == "SCHEDULER_CROSS_WORKSPACE"
+
+
+async def test_a_pane_in_the_commanders_workspace_and_the_user_may(env):
+    c = env.svc.create({"name": "boss", "workspaces": ["/ws"], "agent_key": "claude"})
+    assert (await env.sched.upsert(job(commander_id=c.id), PANE_A))["ok"]
+    assert (await env.sched.upsert(job(commander_id=c.id)))["ok"]  # the user, from a window
+
+
+async def test_migrated_jobs_still_run_and_resave(env):
+    env.world.add(pane("pa", "a"))  # the owner is live, so it may change its job
+    mine = await env.sched.upsert(job(pane_id="p1"), PANE_A)  # an agent's own job
+    assert mine["ok"]
+    c = env.svc.upgrade_pane(env.world.panes["p1"], {})
+    action = (await stored(env, mine["job"]["id"]))["action"]
+    assert action["commander_id"] == c.id and commander_target(action)["pane_id"] == "p1"
+    # Its owner re-saves it unchanged after the migration: not refused for the workspace.
+    assert (await env.sched.upsert({"id": mine["job"]["id"], "name": "renamed"}, PANE_A))["ok"]
+
+
+async def test_a_body_in_another_workspace_is_skipped_not_sent(env, monkeypatch):
+    from agent_team_backend.mcp_server import server as mcp
+
+    sent: list[dict[str, Any]] = []
+
+    async def fake_send(caller, name, text, **kw):
+        sent.append(kw)
+        return {"ok": True, "status": "delivered", "msg_key": "k"}
+
+    monkeypatch.setattr(mcp, "_send", fake_send)
+    c = env.svc.create({"name": "boss", "workspaces": ["/ws"], "agent_key": "claude"})
+    env.svc.store.attach_body(c.id, pane_id="p1", workspace="/elsewhere", agent_key="claude")
+    out = await LiveBridge().deliver({"kind": "message", "workspace": "/ws", "text": "t", "commander_id": c.id})
+    assert out["status"] == "skipped" and out["reason"] == sched_mod.SKIP_COMMANDER_WORKSPACE_MISMATCH
+    assert sent == []
