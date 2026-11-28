@@ -42,7 +42,7 @@ export function fakeBackend(answers: Record<string, unknown>): FakeBackend {
       const a = answers[type]
       const value = typeof a === 'function' ? (a as (p: Record<string, unknown>) => unknown)(payload) : a
       if (value instanceof Error) {
-        return { id: '1', type, ok: false, payload: null, error: { code: 'BAD_REQUEST', message: value.message }, timestamp: '' }
+        return { id: '1', type, ok: false, payload: null, error: { code: (value as Error & { code?: string }).code ?? 'BAD_REQUEST', message: value.message }, timestamp: '' }
       }
       return { id: '1', type, ok: value !== undefined, payload: (value ?? null) as T | null, error: value === undefined ? { code: 'NOT_FOUND', message: 'unhandled' } : null, timestamp: '' }
     },
@@ -55,4 +55,9 @@ export function fakeBackend(answers: Record<string, unknown>): FakeBackend {
       for (const cb of listeners.get(type) ?? []) cb(payload)
     },
   }
+}
+
+/** An Error the fake answers with, carrying a backend error code. */
+export function refusal(code: string, message = 'refused'): Error {
+  return Object.assign(new Error(message), { code })
 }

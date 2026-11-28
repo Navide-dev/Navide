@@ -160,6 +160,7 @@ const unassigned = computed(() => {
 .cmd-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .cmd-name { color: var(--text-bright); font-size: var(--font-sm); font-weight: 600; }
 .cmd-sub { color: var(--text-muted); font-size: var(--font-2xs); }
+.cmd-name, .cmd-sub, .cmd-child-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd-fold { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0 2px; font-size: var(--font-2xs); }
 .cmd-children { list-style: none; margin: 0 0 4px; padding: 0; }
 .cmd-child { display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 28px; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-xs); color: var(--text-primary); min-width: 0; }

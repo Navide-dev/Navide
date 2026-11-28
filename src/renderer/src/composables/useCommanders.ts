@@ -24,6 +24,18 @@ const RPC_TIMEOUT_MS = 15_000
 /** Detected states change without an event (a pane goes quiet), so the trees
  *  are re-read on this interval while anything is listed. */
 const TREE_POLL_MS = 30_000
+/** commander.* answers FORBIDDEN until the window has proven itself (the
+ *  ws.welcome challenge useBackend answers right after connecting), so a
+ *  refresh sent on connect can land first. It is retried this many times. */
+const FORBIDDEN_RETRIES = 6
+const FORBIDDEN_RETRY_MS = 400
+
+/** A refused commander.* call, with the backend's error code. */
+class CommanderCallError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message)
+  }
+}
 
 /** The slice of useBackend this store needs; tests pass a fake. */
 export interface CommanderBackend {
@@ -81,11 +93,12 @@ export function createCommanderStore() {
   let poll: ReturnType<typeof setInterval> | null = null
   let stopStatusWatch: (() => void) | null = null
   let listSeq = 0
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
 
   async function call<K extends CommanderMessageType>(type: K, payload: Request<K>): Promise<Response<K> | null> {
     if (!backend) return null
     const resp = await backend.send<Response<K>>(type, payload as Record<string, unknown>, RPC_TIMEOUT_MS)
-    if (!resp.ok || !resp.payload) throw new Error(resp.error?.message || `${type} failed`)
+    if (!resp.ok || !resp.payload) throw new CommanderCallError(resp.error?.message || `${type} failed`, resp.error?.code ?? '')
     return resp.payload
   }
 
@@ -98,8 +111,10 @@ export function createCommanderStore() {
     }
   }
 
-  async function refresh(): Promise<void> {
+  async function refresh(attempt = 0): Promise<void> {
     if (!backend || backend.status.value !== 'connected') return
+    if (retryTimer !== null) clearTimeout(retryTimer)
+    retryTimer = null
     const seq = ++listSeq
     try {
       const answer = await call('commander.list', {})
@@ -112,6 +127,10 @@ export function createCommanderStore() {
       await Promise.all(answer.commanders.map((c) => loadTree(c.id)))
     } catch (err) {
       if (seq !== listSeq) return
+      if (err instanceof CommanderCallError && err.code === 'FORBIDDEN' && attempt < FORBIDDEN_RETRIES) {
+        retryTimer = setTimeout(() => void refresh(attempt + 1), FORBIDDEN_RETRY_MS * (attempt + 1))
+        return
+      }
       listError.value = err instanceof Error ? err.message : String(err)
     }
   }
@@ -152,6 +171,10 @@ export function createCommanderStore() {
       },
     )
     poll = setInterval(() => {
+      if (!loaded.value) {
+        void refresh()
+        return
+      }
       for (const c of commanders.value) void loadTree(c.id)
     }, TREE_POLL_MS)
     void refresh()
@@ -164,6 +187,8 @@ export function createCommanderStore() {
     stopStatusWatch = null
     if (poll !== null) clearInterval(poll)
     poll = null
+    if (retryTimer !== null) clearTimeout(retryTimer)
+    retryTimer = null
     backend = null
   }
 

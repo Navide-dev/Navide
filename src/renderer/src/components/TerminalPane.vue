@@ -1607,10 +1607,12 @@ onMounted(() => {
   outline: none;
 }
 .commander-chip {
-  /* Gives way before the pane name and the buttons do: min-width 0 and a cap. */
-  min-width: 0;
+  /* Gives way before the pane name and the buttons do. Flex shrinks items in
+     proportion to factor × width, so an ordinary factor would still wrap the
+     title; this one takes nearly all of the shortfall, down to the ◎ mark. */
+  min-width: 26px;
   max-width: 140px;
-  flex-shrink: 2;
+  flex-shrink: 1000;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1625,13 +1627,22 @@ onMounted(() => {
 .commander-state-chip {
   min-width: 0;
   max-width: 96px;
-  flex-shrink: 3;
+  flex-shrink: 2000;
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: var(--font-3xs);
   padding: 1px 7px;
   line-height: normal;
   cursor: pointer;
+}
+/* The chips are extra: a header with no room for them drops them rather than
+   squeeze the title or the buttons. The state goes first, then the commander;
+   both stay in the sidebar row and the commander's detail. */
+@container cli-pane-header (max-width: 640px) {
+  .commander-state-chip { display: none; }
+}
+@container cli-pane-header (max-width: 520px) {
+  .commander-chip { display: none; }
 }
 .commander-inline {
   font-size: var(--font-3xs);

@@ -190,7 +190,7 @@ function onKeydown(e: KeyboardEvent): void {
 
 <style scoped>
 .ccd-backdrop { position: fixed; inset: 0; z-index: calc(var(--z-modal) + 130); background: color-mix(in srgb, var(--bg-base) 55%, transparent); display: flex; align-items: center; justify-content: center; -webkit-app-region: no-drag; }
-.ccd { width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); padding: 18px 20px; }
+.ccd { width: min(520px, calc(100vw - 48px)); max-height: calc(100vh - 80px); overflow: auto; background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); padding: 18px 20px; font-family: var(--font-ui); color: var(--text-primary); }
 .ccd-title { margin: 0 0 14px; font-size: var(--font-md); color: var(--text-bright); }
 .ccd-form { display: flex; flex-direction: column; gap: 12px; }
 .ccd-field { display: flex; flex-direction: column; gap: 6px; font-size: var(--font-xs); color: var(--text-secondary); min-width: 0; }

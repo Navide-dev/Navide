@@ -93,10 +93,16 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
+/** The commander's own chip: its most urgent dispatch, else whether it has a pane. */
 const headState = computed(() => {
   for (const s of ['stalled', 'waiting', 'working'] as const) if (liveNodes.value.some((n) => n.state === s)) return s
-  return commander.value?.body_live ? 'idle' : 'gone'
+  return commander.value?.body_live ? 'standby' : 'offline'
 })
+const headLabel = computed(() => {
+  const s = headState.value
+  return s === 'standby' || s === 'offline' ? t(`commander.detail.${s}`) : t(`commander.state.${s}`)
+})
+const headClass = computed(() => commanderStateClass(headState.value === 'standby' ? 'idle' : headState.value === 'offline' ? 'gone' : headState.value))
 function openBody(): void {
   const pane = commander.value?.body?.pane_id
   if (pane && commander.value?.body_live) emit('focus-pane', pane)
@@ -182,7 +188,7 @@ const counts = computed(() =>
         <div class="cd-title">
           <div class="cd-name-row">
             <span class="cd-name" v-truncate>{{ commander.name }}</span>
-            <span class="cmd-state-chip" :class="commanderStateClass(headState)">{{ t(`commander.state.${headState}`) }}</span>
+            <span class="cmd-state-chip" :class="headClass" data-testid="commander-head-state">{{ headLabel }}</span>
           </div>
           <div class="cd-duty" v-truncate>
             {{ commander.duty ? t('commander.detail.duty-line', { duty: commander.duty }) : t('commander.detail.duty-none') }}<template v-if="commander.workspaces[0]"> · {{ t('commander.detail.workspace', { name: workspaceName(commander.workspaces[0]) }) }}</template>
@@ -307,7 +313,7 @@ const counts = computed(() =>
             <div class="cd-tree-root">
               <span class="cd-icon cd-icon--sm" :style="{ background: commander.color || 'var(--accent-emphasis)' }" aria-hidden="true">{{ commander.icon || '◎' }}</span>
               <strong>{{ commander.name }}</strong>
-              <span class="cmd-state-chip" :class="commanderStateClass(headState)">{{ t(`commander.state.${headState}`) }}</span>
+              <span class="cmd-state-chip" :class="headClass" data-testid="commander-head-state">{{ headLabel }}</span>
             </div>
             <ul v-if="treeRows.length" class="cd-tree">
               <li v-for="{ node, depth, parent } in treeRows" :key="node.pane_id" :style="{ paddingLeft: 18 + depth * 18 + 'px' }" data-testid="commander-tree-row">
@@ -357,16 +363,19 @@ const counts = computed(() =>
   overflow: hidden;
   -webkit-app-region: no-drag;
   outline: none;
+  /* Teleported to <body>, outside the app root that sets the UI font. */
+  font-family: var(--font-ui);
+  color: var(--text-primary);
 }
 .cmd-detail--full { inset: var(--titlebar-height, 0px) 0 0 0; }
-.cd-head { display: flex; align-items: center; gap: 14px; padding: 18px 20px 12px; }
+.cd-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; padding: 18px 20px 12px; }
 .cd-icon { width: 44px; height: 44px; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-on-emphasis); font-size: var(--font-lg); }
 .cd-icon--sm { width: 20px; height: 20px; font-size: var(--font-2xs); border-radius: var(--radius-xs); }
-.cd-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cd-title { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .cd-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.cd-name { font-size: var(--font-lg); font-weight: 700; color: var(--text-bright); }
-.cd-duty { color: var(--text-secondary); font-size: var(--font-xs); }
-.cd-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.cd-name { font-size: var(--font-lg); font-weight: 700; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cd-duty { color: var(--text-secondary); font-size: var(--font-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cd-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
 .cd-btn { background: var(--bg-subtle); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: 5px 12px; font-size: var(--font-xs); cursor: pointer; white-space: nowrap; }
 .cd-btn:hover:not(:disabled) { background: var(--bg-muted); }
 .cd-btn:disabled { opacity: 0.5; cursor: default; }
@@ -374,8 +383,8 @@ const counts = computed(() =>
 .cd-btn--primary:hover:not(:disabled) { background: var(--accent-emphasis); filter: brightness(1.08); }
 .cd-close { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: var(--font-md); padding: 2px 6px; }
 .cd-error { color: var(--danger-fg); font-size: var(--font-xs); padding: 0 20px 6px; }
-.cd-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-muted); }
-.cd-tabs button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 8px 12px; font-size: var(--font-sm); cursor: pointer; }
+.cd-tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border-muted); overflow-x: auto; }
+.cd-tabs button { white-space: nowrap; flex-shrink: 0; background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-secondary); padding: 8px 12px; font-size: var(--font-sm); cursor: pointer; }
 .cd-tabs button.active { color: var(--text-bright); border-bottom-color: var(--accent-fg); }
 .cd-body { flex: 1; overflow: auto; padding: 16px 20px; min-height: 0; }
 .cd-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
@@ -404,6 +413,7 @@ const counts = computed(() =>
 .cd-memory { margin: 0; white-space: pre-wrap; font-size: var(--font-2xs); color: var(--text-primary); max-height: 360px; overflow: auto; }
 .cd-tree-root { display: flex; align-items: center; gap: 8px; font-size: var(--font-sm); color: var(--text-bright); margin-bottom: 10px; }
 .cd-tree li { display: grid; grid-template-columns: 8px minmax(0, 1.2fr) 120px minmax(0, 1.4fr) max-content; align-items: center; gap: 10px; font-size: var(--font-xs); }
+.cd-tree-name, .cd-log-name { color: var(--text-primary); }
 .cd-tree-chip { text-align: center; }
 .cd-stall { display: flex; align-items: center; gap: 12px; border: 1px solid var(--danger-fg); background: var(--danger-subtle); border-radius: var(--radius-md); padding: 10px 14px; font-size: var(--font-xs); }
 .cd-stall-text { flex: 1; color: var(--text-primary); }

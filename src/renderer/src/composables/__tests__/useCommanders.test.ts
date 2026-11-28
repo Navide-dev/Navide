@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createCommanderStore, dispatchedNodes, resetCommandersForTest, useCommanders } from '../useCommanders'
-import { commanderSummary, fakeBackend, node, tree } from './commanderFixtures'
+import { commanderSummary, fakeBackend, node, refusal, tree } from './commanderFixtures'
 
 function listing() {
   return fakeBackend({
@@ -110,6 +110,35 @@ describe('useCommanders', () => {
     await flushPromises()
     expect(await store.downgrade('c1')).toBe(true)
     expect(store.commanders.value).toEqual([])
+    store.unbind()
+  })
+
+  it('retries the list while the window has not proven itself yet, without showing an error', async () => {
+    vi.useFakeTimers()
+    try {
+      let calls = 0
+      const store = createCommanderStore()
+      store.bind(fakeBackend({
+        'commander.list': () => (++calls < 3 ? refusal('FORBIDDEN', 'only a Navide main window may do this') : { commanders: [commanderSummary()] }),
+        'commander.tree': tree('c1', []),
+      }))
+      await flushPromises()
+      expect(store.listError.value).toBe('')
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(calls).toBe(3)
+      expect(store.commanders.value.map((c) => c.id)).toEqual(['c1'])
+      expect(store.listError.value).toBe('')
+      store.unbind()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows any other refusal at once', async () => {
+    const store = createCommanderStore()
+    store.bind(fakeBackend({ 'commander.list': refusal('BAD_REQUEST', 'broken') }))
+    await flushPromises()
+    expect(store.listError.value).toBe('broken')
     store.unbind()
   })
 

@@ -12898,6 +12898,8 @@
       "workspace": "工作區 {name}",
       "open-pane": "開啟對話分格",
       "no-pane": "這個指揮目前沒有開啟的分格",
+      "standby": "待命",
+      "offline": "沒有分格",
       "tab-overview": "總覽",
       "tab-duty": "職責與記憶",
       "tab-bindings": "綁定 {count}",

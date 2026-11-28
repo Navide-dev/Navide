@@ -8,11 +8,11 @@ import { commanderSummary, fakeBackend, node, tree } from '../../composables/__t
 
 const t = i18n.global.t
 
-async function open(extra: Record<string, unknown> = {}) {
+async function open(extra: Record<string, unknown> = {}, dispatches = true) {
   const summary = commanderSummary({
     bindings: [{ kind: 'telegram', ref_id: 'b1', label: '@navide_bot', target: 'DM', paused: false }],
   })
-  const children = [node('dev', 'working', { task: 'queue overflow', children: [node('test', 'stalled', { opened_by: 'dev' })] }), node('old', 'gone', { closed_at: 300 })]
+  const children = !dispatches ? [] : [node('dev', 'working', { task: 'queue overflow', children: [node('test', 'stalled', { opened_by: 'dev' })] }), node('old', 'gone', { closed_at: 300 })]
   const backend = fakeBackend({
     'commander.list': { commanders: [summary] },
     'commander.tree': tree('c1', children),
@@ -83,6 +83,15 @@ describe('CommanderDetail', () => {
     await flushPromises()
     expect(backend.sent.some((s) => s.type === 'commander.downgrade')).toBe(true)
     expect(store.detailId.value).toBe('')
+  })
+
+  it('heads the page with the most urgent dispatch, or standing by when there is none', async () => {
+    const busy = await open()
+    expect(busy.wrapper.find('[data-testid="commander-head-state"]').text()).toBe(t('commander.state.stalled'))
+    busy.wrapper.unmount()
+    resetCommandersForTest()
+    const quiet = await open({}, false)
+    expect(quiet.wrapper.find('[data-testid="commander-head-state"]').text()).toBe(t('commander.detail.standby'))
   })
 
   it('opens the body pane and closes on Escape', async () => {

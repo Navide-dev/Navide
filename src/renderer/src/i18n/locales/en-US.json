@@ -12898,6 +12898,8 @@
       "workspace": "Workspace {name}",
       "open-pane": "Open conversation pane",
       "no-pane": "This commander has no pane open right now",
+      "standby": "Standing by",
+      "offline": "No pane open",
       "tab-overview": "Overview",
       "tab-duty": "Duty and memory",
       "tab-bindings": "Bindings {count}",

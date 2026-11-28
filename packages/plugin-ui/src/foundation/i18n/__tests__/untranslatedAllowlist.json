@@ -281,7 +281,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "fr-FR": [
     "account.title",
@@ -636,7 +638,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "de-DE": [
     "account.title",
@@ -919,7 +923,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "pt-BR": [
     "account.title",
@@ -1218,7 +1224,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "ru-RU": [
     "account.title",
@@ -1420,7 +1428,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "vi-VN": [
     "account.title",
@@ -1669,7 +1679,9 @@
     "commander.state.stalled",
     "commander.state.waiting",
     "commander.state.working",
-    "label.commanders"
+    "label.commanders",
+    "commander.detail.standby",
+    "commander.detail.offline"
   ],
   "ja-JP": [
     "sshRemote.dialog-title",

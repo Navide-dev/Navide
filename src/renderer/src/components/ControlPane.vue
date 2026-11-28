@@ -6769,8 +6769,9 @@ button.icon-btn.muted:hover {
 .ws-more[aria-expanded='true'] { opacity: 1; color: var(--text-bright); }
 
 /* A dispatched pane's detected state, at the row's tail (0.2.51). Colours come
-   from CommanderList's shared block; it gives way before the name does. */
-.cmd-row-chip { min-width: 0; max-width: 84px; overflow: hidden; text-overflow: ellipsis; line-height: 14px; flex-shrink: 1; }
+   from CommanderList's shared block. It keeps its word; the sub-line beside the
+   name is what gives way, and only a long translation is cut. */
+.cmd-row-chip { max-width: 96px; overflow: hidden; text-overflow: ellipsis; line-height: 14px; flex-shrink: 0; }
 .ws-more-menu {
   position: fixed;
   z-index: 300;
