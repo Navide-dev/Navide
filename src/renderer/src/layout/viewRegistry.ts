@@ -25,7 +25,7 @@
 //
 // Two more pins have nothing to do with rendering. A view that something can
 // *reveal* — a shortcut, a command, an agent push — only gets revealed in the
-// host that knows how: `explorer` / `plans` / `git` / `agents` / `pipeline` are
+// host that knows how: `explorer` / `plans` / `git` / `agents` / `commanders` / `pipeline` are
 // surfaced through ControlPane's `selectSidebarTab`, and `preview` through the
 // right panel's watch on `usePreview().focusRequest`. Moved elsewhere they
 // would still draw, but their shortcut would quietly stop working — which is
@@ -38,6 +38,7 @@ import type { SlotId } from './slots'
 
 export type ViewId =
   | 'agents'
+  | 'commanders'
   | 'pipeline'
   | 'explorer'
   | 'git'
@@ -78,6 +79,7 @@ const V = (d: ViewDescriptor): ViewDescriptor => d
  */
 export const VIEWS: readonly ViewDescriptor[] = [
   V({ id: 'agents', titleKey: 'label.agents', icon: '\u{1F916}', defaultSlot: 'left', allowedSlots: ['left'], preferredAxis: 'vertical', minSize: 240 }),
+  V({ id: 'commanders', titleKey: 'label.commanders', icon: '\u25CE', defaultSlot: 'left', allowedSlots: ['left'], preferredAxis: 'vertical', minSize: 240 }),
   V({ id: 'pipeline', titleKey: 'label.pipeline', icon: '\u{1F500}', defaultSlot: 'left', allowedSlots: ['left'], preferredAxis: 'vertical', minSize: 240 }),
   V({ id: 'explorer', titleKey: 'label.explorer', icon: '\u{1F4C1}', defaultSlot: 'left', allowedSlots: ['left'], preferredAxis: 'vertical', minSize: 220 }),
   V({ id: 'git', titleKey: 'label.git', icon: '\u{1F33F}', defaultSlot: 'left', allowedSlots: ['left'], preferredAxis: 'any', minSize: 260 }),

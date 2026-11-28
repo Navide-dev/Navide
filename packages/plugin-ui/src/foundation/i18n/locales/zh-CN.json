@@ -393,6 +393,7 @@
         "controlPane_selectSidebarTab3": "切换侧栏标签页 3",
         "controlPane_selectSidebarTab4": "切换侧栏标签页 4",
         "controlPane_selectSidebarTab5": "切换侧栏标签页 5",
+        "controlPane_selectSidebarTab6": "切换侧栏标签页 6",
         "editor_action_addLineComment": "加入行注解",
         "editor_action_addSelectionToNextFindMatch": "将下一个相符项加入选取",
         "editor_action_blockComment": "区块注解",

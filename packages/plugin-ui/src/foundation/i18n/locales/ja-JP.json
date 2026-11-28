@@ -393,6 +393,7 @@
         "controlPane_selectSidebarTab3": "サイドバーのタブ 3 を選択",
         "controlPane_selectSidebarTab4": "サイドバーのタブ 4 を選択",
         "controlPane_selectSidebarTab5": "サイドバーのタブ 5 を選択",
+        "controlPane_selectSidebarTab6": "サイドバーのタブ 6 を選択",
         "editor_action_addLineComment": "行コメントを追加",
         "editor_action_addSelectionToNextFindMatch": "次の検索一致を選択に追加",
         "editor_action_blockComment": "ブロックコメント",

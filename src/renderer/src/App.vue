@@ -3621,7 +3621,7 @@ async function createRequestedPane(
   // Only these three are read, which is what lets a cross-workspace spawn hand
   // in a parent that lives in another workspace, with the child's workspace.
   parent: Pick<ActivePane, 'id' | 'workspacePath' | 'runGroupId'>,
-  req: { agentKey: string; name: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
+  req: { agentKey: string; name: string; task?: string; model?: string; effort?: string; sessionId?: string; resumeSpawnedBy?: string; resumeRunGroupId?: string; runGroupId?: string; profileId?: string },
 ): Promise<string | null> {
   assertRequestedSpawnGroup(parent.workspacePath, req.runGroupId)
   const mcpCommand = mcpSpawnCommandOverride(req)
@@ -3700,6 +3700,9 @@ async function createRequestedPane(
     // pulls a resumed conversation back under the caller.
     spawned_by: resumeSpawnedBy,
     opened_by: parent.id,
+    // The kickoff, for a commander's dispatch record (the backend keeps its
+    // first 200 characters, masked). Not part of the pane record.
+    task: req.task ?? '',
     // A pinned pane's record keeps its pin, as a rebuild's does; without it the
     // backend files the pane under the live login and a restore reopens it there.
     ...(req.profileId ? { profile_id: req.profileId } : {}),

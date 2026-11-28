@@ -393,6 +393,7 @@
         "controlPane_selectSidebarTab3": "Выбрать вкладку боковой панели 3",
         "controlPane_selectSidebarTab4": "Выбрать вкладку боковой панели 4",
         "controlPane_selectSidebarTab5": "Выбрать вкладку боковой панели 5",
+        "controlPane_selectSidebarTab6": "Выбрать вкладку боковой панели 6",
         "editor_action_addLineComment": "Добавить строчный комментарий",
         "editor_action_addSelectionToNextFindMatch": "Добавить выделение к следующему совпадению",
         "editor_action_blockComment": "Блочный комментарий",

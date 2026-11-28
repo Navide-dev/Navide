@@ -12756,7 +12756,8 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         from .mcp_server import commander_tools
 
         try:
-            await run_in_db_thread(commander_tools.note_dispatch, opener, str(payload["pane_id"]), "")
+            await run_in_db_thread(commander_tools.note_dispatch, opener, str(payload["pane_id"]),
+                                   str(payload.get("task") or ""))
         except Exception:  # noqa: BLE001 — the spawn is recorded either way
             log.exception("manual_pane.spawn: commander dispatch not recorded")
     if previous_session_id:

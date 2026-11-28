@@ -109,6 +109,20 @@ async def test_spawn_block_pane_is_recorded_once(spawn_env):
     assert [(d.pane_id, d.task) for d in svc.store.dispatches(c.id)] == [("kid", "build it")]
 
 
+async def test_spawn_block_task_is_recorded(spawn_env):
+    # The renderer sends a SPAWN block's task with manual_pane.spawn; a missing
+    # one stays empty, as before.
+    world, svc, tmp_path = spawn_env
+    ws = str(tmp_path / "proj")
+    (tmp_path / "proj").mkdir()
+    c = svc.create({"name": "C"}, pane=world.add(pane("boss", "Boss")))
+    await spawn(ws, pane_id="kid", origin="mcp", opened_by="boss", task="review fix/git-panel-poll")
+    await spawn(ws, pane_id="kid2", origin="mcp", opened_by="boss")
+    assert [(d.pane_id, d.task) for d in svc.store.dispatches(c.id)] == [
+        ("kid", "review fix/git-panel-poll"), ("kid2", ""),
+    ]
+
+
 async def test_spawn_without_a_commander_or_opener_records_nothing(spawn_env):
     world, svc, tmp_path = spawn_env
     ws = str(tmp_path / "proj")

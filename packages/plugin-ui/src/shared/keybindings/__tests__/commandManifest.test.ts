@@ -139,7 +139,7 @@ describe('loop-registered command families', () => {
   it('have all of their members in the manifest', () => {
     for (const id of [
       ...Array.from({ length: 9 }, (_, i) => `controlPane.selectCliType${i + 1}`),
-      ...Array.from({ length: 5 }, (_, i) => `controlPane.selectSidebarTab${i + 1}`),
+      ...Array.from({ length: 6 }, (_, i) => `controlPane.selectSidebarTab${i + 1}`),
       ...Array.from({ length: 7 }, (_, i) => `editor.foldLevel${i + 1}`),
       ...Array.from({ length: 9 }, (_, i) => `workbench.action.openEditorAtIndex${i + 1}`),
     ]) {

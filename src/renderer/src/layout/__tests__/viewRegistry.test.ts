@@ -49,7 +49,7 @@ describe('view registry', () => {
   })
 
   it('seeds the shipped slots from the declaration order', () => {
-    expect(defaultViewsFor('left')).toEqual(['agents', 'pipeline', 'explorer', 'git', 'plans'])
+    expect(defaultViewsFor('left')).toEqual(['agents', 'commanders', 'pipeline', 'explorer', 'git', 'plans'])
     expect(defaultViewsFor('right')).toEqual(['history', 'time', 'tokens', 'tasker', 'messages', 'preview'])
     expect(defaultViewsFor('up')).toEqual([])
     expect(defaultViewsFor('down')).toEqual([])
@@ -123,6 +123,6 @@ describe('reconcileOccupancy', () => {
 
   it('appends re-homed views after the ones the user placed', () => {
     const out = occ({ left: ['plans', 'agents'] })
-    expect(out.left).toEqual(['plans', 'agents', 'pipeline', 'explorer', 'git'])
+    expect(out.left).toEqual(['plans', 'agents', 'commanders', 'pipeline', 'explorer', 'git'])
   })
 })

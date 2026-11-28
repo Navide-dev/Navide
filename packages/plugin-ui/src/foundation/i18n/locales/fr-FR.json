@@ -393,6 +393,7 @@
         "controlPane_selectSidebarTab3": "Sélectionner l’onglet 3 de la barre latérale",
         "controlPane_selectSidebarTab4": "Sélectionner l’onglet 4 de la barre latérale",
         "controlPane_selectSidebarTab5": "Sélectionner l’onglet 5 de la barre latérale",
+        "controlPane_selectSidebarTab6": "Sélectionner l’onglet 6 de la barre latérale",
         "editor_action_addLineComment": "Ajouter un commentaire de ligne",
         "editor_action_addSelectionToNextFindMatch": "Ajouter la sélection à la correspondance suivante",
         "editor_action_blockComment": "Commentaire de bloc",
