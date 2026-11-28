@@ -165,6 +165,14 @@ def _v9(cur: sqlite3.Cursor) -> None:
     cur.execute("ALTER TABLE channel_bindings ADD COLUMN closed_at INTEGER NOT NULL DEFAULT 0")
 
 
+def _v10(cur: sqlite3.Cursor) -> None:
+    # A binding may target a commander (0.2.51) instead of its pane: '' keeps the pane, as
+    # before. Only upgrading a pane to a commander sets it. `paused` holds a commander's
+    # bindings while it is archived: kept, never deleted, and routed nowhere.
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN commander_id TEXT NOT NULL DEFAULT ''")
+    cur.execute("ALTER TABLE channel_bindings ADD COLUMN paused INTEGER NOT NULL DEFAULT 0")
+
+
 DEFAULT_ACCOUNT = "default"
 
 # "replies": only answers to turns the chat started (the pre-mirror behaviour).
@@ -206,6 +214,8 @@ class Binding:
     state: str = "active"  # "dormant": its pane was closed; kept for a wake until unlinked
     agent: str = ""  # the CLI a wake or a new conversation opens ("" = unknown)
     closed_at: int = 0  # when its pane was closed (0 = active)
+    commander_id: str = ""  # the commander this chat drives ("" = its pane, as before)
+    paused: bool = False  # its commander is archived: kept, routed nowhere
 
     @property
     def dormant(self) -> bool:
@@ -215,10 +225,13 @@ class Binding:
         return Location(self.platform, self.account, self.chat_id, self.thread_id, self.title)
 
     def public(self) -> dict[str, Any]:
-        return {"pane_id": self.pane_id, "platform": self.platform, "account": self.account,
-                "chat_id": self.chat_id, "thread_id": self.thread_id, "title": self.title,
-                "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto,
-                "state": self.state, "closed_at": self.closed_at}
+        out = {"pane_id": self.pane_id, "platform": self.platform, "account": self.account,
+               "chat_id": self.chat_id, "thread_id": self.thread_id, "title": self.title,
+               "verbosity": self.verbosity, "parent_pane_id": self.parent_pane_id, "auto": self.auto,
+               "state": self.state, "closed_at": self.closed_at}
+        if self.commander_id:
+            out["commander_id"] = self.commander_id
+        return out
 
 
 class ChannelStore:
@@ -233,6 +246,7 @@ class ChannelStore:
         db.migrate(COMPONENT, 7, _v7)
         db.migrate(COMPONENT, 8, _v8)
         db.migrate(COMPONENT, 9, _v9)
+        db.migrate(COMPONENT, 10, _v10)
 
     def _rows(self, sql: str, args: tuple = ()) -> list[sqlite3.Row]:
         with self._db.transaction() as cur:
@@ -447,10 +461,14 @@ class ChannelStore:
     def _binding(r: sqlite3.Row) -> Binding:
         return Binding(r["pane_id"], r["platform"], r["account"], r["chat_id"], r["thread_id"],
                        r["title"], int(r["created_at"]), r["verbosity"], r["parent_pane_id"], bool(r["auto"]),
-                       r["workspace_path"], r["session_id"], r["state"], r["agent"], int(r["closed_at"]))
+                       r["workspace_path"], r["session_id"], r["state"], r["agent"], int(r["closed_at"]),
+                       r["commander_id"], bool(r["paused"]))
 
     def bindings(self) -> list[Binding]:
-        return [self._binding(r) for r in self._rows("SELECT * FROM channel_bindings ORDER BY created_at")]
+        """Every binding a message or a pane's activity may follow; a paused one (its
+        commander archived) is left out until it is resumed."""
+        return [self._binding(r) for r in self._rows("SELECT * FROM channel_bindings WHERE paused = 0"
+                                                      " ORDER BY created_at")]
 
     def bind(self, pane_id: str, loc: Location, *, verbosity: str = DEFAULT_VERBOSITY,
              parent_pane_id: str = "", auto: bool = False) -> Binding:
@@ -529,6 +547,57 @@ class ChannelStore:
             cur.execute("UPDATE channel_bindings SET verbosity = ? WHERE pane_id = ?", (verbosity, pane_id))
             r = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ?", (pane_id,)).fetchone()
             return self._binding(r) if r is not None else None
+
+    # --- commanders (0.2.51) ---------------------------------------------------------
+
+    def commander_bindings(self, commander_id: str) -> list[Binding]:
+        """The bindings that target ``commander_id``, paused ones included."""
+        return [self._binding(r) for r in self._rows("SELECT * FROM channel_bindings WHERE commander_id = ?"
+                                                      " ORDER BY created_at", (commander_id,))]
+
+    def retarget_to_commander(self, pane_id: str, commander_id: str) -> list[tuple[str, dict[str, Any]]]:
+        """Upgrading ``pane_id`` to a commander: its own binding (not a child's) now targets
+        the commander. Returns (location key, original values) for each one moved."""
+        moved: list[tuple[str, dict[str, Any]]] = []
+        with self._db.transaction() as cur:
+            rows = cur.execute("SELECT * FROM channel_bindings WHERE pane_id = ? AND commander_id = ''"
+                               " AND paused = 0", (pane_id,)).fetchall()
+            for r in rows:
+                b = self._binding(r)
+                cur.execute("UPDATE channel_bindings SET commander_id = ? WHERE pane_id = ?",
+                            (commander_id, b.pane_id))
+                moved.append((b.location().key(), {
+                    "pane_id": b.pane_id, "commander_id": "", "paused": False, "platform": b.platform,
+                    "account": b.account, "chat_id": b.chat_id, "thread_id": b.thread_id}))
+        for _key, before in moved:
+            log.info("channels: binding of pane %s now targets commander %s", before["pane_id"], commander_id)
+        return moved
+
+    def restore_from_commander(self, commander_id: str, before: dict[str, Any], pane_id: str) -> bool:
+        """Downgrading: the binding moved at upgrade targets ``pane_id`` again, with its
+        original commander and paused values. False when it was unbound meanwhile."""
+        loc = (str(before.get("platform") or ""), str(before.get("account") or ""),
+               str(before.get("chat_id") or ""), str(before.get("thread_id") or ""))
+        with self._db.transaction() as cur:
+            r = cur.execute("SELECT * FROM channel_bindings WHERE platform = ? AND account = ? AND chat_id = ?"
+                            " AND thread_id = ? AND commander_id = ?", (*loc, commander_id)).fetchone()
+            if r is None:
+                return False
+            row_pane = r["pane_id"]
+            taken = pane_id and pane_id != row_pane and cur.execute(
+                "SELECT 1 FROM channel_bindings WHERE pane_id = ?", (pane_id,)).fetchone() is not None
+            target = pane_id if pane_id and not taken else row_pane
+            cur.execute("UPDATE channel_bindings SET commander_id = ?, paused = ?, pane_id = ? WHERE pane_id = ?",
+                        (str(before.get("commander_id") or ""), int(bool(before.get("paused"))), target, row_pane))
+            if target != row_pane:
+                cur.execute("UPDATE channel_bindings SET parent_pane_id = ? WHERE parent_pane_id = ?",
+                            (target, row_pane))
+        log.info("channels: binding back from commander %s to pane %s", commander_id, target)
+        return True
+
+    def set_commander_paused(self, commander_id: str, paused: bool) -> int:
+        return self._exec("UPDATE channel_bindings SET paused = ? WHERE commander_id = ?",
+                          (int(bool(paused)), commander_id))
 
     # --- offsets (Telegram OffsetStore protocol) --------------------------------
 

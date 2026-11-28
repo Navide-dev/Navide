@@ -205,6 +205,13 @@ class SchedulerStore:
             )
             return cur.rowcount > 0
 
+    def _set_action(self, job_id: str, action: dict[str, Any]) -> bool:
+        """Only the target: a commander migration is nobody's edit and must not
+        race a run's state write."""
+        with self.db.transaction() as cur:
+            cur.execute("UPDATE scheduler_jobs SET action = ? WHERE id = ?", (_dumps(action), job_id))
+            return cur.rowcount > 0
+
     def _delete_job(self, job_id: str) -> bool:
         with self.db.transaction() as cur:
             cur.execute("DELETE FROM scheduler_jobs WHERE id = ?", (job_id,))
