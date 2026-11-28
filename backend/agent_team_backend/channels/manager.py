@@ -249,6 +249,27 @@ async def _no_turn_text() -> str:
     return ""
 
 
+#: commander_migrations.kind of a chat binding moved onto a commander.
+COMMANDER_MIGRATION_KIND = "channel_binding"
+
+
+def _commander_body(commander_id: str) -> Any:
+    """The commander's current body, else its latest one (for a wake); None when the
+    commander is unknown or has never had one. A failed read leaves the binding as is."""
+    from .. import commander_service
+
+    try:
+        service = commander_service.current()
+        body = service.body(commander_id)
+        if body is None:
+            bodies = service.store.bodies(commander_id)
+            body = bodies[-1] if bodies else None
+        return body
+    except Exception as exc:  # noqa: BLE001 - routing falls back to the stored pane
+        log.warning("channels: commander %s unreadable: %s", commander_id, exc)
+        return None
+
+
 @dataclass
 class Seams:
     """Everything the manager needs from the rest of the backend."""
@@ -603,6 +624,7 @@ class ChannelManager:
             self._status_task = asyncio.create_task(self._status_watch(), name="channels-status")
         self._adopt_lost_kept()
         self._adopt_lost_replies()
+        self._register_commander_hooks()
         if self.store.global_enabled():
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
@@ -610,6 +632,7 @@ class ChannelManager:
         self.mirror.schedule_sync()
 
     async def stop(self) -> None:
+        self._unregister_commander_hooks()
         if self._status_task:
             self._status_task.cancel()
             self._status_task = None
@@ -2099,8 +2122,77 @@ class ChannelManager:
         key = msg.location_key()
         for b in self.store.bindings():
             if b.location().key() == key:
-                return b
+                return self._follow_commander(b) if b.commander_id else b
         return None
+
+    # --- commanders (0.2.51) ------------------------------------------------------------
+
+    def _follow_commander(self, b: Binding) -> Binding:
+        """A binding that targets a commander follows the commander's current body: onto
+        its pane when that pane is live, and otherwise onto its workspace and conversation
+        for a wake. A binding without a commander never comes here."""
+        body = _commander_body(b.commander_id)
+        if body is None:
+            return b
+        moved = False
+        if body.pane_id and body.pane_id != b.pane_id and self._seams.resolve_pane(body.pane_id) == body.pane_id \
+                and not any(o.pane_id == body.pane_id for o in self.store.bindings()):
+            if self.store.rename_pane(b.pane_id, body.pane_id):
+                self.mirror.rename_pane(b.pane_id, body.pane_id)
+                moved = True
+        pane_id = body.pane_id if moved else b.pane_id
+        session_id = body.session_id or b.session_id
+        if body.workspace and (body.workspace, session_id, body.agent_key or b.agent) \
+                != (b.workspace_path, b.session_id, b.agent):
+            self.store.set_wake_target(pane_id, body.workspace, session_id, body.agent_key)
+            moved = True
+        if not moved:
+            return b
+        if self._loop is not None:
+            self._spawn(self._changed())
+        return next((o for o in self.store.bindings() if o.pane_id == pane_id), b)
+
+    def commander_upgrade(self, commander_id: str, pane_id: str) -> list[tuple[str, dict[str, Any]]]:
+        """commander_service Migrator: the pane's own binding now targets the commander."""
+        # A binding not yet synced may still sit under one of the pane's earlier ids.
+        ids = {pane_id} | {b.pane_id for b in self.store.bindings() if self._seams.resolve_pane(b.pane_id) == pane_id}
+        moved = [m for pid in sorted(ids) for m in self.store.retarget_to_commander(pid, commander_id)]
+        if moved:
+            self._changed_soon()
+        return moved
+
+    def commander_restore(self, commander_id: str, _ref_id: str, before: dict[str, Any], pane_id: str) -> None:
+        if self.store.restore_from_commander(commander_id, before, pane_id):
+            self._changed_soon()
+
+    def commander_set_paused(self, commander_id: str, paused: bool) -> None:
+        if self.store.set_commander_paused(commander_id, paused):
+            self._changed_soon()
+
+    def commander_bindings(self, commander_id: str) -> list[dict[str, Any]]:
+        return [{"kind": COMMANDER_MIGRATION_KIND, "ref_id": b.location().key(),
+                 "label": b.title or b.platform, "target": b.pane_id, "paused": b.paused}
+                for b in self.store.commander_bindings(commander_id)]
+
+    def _changed_soon(self) -> None:
+        """Migrators run on a worker thread: the change event goes out on the loop."""
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            loop.call_soon_threadsafe(lambda: self._spawn(self._changed()))
+
+    def _register_commander_hooks(self) -> None:
+        from .. import commander_service
+
+        commander_service.register_migrator(commander_service.Migrator(
+            kind=COMMANDER_MIGRATION_KIND, upgrade=self.commander_upgrade,
+            restore=self.commander_restore, set_paused=self.commander_set_paused))
+        commander_service.register_binding_summary(self.commander_bindings)
+
+    def _unregister_commander_hooks(self) -> None:
+        from .. import commander_service
+
+        commander_service.unregister_migrator(COMMANDER_MIGRATION_KIND)
+        commander_service.unregister_binding_summary(self.commander_bindings)
 
     async def _reply(self, msg: InboundMessage, text: str,
                      buttons: list[tuple[str, str]] | None = None, typed_hint: str = MSG_TYPED_HINT) -> str:

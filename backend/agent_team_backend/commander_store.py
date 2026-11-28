@@ -474,14 +474,30 @@ class CommanderStore:
         if not pane_id:
             raise CommanderInvalid("a dispatch needs a pane id")
         now = int(time.time()) if now is None else now
-        dispatch = CommanderDispatch(commander_id, pane_id, opened_by, str(task or "")[:MAX_TASK], now, 0)
+        task = str(task or "")[:MAX_TASK]
         with self.db.transaction() as cur:
+            # One open dispatch per child: the window's spawn record and
+            # cli_open_agent both report the same pane; the later one only
+            # fills a task the first did not have.
+            row = cur.execute(
+                "SELECT rowid, * FROM commander_dispatches WHERE pane_id = ? AND closed_at = 0"
+                " ORDER BY opened_at DESC, rowid DESC LIMIT 1",
+                (pane_id,),
+            ).fetchone()
+            if row is not None:
+                found = _row(row, cur)
+                rowid = found.pop("rowid")
+                existing = CommanderDispatch(**found)
+                if task and not existing.task:
+                    cur.execute("UPDATE commander_dispatches SET task = ? WHERE rowid = ?", (task, rowid))
+                    existing.task = task
+                return existing
             cur.execute(
                 "INSERT INTO commander_dispatches (commander_id, pane_id, opened_by, task, opened_at, closed_at)"
                 " VALUES (?, ?, ?, ?, ?, 0)",
-                (commander_id, pane_id, dispatch.opened_by, dispatch.task, now),
+                (commander_id, pane_id, opened_by, task, now),
             )
-        return dispatch
+        return CommanderDispatch(commander_id, pane_id, opened_by, task, now, 0)
 
     def close_dispatch(self, pane_id: str, *, now: int | None = None) -> int:
         now = int(time.time()) if now is None else now

@@ -91,6 +91,8 @@ DEVELOPER_BACKEND_TOOLS = ["plugins_developer_backend_call"]
 #: Registered after it: 0.2.40's running-pane model switch
 #: (mcp_server/pane_model_tool.py).
 SET_MODEL_TOOLS = ["cli_set_model"]
+#: Registered after it: 0.2.51's commander tools (mcp_server/commander_tools.py).
+COMMANDER_TOOLS = ["commander_list", "commander_get", "commander_tree", "commander_memory_append"]
 #: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills,
 #: navide.shipped-log).
 PLUGIN_PREFIXES = ("plan_", "skills_", "ship_log_")
@@ -111,7 +113,7 @@ def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -
     # onto the same server; those are left out by their known prefixes, and
     # anything else that is not main's must make this fail.
     tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
-    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS + EVOLVE_RETRO_TOOLS + CHANNEL_TOOLS + RENAME_TOOLS + DEVELOPER_BACKEND_TOOLS + SET_MODEL_TOOLS
+    added = SHARE_TOOLS + MARKETPLACE_TOOLS + MARKETPLACE_REQUEST_TOOLS + ACCOUNT_TOOLS + FORM_TOOLS + TESTPLACE_TOOLS + LOCAL_PACKAGE_TOOLS + WINDOW_TOOLS + EVOLVE_RETRO_TOOLS + CHANNEL_TOOLS + RENAME_TOOLS + DEVELOPER_BACKEND_TOOLS + SET_MODEL_TOOLS + COMMANDER_TOOLS
     existing = [t for t in tools if t["name"] not in added]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-len(added):]] == added

@@ -943,6 +943,15 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
     device, trusting or blocking one all move trust state, so they are the
     user's to do in Navide's account window and are deliberately on no tool.
 
+    `commander` says where you stand with a commander (a named, long-lived
+    agent identity the user set up in the window; see commander_list):
+    {id, name, role: "commander"} when you are its current pane, or
+    {id, name, role: "worker", dispatched_by: {pane_id, name, address}} when
+    you are work it dispatched — opened by its pane, or by a pane it
+    dispatched. `dispatched_by` is the pane that opened you, i.e. who your
+    report goes to; like `spawned_by` it survives a compaction, and a closed
+    one comes back as {pane_id, gone: true}. The key is absent otherwise.
+
     `delegation_hint` restates the rule for where delegated work goes (a
     Navide pane via cli_open_agent rather than your own subagents) so that a
     pane which never read the server instructions still meets it here.
@@ -951,7 +960,7 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
     and has none of these: it gets {ok, caller} only.
     Returns {ok, caller, name, address, pane_id, workspace_path, agent_key,
     busy, offline, delegation_hint, hold_reason?, surface?, window_kind?,
-    window_id?, spawned_by?, waiting_on_me?,
+    window_id?, spawned_by?, waiting_on_me?, commander?,
     cloud?} or {ok: false, error}.
     """
     from agent_team_backend import agent_messaging
@@ -996,6 +1005,13 @@ async def cli_whoami(ctx: Context) -> dict[str, Any]:
     waiting = _waiting_on_me(me.pane_id)
     if waiting:
         result["waiting_on_me"] = waiting
+    # Absent, not null, for a pane no commander knows (the same byte-for-byte
+    # rule as above).
+    from . import commander_tools
+
+    commander = await run_in_db_thread(commander_tools.whoami_commander, me.pane_id)
+    if commander:
+        result["commander"] = commander
     # Absent on an unlinked machine, for the same reason every optional key
     # here is: it must read byte-for-byte as it did before cross-device
     # addressing existed. Present the moment there is a link, because that is
@@ -1725,6 +1741,11 @@ async def cli_open_agent(
             _record_cross_spawn(caller, cross_workspace, choice, {**refused_spawn, "prepared": prepared})
         return refused_spawn
     await run_in_db_thread(_taint_spawned, caller, str(verdict.get("pane_id") or ""))
+    if caller.kind == "pane":
+        # A commander's dispatch record (0.2.51); never fails the spawn.
+        from . import commander_tools
+
+        await run_in_db_thread(commander_tools.note_dispatch, caller.pane_id, str(verdict.get("pane_id") or ""), task)
     # The pane exists; now the task. Waited for here rather than reported by
     # message: the caller acts on this answer, and "ok" alone was taken as
     # "delivered" by every caller that got it.
@@ -13031,3 +13052,6 @@ from . import pane_rename_tool as _pane_rename_tool  # noqa: E402,F401
 from . import developer_backend_tool as _developer_backend_tool  # noqa: E402,F401
 # Registered after it (0.2.40): switching a running pane's model.
 from . import pane_model_tool as _pane_model_tool  # noqa: E402,F401
+# Registered after it (0.2.51): the read-only commander_* tools and a
+# commander's own memory note.
+from . import commander_tools as _commander_tools  # noqa: E402,F401

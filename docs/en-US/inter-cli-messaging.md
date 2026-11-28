@@ -520,6 +520,24 @@ the head: a turn that was going to be a report ends with its conclusion.
 None of this makes the report a completion signal. To be sure a spawned pane has
 finished, check its state yourself with `cli_get_status` / `cli_wait_idle`.
 
+### Commanders
+
+A commander (0.2.51) is a named, long-lived agent identity the user sets up in
+the window; the pane it runs in is its body. When a commander's body — or a
+pane it dispatched, at any depth through `opened_by` — opens a pane with
+`cli_open_agent`, Navide records the dispatch (the first 200 characters of the
+task, credentials masked). `cli_whoami` then answers `commander`:
+`{id, name, role: "commander"}` for the body, or
+`{id, name, role: "worker", dispatched_by}` for dispatched work, where
+`dispatched_by` is the pane to report to and survives a compaction.
+`commander_list`, `commander_get` and `commander_tree` are read-only: panes in
+one of the commander's workspaces see every field and the dispatch tree with a
+detected state per pane; anyone else sees `{id, name, icon, color}` only. No
+account id, session id or credential is returned. `commander_memory_append`
+writes only the caller's own commander memory. Creating, upgrading and binding
+a commander are not on any tool — they stay with the user in the window.
+SPAWN blocks are not recorded as dispatches yet.
+
 ### Releasing a finished pane
 
 Once a child has reported and its work is done, the parent can free its memory
