@@ -12749,6 +12749,16 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
     await session.send_json(
         make_response(msg_id, msg_type, app._project_payload(project))
     )
+    # A pane another pane opened (cli_open_agent or a bare-line SPAWN block):
+    # a commander's dispatch when the opener is one's. Bookkeeping only.
+    opener = str(payload.get("opened_by") or "")
+    if opener and payload.get("origin") == "mcp" and not previous_pane_id:
+        from .mcp_server import commander_tools
+
+        try:
+            await run_in_db_thread(commander_tools.note_dispatch, opener, str(payload["pane_id"]), "")
+        except Exception:  # noqa: BLE001 — the spawn is recorded either way
+            log.exception("manual_pane.spawn: commander dispatch not recorded")
     if previous_session_id:
         from . import scheduler
 
