@@ -130,6 +130,21 @@ describe('Cloud sign-in, account scope', () => {
     expect(state.cloudMemberId).toBe('m_1')
   })
 
+  it('the automatic sync never reaches the publish scope (0.2.51 S5)', async () => {
+    // A Cloud account that could publish: the Registry offers namespaces.
+    const { account, assertions, confirmPublish, calls } = setup({
+      registry: (call) => exchangeAnswer(call)
+        ?? (call.url.endsWith('/api/developer/me/namespaces') ? { status: 200, body: { namespaces: ['acme'] } } : { status: 404, body: {} }),
+    })
+    await account.syncCloudAccount()
+    await account.syncCloudAccount()
+    expect(assertions.map((a) => a.scope)).toEqual(['account'])
+    expect(confirmPublish).not.toHaveBeenCalled()
+    expect(calls.some((call) => (call.body as { scope?: string } | undefined)?.scope === 'publish')).toBe(false)
+    expect(await vault.token(REGISTRY, 'publisher')).toBeNull()
+    expect(account.state().signedIn.publisher).toBe(false)
+  })
+
   it('a refusal that is not about the assertion is an error, not a silent fallback', async () => {
     const { account } = setup({ registry: () => ({ status: 500, body: { detail: 'boom' } }) })
     await expect(account.syncCloudAccount()).rejects.toThrow(/sign-in failed \(500/)

@@ -143,6 +143,28 @@ def test_resolve_caller_rejects_a_bad_external_token_even_when_enabled() -> None
         plan_mcp._resolve_caller(_ctx(client="external", t="wrong"))
 
 
+def test_a_regenerated_external_token_locks_out_the_old_one() -> None:
+    # 0.2.51 S1: the Settings "regenerate" button is the rotation path for a
+    # long-lived external token; a client still holding the old one is refused.
+    plan_mcp_auth.set_external_enabled(True)
+    old = plan_mcp_auth.external_token()
+    plan_mcp_auth.regenerate_external_token()
+    with pytest.raises(plan_mcp.CallerUnknown, match="external token rejected"):
+        plan_mcp._resolve_caller(_ctx(client="external", t=old))
+    assert plan_mcp._resolve_caller(
+        _ctx(client="external", t=plan_mcp_auth.external_token())
+    ).kind == "external"
+
+
+def test_turning_external_access_off_refuses_the_current_token() -> None:
+    # 0.2.51 S1: switching the toggle off is the other immediate revocation.
+    plan_mcp_auth.set_external_enabled(True)
+    token = plan_mcp_auth.external_token()
+    plan_mcp_auth.set_external_enabled(False)
+    with pytest.raises(plan_mcp.CallerUnknown, match="disabled"):
+        plan_mcp._resolve_caller(_ctx(client="external", t=token))
+
+
 # ── integration: a real tool enforces the same gate ─────────────────────────
 
 
