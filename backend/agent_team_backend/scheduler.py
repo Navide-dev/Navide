@@ -103,6 +103,10 @@ SKIP_INTERRUPTED = "interrupted"
 SKIP_BUDGET_GLOBAL = "budget_global"
 #: An agent-owned periodic job disabled because it expired.
 SKIP_EXPIRED = "expired"
+#: A commander-targeted job whose commander's body is not in the job's workspace.
+SKIP_COMMANDER_WORKSPACE_MISMATCH = "commander_workspace_mismatch"
+#: Refusal code for a pane scheduling outside its own workspace (same as the MCP tool's).
+CROSS_WORKSPACE = "SCHEDULER_CROSS_WORKSPACE"
 #: A pane-id target that is gone (unknown-pane-id, never target-offline) this
 #: many runs in a row disables the job and tells its owner — or the user — once.
 #: A skip is still not an error; this is the one skip that stops a job.
@@ -711,6 +715,8 @@ class LiveBridge:
         from .usage_service import service
 
         action = await asyncio.to_thread(commander_target, action)
+        if action.get(_WORKSPACE_MISMATCH):
+            return False
         entry = None
         if action.get("pane_id"):
             entry = agent_messaging.current(action["pane_id"])
@@ -738,6 +744,9 @@ class LiveBridge:
         from .mcp_server import server as mcp
 
         action = await asyncio.to_thread(commander_target, action)
+        if action.get(_WORKSPACE_MISMATCH):
+            return {"status": "skipped", "reason": SKIP_COMMANDER_WORKSPACE_MISMATCH,
+                    "detail": "its commander's pane is not in this job's workspace"}
         if not action.get("pane_id") and not action.get("pane_name"):
             return {"status": "skipped", "reason": SKIP_TARGET_GONE,
                     "detail": "its commander has no pane to send to"}
@@ -831,6 +840,28 @@ class LiveBridge:
 
 # ── commanders (0.2.51) ────────────────────────────────────────────────────
 
+
+async def _commander_scope(
+    actor: dict[str, Any], action: dict[str, Any], existing: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """A pane may aim a job only at a commander of its own workspace (the rule
+    the MCP tool keeps for pane targets). The user and Navide are not limited;
+    an action saved unchanged is not checked again."""
+    commander_id = action.get("commander_id")
+    if actor.get("kind") != "pane" or not commander_id:
+        return None
+    if existing is not None and existing.get("action") == action:
+        return None
+    own = str(actor.get("workspace") or "")
+    if await asyncio.to_thread(commander_in_workspace, commander_id, own):
+        return None
+    return {
+        "ok": False, "code": CROSS_WORKSPACE,
+        "error": f'a pane may only schedule commanders of its own workspace ("{own}") — '
+        "ask the user, or a pane in that workspace, to schedule it",
+    }
+
+
 #: commander_migrations.kind of a job moved onto a commander.
 COMMANDER_MIGRATION_KIND = "scheduler_job"
 #: state key: disabled because its commander was archived (enabled again on resume).
@@ -853,18 +884,43 @@ def _commander_body(commander_id: str) -> Any:
         return None
 
 
+#: Set (never stored) on an action whose commander's body is in another workspace.
+_WORKSPACE_MISMATCH = "_commander_workspace_mismatch"
+
+
+def _same_workspace(a: str, b: str) -> bool:
+    from . import agent_messaging
+
+    return bool(a) and agent_messaging._normalize_workspace(a) == agent_messaging._normalize_workspace(b)
+
+
 def commander_target(action: dict[str, Any]) -> dict[str, Any]:
     """The action aimed at its commander's body by pane id; an action without a
-    commander, or whose commander has no body, comes back unchanged. Blocking."""
+    commander, or whose commander has no body, comes back unchanged. A body in
+    another workspace than the job's is never sent to: the action comes back
+    marked, for the run to be skipped. Blocking."""
     commander_id = action.get("commander_id")
     if not commander_id:
         return action
     body = _commander_body(commander_id)
     if body is None or not body.pane_id:
         return action
+    if not _same_workspace(str(body.workspace or ""), str(action.get("workspace") or "")):
+        return {**action, _WORKSPACE_MISMATCH: True}
     out = {k: v for k, v in action.items() if k not in ("pane_id", "pane_name")}
     out["pane_id"] = body.pane_id
     return out
+
+
+def commander_in_workspace(commander_id: str, workspace: str) -> bool:
+    """Does the commander list ``workspace`` among its workspaces? Blocking."""
+    from . import commander_service
+
+    try:
+        commander = commander_service.current().store.get(commander_id)
+    except Exception:  # noqa: BLE001 — unknown or unreadable: not provably the caller's
+        return False
+    return any(_same_workspace(str(w), workspace) for w in commander.workspaces or [])
 
 
 def _aims_at(action: dict[str, Any], pane: Any) -> bool:
@@ -1526,6 +1582,9 @@ class SchedulerService:
                     return _not_owner(existing)
             now = self.now_ms()
             job = normalize_job(raw, existing, now)
+            refusal = await _commander_scope(actor, job["action"], existing)
+            if refusal is not None:
+                return refusal
             # Checked when saved, so a misspelt pipeline is refused now rather
             # than failing at its first run; an action saved unchanged is not
             # checked again (the pipeline may have been deleted since).
