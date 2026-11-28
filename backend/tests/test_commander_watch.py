@@ -35,12 +35,14 @@ class Harness:
         self.svc = svc
         self.now = 1000.0
         self.sent: list[tuple[str, str]] = []
+        self.sources: list[str] = []
         self.chats: list[tuple[str, str]] = []
         self.events: list[tuple[str, str, str]] = []
         self.has_chat = chats
 
-        async def send_to_body(pane_id: str, text: str) -> None:
+        async def send_to_body(pane_id: str, text: str, source: str) -> None:
             self.sent.append((pane_id, text))
+            self.sources.append(source)
 
         async def push_chats(commander_id: str, text: str) -> None:
             if self.has_chat:
@@ -154,7 +156,7 @@ def test_one_failing_notice_does_not_stop_the_others() -> None:
     svc = FakeService()
     h = Harness(svc)
 
-    async def boom(pane_id: str, text: str) -> None:
+    async def boom(pane_id: str, text: str, source: str) -> None:
         raise RuntimeError("down")
 
     h.watch._send_to_body = boom  # type: ignore[assignment]
@@ -207,3 +209,27 @@ async def test_module_startup_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
     assert watch is not None and watch._task is not None and not watch._task.done()
     await commander_watch.shutdown()
     assert commander_watch._WATCH is None and watch._task is None
+
+
+def test_body_notice_names_the_quoted_pane_for_guard() -> None:
+    svc = FakeService()
+    h = Harness(svc)
+    svc.states["child"] = STALLED
+    h.tick()
+    assert h.sources == ["child"]
+
+
+@pytest.mark.asyncio
+async def test_send_to_body_passes_taint(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend.mcp_server import server as mcp
+
+    seen: dict[str, Any] = {}
+
+    async def fake_send(caller: Any, to: str, text: str, **kw: Any) -> dict[str, Any]:
+        seen.update(kw, caller=caller.kind)
+        return {"ok": True}
+
+    monkeypatch.setattr(mcp, "_send", fake_send)
+    await commander_watch._send_to_body("boss", "hi", "child")
+    assert seen["caller"] == "host" and seen["pane_id"] == "boss"
+    assert "child" in seen["taint_detail"]
