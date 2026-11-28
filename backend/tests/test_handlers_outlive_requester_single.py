@@ -216,11 +216,18 @@ CASES: list[tuple[str, Setup]] = [
 
 
 @pytest.fixture
-def broadcasts(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+def told() -> asyncio.Event:
+    """Set by the first broadcast."""
+    return asyncio.Event()
+
+
+@pytest.fixture
+def broadcasts(monkeypatch: pytest.MonkeyPatch, told: asyncio.Event) -> list[dict]:
     events: list[dict] = []
 
     async def capture(event: Any, *_a: Any, **_k: Any) -> None:
         events.append(event if isinstance(event, dict) else {"type": "tokens"})
+        told.set()
 
     for name in ("broadcast", "broadcast_main_windows", "broadcast_tokens_changed"):
         monkeypatch.setattr(app_module, name, capture)
@@ -258,8 +265,8 @@ def _handler_for(msg_type: str) -> Any:
 
 @pytest.mark.parametrize("msg_type,setup", CASES, ids=[c[0] for c in CASES])
 async def test_the_broadcast_after_a_write_survives_a_hang_up(
-    msg_type: str, setup: Setup, broadcasts: list, slow_first_write: asyncio.Event,
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+    msg_type: str, setup: Setup, broadcasts: list, told: asyncio.Event,
+    slow_first_write: asyncio.Event, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
     payload = setup(monkeypatch, tmp_path)
     # Answered in full when nobody hangs up: the case really reaches its broadcast.
@@ -269,8 +276,10 @@ async def test_the_broadcast_after_a_write_survives_a_hang_up(
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    for _ in range(200):
-        if broadcasts:
-            break
-        await asyncio.sleep(0.01)
-    assert broadcasts, f"{msg_type}: the write landed but no window was told"
+    # The broadcast follows a commit on the single db-writes thread, whose fsync
+    # can take seconds on a slow disk (a Windows runner missed a ~3s budget), so
+    # wait for the broadcast itself; the timeout only bounds a real miss.
+    try:
+        await asyncio.wait_for(told.wait(), timeout=60)
+    except TimeoutError:
+        pytest.fail(f"{msg_type}: the write landed but no window was told")
