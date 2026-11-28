@@ -222,12 +222,22 @@ class CommanderService:
         return classify(registered=True, busy=bool(live.busy), display_status=live.display_status or "",
                         activity_age_s=age, reported=reported, stall_minutes=stall_minutes)
 
+    def _dispatches(self, commander_id: str, *, open_only: bool = False) -> list[CommanderDispatch]:
+        """The commander's dispatches, with every open one re-keyed onto the
+        id its pane answers to now (a resumed child keeps its CLI under a new
+        pane id; agent_messaging aliases the old one)."""
+        for d in self.store.dispatches(commander_id, open_only=True):
+            live = self._pane(d.pane_id)
+            if live is not None and live.pane_id != d.pane_id:
+                self.store.update_body_pane(d.pane_id, live.pane_id)
+        return self.store.dispatches(commander_id, open_only=open_only)
+
     def tree(self, commander_id: str) -> dict[str, Any]:
         """The dispatch tree rooted at the commander's body; every node has a
         detected state. Closed dispatches stay, with state ``gone``."""
         commander = self.store.get(commander_id)
         body = self.body(commander_id)
-        dispatches = self.store.dispatches(commander_id)
+        dispatches = self._dispatches(commander_id)
         nodes: dict[str, dict[str, Any]] = {}
         for d in dispatches:
             nodes[d.pane_id] = self._node(d, commander)
@@ -288,7 +298,7 @@ class CommanderService:
         body = self.body(commander.id) if not commander.archived_at else None
         counts = dict.fromkeys(STATES, 0)
         if body is not None:
-            for d in self.store.dispatches(commander.id, open_only=True):
+            for d in self._dispatches(commander.id, open_only=True):
                 counts[self.detect(d.pane_id, dispatcher=d.opened_by, since=d.opened_at,
                                    stall_minutes=commander.stall_minutes)] += 1
         return {
