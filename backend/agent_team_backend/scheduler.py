@@ -321,7 +321,14 @@ def _normalize_action(raw: Any) -> dict[str, Any]:
         if not isinstance(value, str) or not value.strip() or "/" in value or len(value) > 256:
             raise JobInvalid(f"action.{key} must be a pane id / name without '/'")
         action[key] = value.strip()
-    if "pane_id" not in action and "pane_name" not in action:
+    commander_id = raw.get("commander_id")
+    if commander_id is not None and commander_id != "":
+        # Sent to the commander's current body at run time (0.2.51).
+        if not isinstance(commander_id, str) or not commander_id.strip() or "/" in commander_id \
+                or len(commander_id) > 64:
+            raise JobInvalid("action.commander_id must be a commander id")
+        action["commander_id"] = commander_id.strip()
+    if "pane_id" not in action and "pane_name" not in action and "commander_id" not in action:
         raise JobInvalid("action needs pane_id or pane_name")
     action["text"] = _require_str(raw, "text", "action.text", limit=_MAX_TEXT)
     return action
@@ -703,6 +710,7 @@ class LiveBridge:
         from . import agent_messaging
         from .usage_service import service
 
+        action = await asyncio.to_thread(commander_target, action)
         entry = None
         if action.get("pane_id"):
             entry = agent_messaging.current(action["pane_id"])
@@ -729,6 +737,10 @@ class LiveBridge:
         """Send through cli_send's path with open_target=True; map its answer."""
         from .mcp_server import server as mcp
 
+        action = await asyncio.to_thread(commander_target, action)
+        if not action.get("pane_id") and not action.get("pane_name"):
+            return {"status": "skipped", "reason": SKIP_TARGET_GONE,
+                    "detail": "its commander has no pane to send to"}
         answer = await mcp._send(
             mcp._Caller(kind="host"),
             "" if action.get("pane_id") else _qualified(action),
@@ -815,6 +827,130 @@ class LiveBridge:
             "id": job.get("id"), "name": name, "reason": SKIP_TARGET_GONE,
             "pane_id": target, "count": count,
         }))
+
+
+# ── commanders (0.2.51) ────────────────────────────────────────────────────
+
+#: commander_migrations.kind of a job moved onto a commander.
+COMMANDER_MIGRATION_KIND = "scheduler_job"
+#: state key: disabled because its commander was archived (enabled again on resume).
+_COMMANDER_PAUSED = "commander_paused"
+
+
+def _commander_body(commander_id: str) -> Any:
+    """The commander's current body, else its latest one; None when unknown."""
+    from . import commander_service
+
+    try:
+        service = commander_service.current()
+        body = service.body(commander_id)
+        if body is None:
+            bodies = service.store.bodies(commander_id)
+            body = bodies[-1] if bodies else None
+        return body
+    except Exception as err:  # noqa: BLE001 — the stored pane target still applies
+        log.warning("scheduler: commander %s unreadable: %s", commander_id, err)
+        return None
+
+
+def commander_target(action: dict[str, Any]) -> dict[str, Any]:
+    """The action aimed at its commander's body by pane id; an action without a
+    commander, or whose commander has no body, comes back unchanged. Blocking."""
+    commander_id = action.get("commander_id")
+    if not commander_id:
+        return action
+    body = _commander_body(commander_id)
+    if body is None or not body.pane_id:
+        return action
+    out = {k: v for k, v in action.items() if k not in ("pane_id", "pane_name")}
+    out["pane_id"] = body.pane_id
+    return out
+
+
+def _aims_at(action: dict[str, Any], pane: Any) -> bool:
+    if action.get("kind") != "message" or action.get("commander_id"):
+        return False
+    from . import agent_messaging
+
+    if action.get("pane_id"):
+        live = agent_messaging.current(action["pane_id"])
+        return action["pane_id"] == pane.pane_id or (live is not None and live.pane_id == pane.pane_id)
+    return bool(action.get("pane_name")) and action.get("pane_name") == pane.name \
+        and str(action.get("workspace") or "").rstrip("/") == str(pane.workspace_path or "").rstrip("/")
+
+
+class CommanderJobs:
+    """The commander_service Migrator for scheduler jobs. Its callbacks run on a
+    worker thread and write the store directly; ``changed`` tells the windows."""
+
+    def __init__(self, store: SchedulerStore, changed: Callable[[], None], clock: Callable[[], float]) -> None:
+        self.store = store
+        self._changed = changed
+        self._clock = clock
+
+    def upgrade(self, commander_id: str, pane_id: str) -> list[tuple[str, dict[str, Any]]]:
+        """Jobs aimed at ``pane_id`` (by id or by name) now go to the commander."""
+        from . import agent_messaging
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            pane = type("Pane", (), {"pane_id": pane_id, "name": "", "workspace_path": ""})()
+        moved: list[tuple[str, dict[str, Any]]] = []
+        for job in self.store._list_jobs():
+            action = job.get("action") or {}
+            if is_system(job.get("owner")) or not _aims_at(action, pane):
+                continue
+            if self.store._set_action(job["id"], {**action, "commander_id": commander_id}):
+                moved.append((job["id"], dict(action)))
+        if moved:
+            log.info("scheduler: %d job(s) of pane %s now go to commander %s", len(moved), pane_id, commander_id)
+            self._changed()
+        return moved
+
+    def restore(self, commander_id: str, job_id: str, before: dict[str, Any], pane_id: str) -> None:
+        """The job's original action, onto the body's current pane id. A job
+        whose target was changed meanwhile is left as it is now."""
+        job = self.store._get_job(job_id)
+        if job is None or (job.get("action") or {}).get("commander_id") != commander_id:
+            return
+        action = dict(before)
+        if action.get("pane_id") and pane_id:
+            action["pane_id"] = pane_id
+        self.store._set_action(job_id, action)
+        state = dict(job.get("state") or {})
+        if state.pop(_COMMANDER_PAUSED, None):
+            self._resume(job, state)
+        self._changed()
+
+    def set_paused(self, commander_id: str, paused: bool) -> None:
+        """Archived: its enabled jobs are disabled, never deleted; resumed: only
+        those come back."""
+        changed = False
+        now_ms = int(self._clock() * 1000)
+        for job in self.store._list_jobs():
+            if (job.get("action") or {}).get("commander_id") != commander_id:
+                continue
+            state = dict(job.get("state") or {})
+            if paused and job["enabled"]:
+                state[_COMMANDER_PAUSED] = True
+                changed |= self.store._set_enabled(job["id"], False, state, now_ms, None, None)
+            elif not paused and state.pop(_COMMANDER_PAUSED, None):
+                self._resume(job, state)
+                changed = True
+        if changed:
+            self._changed()
+
+    def _resume(self, job: dict[str, Any], state: dict[str, Any]) -> None:
+        now_ms = int(self._clock() * 1000)
+        state["next_run_at"] = next_run_after(job["schedule"], now_ms)
+        self.store._set_enabled(job["id"], True, state, now_ms, None, None)
+
+    def summaries(self, commander_id: str) -> list[dict[str, Any]]:
+        return [{"kind": COMMANDER_MIGRATION_KIND, "ref_id": job["id"], "label": job["name"],
+                 "target": (job.get("action") or {}).get("pane_id") or (job.get("action") or {}).get("pane_name") or "",
+                 "paused": bool((job.get("state") or {}).get(_COMMANDER_PAUSED))}
+                for job in self.store._list_jobs()
+                if (job.get("action") or {}).get("commander_id") == commander_id]
 
 
 #: Carries "scheduled by <agent>" from a job to LiveBridge.deliver; never stored.
@@ -946,8 +1082,34 @@ class SchedulerService:
             self._catch_up_pending = {job["id"] for job in overdue}
             self._catch_up_task = asyncio.create_task(self._catch_up([j["id"] for j in overdue]))
         self._task = asyncio.create_task(self._run())
+        self._register_commander_hooks()
+
+    def _register_commander_hooks(self) -> None:
+        from . import commander_service
+
+        loop = asyncio.get_running_loop()
+
+        def changed() -> None:
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._changed()))
+
+        self._commander_jobs = CommanderJobs(self.store, changed, self.clock)
+        commander_service.register_migrator(commander_service.Migrator(
+            kind=COMMANDER_MIGRATION_KIND, upgrade=self._commander_jobs.upgrade,
+            restore=self._commander_jobs.restore, set_paused=self._commander_jobs.set_paused))
+        commander_service.register_binding_summary(self._commander_jobs.summaries)
+
+    def _unregister_commander_hooks(self) -> None:
+        from . import commander_service
+
+        jobs = getattr(self, "_commander_jobs", None)
+        if jobs is not None:
+            commander_service.unregister_migrator(COMMANDER_MIGRATION_KIND)
+            commander_service.unregister_binding_summary(jobs.summaries)
+            self._commander_jobs = None
 
     async def close(self) -> None:
+        self._unregister_commander_hooks()
         tasks = [t for t in (self._task, self._catch_up_task) if t is not None]
         tasks += [task for task, _manual in self._runs.values()]
         for task in tasks:

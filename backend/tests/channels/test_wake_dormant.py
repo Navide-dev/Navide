@@ -74,7 +74,7 @@ def test_v9_gives_old_bindings_an_active_state_and_parks_keep_a_known_target(tmp
                     " created_at, workspace_path, session_id) VALUES ('p1', 'telegram', 'default', '-1', '5',"
                     " 't', 9, '/known', 's-known')")
     s = ChannelStore(db)
-    assert db.schema_version("channels") == 9
+    assert db.schema_version("channels") == 10
     [b] = s.bindings()
     assert (b.state, b.agent, b.closed_at, b.dormant) == ("active", "", 0, False)
     parked = s.park("p1", workspace_path="/other", session_id="s-other", agent="codex")
