@@ -14690,6 +14690,13 @@ for _name, _webhook_handler in webhook_ws.HANDLERS.items():
     handler(_name)(_webhook_handler)
 
 
+# ── Commanders (commander.*) ───────────────────────────────────────────────
+from . import commander_ws  # noqa: E402
+
+for _name, _commander_handler in commander_ws.HANDLERS.items():
+    handler(_name)(_commander_handler)
+
+
 # ── Voice input (voice.*) ───────────────────────────────────────────────────
 # Handlers live in voice_handlers; the sidecar and model in stt_service. Both
 # stay inert until one of these messages arrives.
