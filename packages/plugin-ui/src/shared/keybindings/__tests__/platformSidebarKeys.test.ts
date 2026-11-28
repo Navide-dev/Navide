@@ -20,7 +20,7 @@ function key(k: string, code: string, mods: Partial<KeyboardEventInit> = {}): Ke
   return new KeyboardEvent('keydown', { key: k, code, bubbles: true, ...mods })
 }
 
-const ADDED = /^controlPane\.selectSidebarTab[1-5]$|^workbench\.action\.openSettings$/
+const ADDED = /^controlPane\.selectSidebarTab[1-6]$|^workbench\.action\.openSettings$/
 const keysOf = (rules: KeybindingRule[], re: RegExp) => rules.filter((r) => re.test(r.command)).map((r) => r.key)
 
 afterEach(() => vi.restoreAllMocks())
@@ -28,19 +28,19 @@ afterEach(() => vi.restoreAllMocks())
 vi.setConfig({ testTimeout: 30_000 })
 
 describe('macOS keeps its sidebar and Settings keys exactly', () => {
-  it('binds the same rules as before: ⌘1..5 and ⌘, only', async () => {
+  it('binds the same rules as before: ⌘1..6 (⌘6 Commanders, 0.2.51) and ⌘, only', async () => {
     const { defaults } = await load('MacIntel')
-    expect(keysOf(defaults, ADDED)).toEqual(['cmd+,', 'cmd+1', 'cmd+2', 'cmd+3', 'cmd+4', 'cmd+5'])
+    expect(keysOf(defaults, ADDED)).toEqual(['cmd+,', 'cmd+1', 'cmd+2', 'cmd+3', 'cmd+4', 'cmd+5', 'cmd+6'])
   })
 
-  it('is the off-macOS table minus the six added rules, nothing else changed', async () => {
+  it('is the off-macOS table minus the seven added rules, nothing else changed', async () => {
     const mac = (await load('MacIntel')).defaults
     const off = (await load('Win32')).defaults
-    const added = off.filter((r) => /^ctrl\+alt\+[1-5]$|^ctrl\+,$/.test(r.key) && ADDED.test(r.command))
-    expect(added).toHaveLength(6)
+    const added = off.filter((r) => /^ctrl\+alt\+[1-6]$|^ctrl\+,$/.test(r.key) && ADDED.test(r.command))
+    expect(added).toHaveLength(7)
     // Plans, Git, the Mini IDE and Navide Browser also take Ctrl+Shift off macOS (builtinPluginKeys.test.ts).
     added.push(...off.filter((r) => /^ctrl\+shift\+[dgmx]$/.test(r.key)))
-    expect(added).toHaveLength(10)
+    expect(added).toHaveLength(11)
     expect(JSON.stringify(off.filter((r) => !added.includes(r)))).toBe(JSON.stringify(mac))
   })
 
@@ -62,7 +62,7 @@ describe.each(['Win32', 'Linux x86_64'])('off macOS (%s)', (platform) => {
     const { defaults, KeyResolver } = await load(platform)
     const r = new KeyResolver(defaults)
     const ctx = { paneStage: true }
-    for (const n of [1, 2, 3, 4, 5]) {
+    for (const n of [1, 2, 3, 4, 5, 6]) {
       expect(r.resolve(key(String(n), `Digit${n}`, { ctrlKey: true, altKey: true }), ctx)?.command)
         .toBe(`controlPane.selectSidebarTab${n}`)
       expect(r.resolve(key(String(n), `Digit${n}`, { ctrlKey: true }), ctx)?.command)

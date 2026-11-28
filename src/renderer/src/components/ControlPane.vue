@@ -41,6 +41,11 @@ import AddPaneIcon from './AddPaneIcon.vue'
 import HistoryIcon from './HistoryIcon.vue'
 import PaneChannelIcon from './PaneChannelIcon.vue'
 import PaneGuardIcon from './PaneGuardIcon.vue'
+import CommanderList from './CommanderList.vue'
+import CommanderDetail from './CommanderDetail.vue'
+import CommanderCreateDialog from './CommanderCreateDialog.vue'
+import { useCommanders } from '../composables/useCommanders'
+import { commanderStateClass } from '../lib/commanderView'
 import FolderIcon from './FolderIcon.vue'
 import ExplorerPane from './ExplorerPane.vue'
 import GitRecoveryPanel from './GitRecoveryPanel.vue'
@@ -1565,7 +1570,7 @@ watch(
 
 // ── Top-level tab: core tabs plus recovery Git and Manifest contributions ─────
 const _TAB_KEY = 'agentTeam.sidebarTab'
-type SidebarTab = 'agents' | 'pipeline' | 'explorer' | 'git' | 'plans' | `plugin:${string}`
+type SidebarTab = 'agents' | 'commanders' | 'pipeline' | 'explorer' | 'git' | 'plans' | `plugin:${string}`
 const CORE_SIDEBAR_TABS = ['agents', 'pipeline', 'explorer'] as const
 type CoreSidebarTab = (typeof CORE_SIDEBAR_TABS)[number]
 const gitPluginFailed = computed(() => props.gitActivationFailure != null)
@@ -1635,7 +1640,7 @@ const sidebarTab = ref<SidebarTab>(
       const v = sessionStorage.getItem(_TAB_KEY) as SidebarTab | null
       // Backward-compat: unknown / legacy values fall back to the first tab.
       const isKnown = v !== null && (
-        v === 'agents' || v === 'pipeline' || v === 'explorer' ||
+        v === 'agents' || v === 'commanders' || v === 'pipeline' || v === 'explorer' ||
         v === 'plans' || v.startsWith('plugin:') || (v === 'git' && gitPluginFailed.value)
       )
       return isKnown ? v : 'agents'
@@ -1742,7 +1747,8 @@ watch(pluginTabs, (tabs) => {
 }, { immediate: true })
 
 // Cmd+1/2/3/4/5 preserve the established Agents / Pipeline / Explorer / Git /
-// Plans positions. V2 Git owns the same fourth command slot as recovery Git.
+// Plans positions; Commanders (0.2.51) came later and takes Cmd+6, although its
+// tab sits next to Agents. V2 Git owns the same fourth command slot as recovery Git.
 //
 // These used to be a bare `document.addEventListener('keydown')` sitting
 // outside the keybinding system, which meant Settings could neither list nor
@@ -1750,7 +1756,7 @@ watch(pluginTabs, (tabs) => {
 // switching the sidebar. They are ordinary commands now; only the text-input
 // guard stayed behind, because the central dispatcher does not look at
 // `e.target` and this shortcut must not fire while someone is typing.
-const SIDEBAR_TABS: SidebarTab[] = [...CORE_SIDEBAR_TABS, 'git', 'plans']
+const SIDEBAR_TABS: SidebarTab[] = [...CORE_SIDEBAR_TABS, 'git', 'plans', 'commanders']
 
 function typingInTextField(): boolean {
   const el = document.activeElement as HTMLElement | null
@@ -1811,6 +1817,24 @@ for (let i = 1; i <= 9; i++) {
       selectSidebarTab('agents')
     }
   })
+}
+
+// ── Commanders (0.2.51) ───────────────────────────────────────────────────────
+// The store is shared with the pane headers; this main-window component is the
+// one that hands it the backend.
+const commanders = useCommanders()
+// A backend without event support (some test harnesses) has nothing to mirror.
+watch(() => props.backend, (b) => { if (b && typeof b.on === 'function') commanders.bind(b) }, { immediate: true })
+const commanderListPanes = computed(() => props.panes.map((p) => ({ id: p.id, name: p.agentLabel })))
+const commanderCreatePanes = computed(() => props.panes
+  .filter((p) => p.agentKey !== 'terminal')
+  .map((p) => ({ id: p.id, name: p.agentLabel, agentKey: p.agentKey, workspacePath: p.workspacePath })))
+function commanderPaneName(paneId: string): string {
+  return props.panes.find((p) => p.id === paneId)?.agentLabel ?? ''
+}
+function focusCommanderPane(paneId: string): void {
+  emit('focus-pane', paneId)
+  commanders.detailId.value = ''
 }
 
 // ── Pipeline two-layer navigation ─────────────────────────────────────────────
@@ -1874,6 +1898,7 @@ function selectSidebarTab(tab: SidebarTab): void {
 // leaves the hints correct.
 const RAIL_TABS: { id: SidebarTab; icon?: string; label: string; shortcut: string; path: string }[] = [
   { id: 'agents', icon: '\u{1F916}', label: 'label.agents', shortcut: '1', path: 'M2 3.5a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0Zm0 4.5a1.25 1.25 0 1 1 2.5 0A1.25 1.25 0 0 1 2 8Zm0 4.5a1.25 1.25 0 1 1 2.5 0 1.25 1.25 0 0 1-2.5 0ZM6.5 2.75A.75.75 0 0 1 7.25 2h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm0 4.5A.75.75 0 0 1 7.25 6.5h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Zm0 4.5a.75.75 0 0 1 .75-.75h7a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1-.75-.75Z' },
+  { id: 'commanders', icon: '\u25CE', label: 'label.commanders', shortcut: '6', path: 'M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 1.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z' },
   { id: 'pipeline', icon: '\u{1F500}', label: 'label.pipeline', shortcut: '2', path: 'M0 1.75C0 .784.784 0 1.75 0h3.5C6.216 0 7 .784 7 1.75v3.5A1.75 1.75 0 0 1 5.25 7H4v4a1 1 0 0 0 1 1h4v-1.25C9 9.784 9.784 9 10.75 9h3.5c.966 0 1.75.784 1.75 1.75v3.5A1.75 1.75 0 0 1 14.25 16h-3.5A1.75 1.75 0 0 1 9 14.25v-.75H5A2.5 2.5 0 0 1 2.5 11V7h-.75A1.75 1.75 0 0 1 0 5.25Zm1.75-.25a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h3.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25Zm9 9a.25.25 0 0 0-.25.25v3.5c0 .138.112.25.25.25h3.5a.25.25 0 0 0 .25-.25v-3.5a.25.25 0 0 0-.25-.25Z' },
   { id: 'explorer', icon: '\u{1F4C1}', label: 'label.explorer', shortcut: '3', path: 'M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5L6.2 1.7A1.75 1.75 0 0 0 4.96 1H1.75Z' },
   { id: 'git', label: 'label.git', shortcut: '4', path: 'M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z' },
@@ -3786,6 +3811,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
     </div><!-- end pipeline tab · list view -->
 
     <!-- ── Agents tab ────────────────────────────────────────────────────── -->
+    <CommanderList
+      v-if="visibleTabIds.has('commanders') && sidebarTab === 'commanders'"
+      :panes="commanderListPanes"
+      :agent-label="agentTypeLabel"
+      @focus-pane="focusCommanderPane"
+    />
     <div v-if="visibleTabIds.has('agents') && sidebarTab === 'agents'" class="agents-split">
     <div class="part-bottom">
 
@@ -4259,6 +4290,13 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <span v-if="p.isMuted" class="muted-tag" :title="$t('pane.terminal.muted-tooltip')"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg></span>
             <PaneChannelIcon :pane-id="p.id" />
             <PaneGuardIcon :pane-id="p.id" />
+            <span
+              v-if="commanders.paneMarks.value.get(p.id)"
+              class="cmd-state-chip cmd-row-chip"
+              :class="commanderStateClass(commanders.paneMarks.value.get(p.id)!.state)"
+              data-testid="commander-row-chip"
+              :title="$t('commander.chip.dispatched-by', { name: commanders.paneMarks.value.get(p.id)!.commanderName })"
+            >{{ $t(`commander.state.${commanders.paneMarks.value.get(p.id)!.state}`) }}</span>
             <span v-if="p.isMinimized" class="minimized-tag" :title="$t('label.docked-in-sidebar')">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
               {{ $t('label.docked') }}
@@ -4324,6 +4362,13 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 <button class="ghost" @click="emit('interrupt', p.id)" :disabled="p.status !== 'running'" :title="interruptTooltip(p)">
                   {{ $t('action.interrupt') }}
                 </button>
+                <button
+                  v-if="p.agentKey !== 'terminal' && !commanders.bodyPanes.value.has(p.id)"
+                  class="ghost"
+                  data-testid="commander-upgrade"
+                  :title="$t('commander.action.upgrade-tooltip')"
+                  @click="commanders.openCreate(p.id)"
+                >{{ $t('commander.action.upgrade') }}</button>
                 <button class="danger" @click="emit('kill', p.id)">{{ $t('action.remove') }}</button>
               </template>
             </div>
@@ -5031,6 +5076,12 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         </div>
       </div>
     </Teleport>
+    <CommanderDetail :agent-label="agentTypeLabel" :pane-name="commanderPaneName" @focus-pane="focusCommanderPane" />
+    <CommanderCreateDialog
+      :agent-specs="manualAgentSpecs"
+      :panes="commanderCreatePanes"
+      :default-workspace="workspace || workspacePath"
+    />
   </aside>
 </template>
 
@@ -6717,6 +6768,9 @@ button.icon-btn.muted:hover {
 .ws-more:hover { color: var(--text-bright); }
 .ws-more[aria-expanded='true'] { opacity: 1; color: var(--text-bright); }
 
+/* A dispatched pane's detected state, at the row's tail (0.2.51). Colours come
+   from CommanderList's shared block; it gives way before the name does. */
+.cmd-row-chip { min-width: 0; max-width: 84px; overflow: hidden; text-overflow: ellipsis; line-height: 14px; flex-shrink: 1; }
 .ws-more-menu {
   position: fixed;
   z-index: 300;

@@ -442,7 +442,7 @@ describe('protected commands', () => {
 describe('main-window sidebar tabs', () => {
   it('are ordinary rules now, so the editor can list and rebind them', () => {
     const rows = buildRows([])
-    for (let i = 1; i <= 5; i++) {
+    for (let i = 1; i <= 6; i++) {
       const row = rowFor(rows, `controlPane.selectSidebarTab${i}`, 'paneStage && !editorOpen')
       expect(row.defaultKeys).toEqual([`cmd+${i}`])
     }

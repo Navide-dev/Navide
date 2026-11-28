@@ -140,8 +140,14 @@ describe('ControlPane – Cmd+number sidebar shortcut', () => {
     expect(activeTabId(wrapper)).toBe('explorer')
   })
 
-  it('out-of-range Cmd+6 is ignored', async () => {
+  it('Cmd+6 opens the Commanders tab', async () => {
     keydown({ key: '6', metaKey: true, code: 'Digit6' })
+    await wrapper.vm.$nextTick()
+    expect(activeTabId(wrapper)).toBe('commanders')
+  })
+
+  it('out-of-range Cmd+7 is ignored', async () => {
+    keydown({ key: '7', metaKey: true, code: 'Digit7' })
     await wrapper.vm.$nextTick()
     expect(activeTabId(wrapper)).toBe('explorer')
   })

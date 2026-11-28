@@ -129,6 +129,7 @@ export const COMMAND_IDS: readonly string[] = [
   'controlPane.selectSidebarTab3',
   'controlPane.selectSidebarTab4',
   'controlPane.selectSidebarTab5',
+  'controlPane.selectSidebarTab6',
   'editor.action.addLineComment',
   'editor.action.addSelectionToNextFindMatch',
   'editor.action.blockComment',

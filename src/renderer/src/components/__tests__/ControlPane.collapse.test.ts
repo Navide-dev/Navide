@@ -83,7 +83,7 @@ describe('ControlPane – left slot collapse', () => {
     const w = mountPane({ collapsed: true })
     expect(w.find('.sidebar').classes()).toContain('is-collapsed')
     const labels = w.findAll('.rail .rail-btn .rail-label').map((n) => n.text())
-    expect(labels).toEqual(['label.agents', 'label.pipeline', 'label.explorer', 'label.git', 'label.plans'])
+    expect(labels).toEqual(['label.agents', 'label.commanders', 'label.pipeline', 'label.explorer', 'label.git', 'label.plans'])
     w.unmount()
   })
 

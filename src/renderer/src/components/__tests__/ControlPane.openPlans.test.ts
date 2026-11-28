@@ -60,12 +60,12 @@ describe('ControlPane – Plans sidebar tab', () => {
 
   it('renders the retained Plans tab in the sidebar icon rail', () => {
     const btns = wrapper.findAll('.sidebar-tabs .tab-btn')
-    // agents, pipeline, explorer, factory-installed Git, retained Plans
-    expect(btns).toHaveLength(5)
+    // agents, commanders, pipeline, explorer, factory-installed Git, retained Plans
+    expect(btns).toHaveLength(6)
     // Select on the tab id, not the title: the title is composed from a
     // locale key and this file stubs $t to echo keys, so matching its text
     // would assert against the stub rather than against the product.
-    expect(btns[4].attributes('data-tab')).toBe('plans')
+    expect(btns[5].attributes('data-tab')).toBe('plans')
   })
 
   it('mounts the packaged Plans left contribution on the canonical tab', async () => {

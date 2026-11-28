@@ -28,6 +28,8 @@ import UsageBadge from './UsageBadge.vue'
 import PaneChannelButton from './PaneChannelButton.vue'
 import PaneGuardBadge from './PaneGuardBadge.vue'
 import CliRiskPill from './CliRiskPill.vue'
+import { useCommanders } from '../composables/useCommanders'
+import { commanderStateClass } from '../lib/commanderView'
 import { cliRiskKey } from '../composables/useResourceUsage'
 import type { CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
 import RestoredPanePlaceholder from './RestoredPanePlaceholder.vue'
@@ -199,6 +201,9 @@ interface Props {
 
 const props = defineProps<Props>()
 const cliRisk = inject(cliRiskKey, null)
+// The commander that dispatched this pane, with Navide's detected state (0.2.51).
+const commanders = useCommanders()
+const commanderMark = computed(() => commanders.paneMarks.value.get(props.paneId) ?? null)
 const emit = defineEmits<{
   (e: 'set-focus', ev?: MouseEvent): void
   (e: 'minimize'): void
@@ -1036,6 +1041,25 @@ onMounted(() => {
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
+        <template v-if="commanderMark">
+          <span
+            class="commander-chip"
+            role="button"
+            data-testid="commander-chip"
+            :title="$t('commander.chip.dispatched-by', { name: commanderMark.commanderName })"
+            @click.stop="commanders.openDetail(commanderMark.commanderId)"
+            @dblclick.stop
+          >{{ commanderMark.icon || '◎' }} {{ commanderMark.commanderName }}</span>
+          <span
+            class="cmd-state-chip commander-state-chip"
+            :class="commanderStateClass(commanderMark.state)"
+            role="button"
+            data-testid="commander-state-chip"
+            :title="$t('commander.chip.state', { state: $t(`commander.state.${commanderMark.state}`) })"
+            @click.stop="commanders.openDetail(commanderMark.commanderId)"
+            @dblclick.stop
+          >{{ $t(`commander.state.${commanderMark.state}`) }}</span>
+        </template>
         <span v-if="agentView" class="agent-vendor" data-testid="agent-vendor" v-truncate>{{ agentVendorLine }}</span>
         <span
           v-if="remote"
@@ -1581,6 +1605,33 @@ onMounted(() => {
   padding: 1px 5px;
   min-width: 0;
   outline: none;
+}
+.commander-chip {
+  /* Gives way before the pane name and the buttons do: min-width 0 and a cap. */
+  min-width: 0;
+  max-width: 140px;
+  flex-shrink: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-3xs);
+  color: var(--done-fg);
+  background: color-mix(in srgb, var(--done-fg) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--done-fg) 45%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  cursor: pointer;
+}
+.commander-state-chip {
+  min-width: 0;
+  max-width: 96px;
+  flex-shrink: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--font-3xs);
+  padding: 1px 7px;
+  line-height: normal;
+  cursor: pointer;
 }
 .commander-inline {
   font-size: var(--font-3xs);

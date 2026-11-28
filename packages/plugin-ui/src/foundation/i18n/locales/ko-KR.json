@@ -393,6 +393,7 @@
         "controlPane_selectSidebarTab3": "사이드바 탭 3 선택",
         "controlPane_selectSidebarTab4": "사이드바 탭 4 선택",
         "controlPane_selectSidebarTab5": "사이드바 탭 5 선택",
+        "controlPane_selectSidebarTab6": "사이드바 탭 6 선택",
         "editor_action_addLineComment": "줄 주석 추가",
         "editor_action_addSelectionToNextFindMatch": "다음 일치 항목 찾기에 선택 영역 추가",
         "editor_action_blockComment": "블록 주석 설정/해제",

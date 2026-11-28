@@ -44,7 +44,7 @@ describe('LayoutSettingsPane', () => {
     const w = mountPane()
     const left = card(w, 'layout.slot.left')
     expect(left.findAll('.ls-view-name').map((n) => n.text())).toEqual([
-      'label.agents', 'label.pipeline', 'label.explorer', 'label.git', 'label.plans',
+      'label.agents', 'label.commanders', 'label.pipeline', 'label.explorer', 'label.git', 'label.plans',
     ])
     w.unmount()
   })
@@ -75,7 +75,7 @@ describe('LayoutSettingsPane', () => {
 
   it('removes a view and offers it back under a hidden section', async () => {
     const w = mountPane()
-    await card(w, 'layout.slot.left').findAll('.ls-hide')[4].trigger('click')
+    await card(w, 'layout.slot.left').findAll('.ls-hide')[5].trigger('click')
     expect(useLayoutStore().slotOf('plans')).toBeNull()
 
     const after = mountPane()

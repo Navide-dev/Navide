@@ -260,11 +260,12 @@ export const defaults: KeybindingRule[] = [
   { key: 'cmd+3', command: 'controlPane.selectSidebarTab3', when: 'paneStage && !editorOpen' },
   { key: 'cmd+4', command: 'controlPane.selectSidebarTab4', when: 'paneStage && !editorOpen' },
   { key: 'cmd+5', command: 'controlPane.selectSidebarTab5', when: 'paneStage && !editorOpen' },
+  { key: 'cmd+6', command: 'controlPane.selectSidebarTab6', when: 'paneStage && !editorOpen' },
   // Off macOS only, added beside the ⌘ rules above (which stay as they were):
   // see sidebarTabKeySpec. Ctrl+Alt is AltGr on Windows; a digit that AltGr
   // turns into a character (German ², Polish ...) is typed, not taken — see
   // eventKeyMatches in parseKey.ts.
-  ...(isMacPlatform() ? [] : [1, 2, 3, 4, 5].map((n): KeybindingRule => ({
+  ...(isMacPlatform() ? [] : [1, 2, 3, 4, 5, 6].map((n): KeybindingRule => ({
     key: sidebarTabKeySpec(n, false), command: `controlPane.selectSidebarTab${n}`, when: 'paneStage && !editorOpen',
   }))),
   ...(isMacPlatform() ? [] : [{ key: settingsKeySpec(false), command: 'workbench.action.openSettings' }]),
