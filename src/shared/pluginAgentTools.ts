@@ -66,7 +66,7 @@ export function agentToolViewId(method: unknown): string | null {
 /** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation), and so
  *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
-  'channels_', 'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
+  'channels_', 'cli_', 'commander_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
   'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'ship_', 'skills_', 'stage_', 'ui_',
   'window_', 'workspace_',
 ] as const
@@ -86,6 +86,7 @@ export const CORE_TOOL_NAMES = [
   'channels_bot_rename', 'channels_bot_set_enabled', 'channels_chats', 'channels_link_code', 'channels_managed_bot_create',
   'channels_pairing_approve_request', 'channels_pairing_reject', 'channels_pairing_requests', 'channels_request_status', 'channels_set_verbosity',
   'channels_status', 'channels_unbind',
+  'commander_get', 'commander_list', 'commander_memory_append', 'commander_tree',
   'credentials_findings', 'credentials_list', 'evolve_report', 'evolve_retro',
   'marketplace_detail',
   'marketplace_developer_application_fill', 'marketplace_developer_application_open',

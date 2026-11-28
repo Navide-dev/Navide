@@ -155,14 +155,17 @@ served by one of its views ([2.9](#29-view-served-tools-contributesagenttools)).
 
 A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
-`channels_` `cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_`
-`memory_` `miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_`
+`channels_` `cli_` `commander_` `credentials_` `evolve_` `git_` `marketplace_`
+`mcp_` `memory_` `miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_`
 `preview_` `prompt_` `role_` `scheduler_` `share_` `ship_` `skills_` `stage_` `ui_`
 `window_` `workspace_`
 
 `git_`, `plans_` and `miniide_` are the prefixes the built-in packages
 (`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party
 tool cannot read as first-party.
+
+`commander_` holds the core `commander_*` tools (0.2.51: read-only commander
+views and a commander's own memory note).
 
 `ship_` holds the `ship_log_*` tools of the built-in `navide.shipped-log`
 backend plugin (0.2.44; `ship_log_config_register` and `ship_log_config_list`

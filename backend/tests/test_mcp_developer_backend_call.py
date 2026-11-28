@@ -142,4 +142,6 @@ async def test_an_explicit_workspace_is_the_target(monkeypatch: pytest.MonkeyPat
 def test_the_tool_is_registered_last() -> None:
     names = [tool.name for tool in core.server._tool_manager.list_tools()]  # noqa: SLF001
     core_names = [name for name in names if not name.startswith(("plan_", "skills_", "ship_log_"))]
-    assert core_names[-3:] == ["cli_rename_pane", "plugins_developer_backend_call", "cli_set_model"]
+    # 0.2.51's commander tools (commander_tools.py) are registered after these.
+    assert core_names[-7:-4] == ["cli_rename_pane", "plugins_developer_backend_call", "cli_set_model"]
+    assert core_names[-4:] == ["commander_list", "commander_get", "commander_tree", "commander_memory_append"]

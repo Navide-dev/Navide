@@ -196,7 +196,10 @@ pytestmark = pytest.mark.asyncio
 #: Re-pinned for 0.2.49 kickoff verdicts (previous pin 8c6d897f…): the
 #: cli_open_agent description documents `kickoff: "unverified"`, what it means
 #: and what the caller does, and the 4-minute wait. No other tool changed.
-MAIN_TOOLS_LIST_SHA256 = "803b62d5005a0dd44f71378c5336d87c4d92bc12c1401e20854f46eac5f11fc5"
+#: Re-pinned for 0.2.51 commanders (previous pin 803b62d5…): the cli_whoami
+#: description documents the `commander` key. No other existing tool changed;
+#: the new commander_* tools are COMMANDER_CORE_TOOLS below.
+MAIN_TOOLS_LIST_SHA256 = "781428280ce2b5863cdd26424897dad15bb779e7995b3eb3a97ce84cfd179a83"
 #: Core tools added after that digest (B2-c); every other tool must still hash to it.
 B2C_CORE_TOOLS = frozenset({
     "marketplace_request_install", "marketplace_request_update", "marketplace_request_rollback",
@@ -210,6 +213,8 @@ RENAME_CORE_TOOLS = frozenset({"cli_rename_pane"})
 DEVELOPER_BACKEND_CORE_TOOLS = frozenset({"plugins_developer_backend_call"})
 #: Switching a running pane's model (0.2.40, pane_model_tool.py), registered after it.
 SET_MODEL_CORE_TOOLS = frozenset({"cli_set_model"})
+#: The commander tools (0.2.51, commander_tools.py), registered after it.
+COMMANDER_CORE_TOOLS = frozenset({"commander_list", "commander_get", "commander_tree", "commander_memory_append"})
 #: Core tools added after that digest by plan mcp_614482 (read-only failover state and accounts, account sign-in).
 ACCOUNT_CORE_TOOLS = frozenset({"cli_failover_state", "cli_accounts_list", "cli_account_sign_in", "cli_account_switch"})
 #: Core tools added after that digest by plan mcp-navide-0-2-27 W3 (developer forms, marketplace_forms.py).
@@ -441,7 +446,7 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
     module_only = [t for t in json.loads(pristine) if t["name"] not in builtin]
     added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
              | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS | P3_CORE_TOOLS
-             | RENAME_CORE_TOOLS | DEVELOPER_BACKEND_CORE_TOOLS | SET_MODEL_CORE_TOOLS)
+             | RENAME_CORE_TOOLS | DEVELOPER_BACKEND_CORE_TOOLS | SET_MODEL_CORE_TOOLS | COMMANDER_CORE_TOOLS)
     assert added <= {t["name"] for t in module_only}
     existing = [t for t in module_only if t["name"] not in added]
     module_text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -474,7 +479,8 @@ async def test_tools_list_is_byte_identical_to_main_while_the_switch_is_off() ->
 #: Re-pinned with MAIN for 0.2.47 MCP reconnect (previous pin f5f52db5…).
 #: Re-pinned with MAIN for 0.2.48 scheduler settings (previous pin 2b8d853f…).
 #: Re-pinned with MAIN for 0.2.49 kickoff verdicts (previous pin 300c1463…).
-ACP_ON_TOOLS_LIST_SHA256 = "6eeaee6ef0d6d785d4ae74705751b48835d7099b83f0f799143e590a952bd209"
+#: Re-pinned with MAIN for 0.2.51 commanders (previous pin 6eeaee6e…).
+ACP_ON_TOOLS_LIST_SHA256 = "3809ace644c1a6c3d8f002e01fe48b455e6394c1adc71bcb8fbadac0def42653"
 
 
 async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main() -> None:
@@ -484,7 +490,7 @@ async def test_tools_list_with_the_acp_switch_on_is_pinned_and_off_again_is_main
         builtin = await _builtin_package_tool_names()
         added = (B2C_CORE_TOOLS | ACCOUNT_CORE_TOOLS | FORM_CORE_TOOLS | TESTPLACE_CORE_TOOLS | W1_CORE_TOOLS
                  | DESIGN_C_CORE_TOOLS | EVOLVE_RETRO_CORE_TOOLS | CHANNEL_CORE_TOOLS | P3_CORE_TOOLS
-                 | RENAME_CORE_TOOLS | DEVELOPER_BACKEND_CORE_TOOLS | SET_MODEL_CORE_TOOLS)
+                 | RENAME_CORE_TOOLS | DEVELOPER_BACKEND_CORE_TOOLS | SET_MODEL_CORE_TOOLS | COMMANDER_CORE_TOOLS)
         existing = [t for t in json.loads(await _tools_list_text()) if t["name"] not in builtin | added]
         text = json.dumps(existing, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         return hashlib.sha256(text.encode()).hexdigest()
